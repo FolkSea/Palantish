@@ -70,6 +70,66 @@ export type Database = {
         }
         Relationships: []
       }
+      adversaries: {
+        Row: {
+          animal_classifier: string | null
+          community_identifiers: string[] | null
+          created_at: string
+          cs_id: string | null
+          description: string | null
+          first_seen: string | null
+          id: string
+          internal_alternative_names: string[] | null
+          last_seen: string | null
+          motivation: string[] | null
+          name: string
+          nexus: Database["public"]["Enums"]["actor_nexus"]
+          objectives: string[] | null
+          short_description: string | null
+          status: string | null
+          targeting_profile: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          animal_classifier?: string | null
+          community_identifiers?: string[] | null
+          created_at?: string
+          cs_id?: string | null
+          description?: string | null
+          first_seen?: string | null
+          id?: string
+          internal_alternative_names?: string[] | null
+          last_seen?: string | null
+          motivation?: string[] | null
+          name: string
+          nexus?: Database["public"]["Enums"]["actor_nexus"]
+          objectives?: string[] | null
+          short_description?: string | null
+          status?: string | null
+          targeting_profile?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          animal_classifier?: string | null
+          community_identifiers?: string[] | null
+          created_at?: string
+          cs_id?: string | null
+          description?: string | null
+          first_seen?: string | null
+          id?: string
+          internal_alternative_names?: string[] | null
+          last_seen?: string | null
+          motivation?: string[] | null
+          name?: string
+          nexus?: Database["public"]["Enums"]["actor_nexus"]
+          objectives?: string[] | null
+          short_description?: string | null
+          status?: string | null
+          targeting_profile?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       allowed_users: {
         Row: {
           created_at: string

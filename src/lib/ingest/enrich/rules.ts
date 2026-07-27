@@ -7,7 +7,7 @@ import type { Enricher, EnrichedItem, ItemType, RawCandidate } from "@/lib/inges
  * public CrowdStrike cryptonym exists, that adversary name. Matching is
  * case-insensitive substring on the combined title+description.
  */
-type GroupEntry = { alias: string; nexus: Nexus; cs?: string };
+export type GroupEntry = { alias: string; nexus: Nexus; cs?: string };
 
 export const GROUP_TABLE: GroupEntry[] = [
   // North Korea (Chollima)
@@ -77,12 +77,34 @@ function haystack(c: RawCandidate): string {
   return `${c.title} ${c.description ?? ""}`.toLowerCase();
 }
 
+/** True if `alias` appears in `hay` on word boundaries (both lower-cased). */
+function wordBoundaryIncludes(hay: string, alias: string): boolean {
+  let idx = hay.indexOf(alias);
+  while (idx !== -1) {
+    const before = idx === 0 ? " " : hay[idx - 1];
+    const after = idx + alias.length >= hay.length ? " " : hay[idx + alias.length];
+    if (!/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after)) return true;
+    idx = hay.indexOf(alias, idx + 1);
+  }
+  return false;
+}
+
+/** Sort group entries longest-alias-first so specific names beat generic ones. */
+export function sortGroups(groups: GroupEntry[]): GroupEntry[] {
+  return [...groups].sort((a, b) => b.alias.length - a.alias.length);
+}
+
+/** First group whose alias matches the haystack on word boundaries. */
+export function matchGroup(
+  hay: string,
+  sortedGroups: GroupEntry[],
+): GroupEntry | null {
+  return sortedGroups.find((g) => wordBoundaryIncludes(hay, g.alias)) ?? null;
+}
+
 /** Returns the matched group entry (nexus + optional CS name) or null. */
 export function classifyGroup(c: RawCandidate): GroupEntry | null {
-  const hay = haystack(c);
-  // Longest alias first so "fancy bear" wins over "bear".
-  const sorted = [...GROUP_TABLE].sort((a, b) => b.alias.length - a.alias.length);
-  return sorted.find((g) => hay.includes(g.alias)) ?? null;
+  return matchGroup(haystack(c), sortGroups(GROUP_TABLE));
 }
 
 export function isMarketing(c: RawCandidate): boolean {
@@ -124,12 +146,22 @@ export function classifyConfidence(c: RawCandidate): Confidence {
  */
 export class RulesEnricher implements Enricher {
   readonly name = "rules";
+  private readonly groups: GroupEntry[];
+
+  /**
+   * @param extraGroups adversary aliases loaded from the `adversaries` table.
+   * These take priority (checked longest-first alongside the built-in table),
+   * giving CrowdStrike-name and nexus coverage far beyond the hard-coded list.
+   */
+  constructor(extraGroups: GroupEntry[] = []) {
+    this.groups = sortGroups([...extraGroups, ...GROUP_TABLE]);
+  }
 
   async enrich(c: RawCandidate): Promise<EnrichedItem | null> {
     if (!c.title || !c.url) return null;
     if (isMarketing(c)) return null;
 
-    const group = classifyGroup(c);
+    const group = matchGroup(haystack(c), this.groups);
 
     // eCrime / "other" nexus only qualifies when clearly large-scale.
     if (group?.nexus === "other" && !isLargeScaleEcrime(c)) return null;

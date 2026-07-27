@@ -5,6 +5,7 @@ import type { Nexus, Confidence } from "@/lib/badges";
 import { computeHash } from "@/lib/ingest/dedup";
 import type { Enricher, EnrichedItem, ItemType, RawCandidate } from "@/lib/ingest/types";
 import { RulesEnricher } from "./rules";
+import type { GroupEntry } from "./rules";
 import { serverEnv } from "@/lib/env";
 
 // Classification of RSS/advisory items is a high-volume, low-complexity task,
@@ -55,11 +56,12 @@ export class LlmEnricher implements Enricher {
   readonly name = "llm";
   private client: Anthropic;
   private model: string;
-  private fallback = new RulesEnricher();
+  private fallback: RulesEnricher;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, extraGroups: GroupEntry[] = []) {
     this.client = new Anthropic({ apiKey });
     this.model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
+    this.fallback = new RulesEnricher(extraGroups);
   }
 
   async enrich(c: RawCandidate): Promise<EnrichedItem | null> {
@@ -142,8 +144,8 @@ Description: ${c.description ?? ""}`,
 }
 
 /** Chooses the enricher based on configuration. */
-export function selectEnricher(): Enricher {
+export function selectEnricher(extraGroups: GroupEntry[] = []): Enricher {
   const key = serverEnv.anthropicApiKey;
-  if (key) return new LlmEnricher(key);
-  return new RulesEnricher();
+  if (key) return new LlmEnricher(key, extraGroups);
+  return new RulesEnricher(extraGroups);
 }

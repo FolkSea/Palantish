@@ -5,6 +5,7 @@ import { pullAllFeeds, type FeedSource } from "./feeds";
 import { selectNewCandidates } from "./dedup";
 import { selectEnricher } from "./enrich/llm";
 import { selectSearchProvider } from "./search";
+import { buildGroupsFromAdversaries } from "./adversaries";
 import type { EnrichedItem } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -67,10 +68,18 @@ export async function runIngest(): Promise<IngestResult> {
 
   try {
     // Reference data ---------------------------------------------------------
-    const [{ data: sources }, { data: actors }] = await Promise.all([
-      db.from("sources").select("id, name, feed_url, category").eq("active", true),
-      db.from("actors").select("id, nexus"),
-    ]);
+    const [{ data: sources }, { data: actors }, { data: adversaries }] =
+      await Promise.all([
+        db.from("sources").select("id, name, feed_url, category").eq("active", true),
+        db.from("actors").select("id, nexus"),
+        db
+          .from("adversaries")
+          .select(
+            "name, animal_classifier, description, short_description, community_identifiers, internal_alternative_names",
+          ),
+      ]);
+
+    const adversaryGroups = buildGroupsFromAdversaries(adversaries ?? []);
 
     const sourceIdByName = new Map(
       (sources ?? []).map((s) => [s.name, s.id]),
@@ -108,7 +117,7 @@ export async function runIngest(): Promise<IngestResult> {
     const fresh = selectNewCandidates(allCandidates, existing);
 
     // Enrich (drop nulls) ----------------------------------------------------
-    const enricher = selectEnricher();
+    const enricher = selectEnricher(adversaryGroups);
     const enrichedNullable = await mapWithConcurrency(fresh, 6, (c) =>
       enricher.enrich(c),
     );

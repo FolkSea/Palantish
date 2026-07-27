@@ -26,8 +26,19 @@ export type DashboardData = {
  * Loads every section of the dashboard in parallel. All queries run under the
  * caller's RLS context, so only allow-listed authenticated users see data.
  */
+// The timeline graph looks back 30 days (enforced by the timeline_events view).
+// Every other section shows only the last 7 days.
+const RECENT_DAYS = 7;
+
+function daysAgo(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+}
+
 export async function loadDashboard(): Promise<DashboardData> {
   const supabase = await createClient();
+  const recentCutoff = daysAgo(RECENT_DAYS);
 
   const [
     actorsRes,
@@ -44,7 +55,9 @@ export async function loadDashboard(): Promise<DashboardData> {
       .from("intel_items")
       .select("*")
       .eq("item_type", "actor_activity")
+      .gte("published_at", recentCutoff)
       .order("published_at", { ascending: false }),
+    // Timeline: 30-day window (the view enforces the range).
     supabase
       .from("timeline_events")
       .select("*")
@@ -53,20 +66,24 @@ export async function loadDashboard(): Promise<DashboardData> {
       .from("intel_items")
       .select("*")
       .eq("item_type", "breaking")
+      .gte("published_at", recentCutoff)
       .order("published_at", { ascending: false })
       .limit(10),
     supabase
       .from("intel_items")
       .select("*")
       .eq("item_type", "report")
+      .gte("published_at", recentCutoff)
       .order("published_at", { ascending: false }),
     supabase
       .from("vulnerabilities")
       .select("*")
+      .gte("added_at", recentCutoff)
       .order("added_at", { ascending: false }),
     supabase
       .from("breaches")
       .select("*")
+      .gte("event_date", recentCutoff)
       .order("event_date", { ascending: false, nullsFirst: false }),
     supabase
       .from("refresh_runs")
