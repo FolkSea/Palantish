@@ -1,0 +1,293 @@
+import { Card, EmptyState } from "@/components/Card";
+import {
+  ConfidenceBadge,
+  CrowdStrikeBadge,
+  SourceBadge,
+  VulnStatusBadge,
+  StatusPill,
+} from "@/components/Badges";
+import { NEXUS_ACCENT, type Nexus } from "@/lib/badges";
+import { formatDate } from "@/lib/format";
+import type {
+  ActorWithItems,
+  BreachRow,
+  IntelItemRow,
+  VulnerabilityRow,
+} from "@/lib/data";
+
+function ExtLink({
+  href,
+  children,
+}: {
+  href: string | null;
+  children: React.ReactNode;
+}) {
+  if (!href) return <span className="font-medium text-slate-900">{children}</span>;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="font-medium text-[#1d4ed8] hover:underline"
+    >
+      {children}
+    </a>
+  );
+}
+
+/* --- Breaking news ticker -------------------------------------------------- */
+export function Ticker({ items }: { items: IntelItemRow[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[10px] border border-[#e5e7eb] bg-white px-4 py-2 text-[12px]">
+      <span className="shrink-0 rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+        Breaking
+      </span>
+      {items.map((i) => (
+        <span key={i.id} className="inline-flex items-center gap-1.5">
+          <span className="text-slate-400">{formatDate(i.published_at)}</span>
+          <ExtLink href={i.url}>{i.title}</ExtLink>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* --- Nation-state activity by actor --------------------------------------- */
+export function ActorGrid({ actors }: { actors: ActorWithItems[] }) {
+  if (!actors.length)
+    return (
+      <Card title="Nation-state activity by actor">
+        <EmptyState>No actor reporting loaded yet.</EmptyState>
+      </Card>
+    );
+
+  return (
+    <section>
+      <h2 className="mb-2 text-[13px] font-semibold text-slate-900">
+        Nation-state activity by actor
+      </h2>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {actors.map((a) => (
+          <ActorCard key={a.id} actor={a} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ActorCard({ actor }: { actor: ActorWithItems }) {
+  const accent = NEXUS_ACCENT[actor.nexus as Nexus] ?? "#475569";
+  return (
+    <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
+      <div
+        className="rounded-t-[10px] border-b border-[#e5e7eb] px-4 py-2.5"
+        style={{ borderTop: `3px solid ${accent}` }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-[13px] font-semibold text-slate-900">
+            {actor.display_name}
+          </h3>
+          <StatusPill status={actor.status} />
+        </div>
+        {actor.tracked_groups ? (
+          <p className="mt-1 text-[11px] text-slate-500">
+            Tracked: {actor.tracked_groups}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex-1 space-y-3 px-4 py-3">
+        {actor.items.length === 0 ? (
+          <p className="text-[12px] text-slate-400">
+            {actor.note ?? "No new reporting in the current window."}
+          </p>
+        ) : (
+          actor.items.map((item) => <ActorEntry key={item.id} item={item} />)
+        )}
+      </div>
+
+      {actor.items.length > 0 && actor.note ? (
+        <div className="border-t border-[#e5e7eb] px-4 py-2 text-[11px] italic text-slate-500">
+          {actor.note}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ActorEntry({ item }: { item: IntelItemRow }) {
+  return (
+    <div className="border-b border-slate-100 pb-3 last:border-none last:pb-0">
+      <ExtLink href={item.url}>{item.title}</ExtLink>
+      {item.description ? (
+        <p className="mt-1 text-[12px] leading-snug text-slate-600">
+          {item.description}
+        </p>
+      ) : null}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <ConfidenceBadge value={item.confidence} />
+        <CrowdStrikeBadge name={item.crowdstrike_adversary} />
+        <SourceBadge name={item.source_name} />
+        {item.published_at ? (
+          <span className="text-[10px] text-slate-400">
+            {formatDate(item.published_at)}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* --- Trending exploits & vulnerabilities ---------------------------------- */
+export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
+  return (
+    <Card title="Trending exploits and vulnerabilities">
+      {rows.length === 0 ? (
+        <EmptyState>No vulnerabilities loaded yet.</EmptyState>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                <th className="py-1.5 pr-3 font-medium">CVE / ID</th>
+                <th className="py-1.5 pr-3 font-medium">Target</th>
+                <th className="py-1.5 pr-3 font-medium">Status</th>
+                <th className="py-1.5 font-medium">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((v) => (
+                <tr key={v.id} className="border-t border-slate-100 align-top">
+                  <td className="py-2 pr-3 whitespace-nowrap">
+                    <ExtLink href={v.url}>{v.cve_id}</ExtLink>
+                  </td>
+                  <td className="py-2 pr-3 text-slate-700">{v.target}</td>
+                  <td className="py-2 pr-3">
+                    <VulnStatusBadge value={v.status} />
+                  </td>
+                  <td className="py-2 text-slate-600">
+                    {v.detail}{" "}
+                    <span className="ml-1 inline-block align-middle">
+                      <SourceBadge name={v.source_name} />
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* --- Reported breaches ----------------------------------------------------- */
+export function BreachTable({ rows }: { rows: BreachRow[] }) {
+  return (
+    <Card title="Reported breaches">
+      {rows.length === 0 ? (
+        <EmptyState>No breaches loaded yet.</EmptyState>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[12px]">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                <th className="py-1.5 pr-3 font-medium">Organisation</th>
+                <th className="py-1.5 pr-3 font-medium">Date</th>
+                <th className="py-1.5 font-medium">What happened</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((b) => (
+                <tr key={b.id} className="border-t border-slate-100 align-top">
+                  <td className="py-2 pr-3 font-medium text-slate-900">
+                    {b.org_name}
+                  </td>
+                  <td className="py-2 pr-3 whitespace-nowrap text-slate-500">
+                    {b.event_date_label ?? formatDate(b.event_date)}
+                  </td>
+                  <td className="py-2 text-slate-600">
+                    {b.summary}{" "}
+                    <span className="ml-1 inline-block align-middle">
+                      {b.url ? (
+                        <a
+                          href={b.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <SourceBadge name={b.source_name} />
+                        </a>
+                      ) : (
+                        <SourceBadge name={b.source_name} />
+                      )}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* --- Newly released reporting --------------------------------------------- */
+export function ReportsList({ items }: { items: IntelItemRow[] }) {
+  return (
+    <Card title="Newly released reporting">
+      {items.length === 0 ? (
+        <EmptyState>No reports loaded yet.</EmptyState>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((r) => (
+            <li key={r.id} className="flex items-start gap-2 text-[12px]">
+              <span className="mt-0.5">
+                <SourceBadge name={r.source_name} />
+              </span>
+              <span className="flex-1">
+                <ExtLink href={r.url}>{r.title}</ExtLink>
+                {r.description ? (
+                  <span className="block text-slate-500">{r.description}</span>
+                ) : null}
+              </span>
+              <span className="shrink-0 text-[10px] text-slate-400">
+                {formatDate(r.published_at)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/* --- Footnote / methodology legend ---------------------------------------- */
+export function Footnote() {
+  return (
+    <footer className="rounded-[10px] border border-[#e5e7eb] bg-white p-4 text-[11px] leading-relaxed text-slate-500">
+      <p className="font-semibold text-slate-700">Methodology and legend</p>
+      <ul className="mt-2 space-y-1">
+        <li>
+          <b>Confidence.</b> CONFIRMED: corroborated by a named vendor/government
+          report. SUSPECTED: single-source or provisional attribution. POC:
+          proof-of-concept or not yet observed exploited in the wild.
+        </li>
+        <li>
+          <b>CS badge.</b> CrowdStrike adversary cryptonym where a public mapping
+          exists. Nation-state suffixes: Panda (China), Bear (Russia), Chollima
+          (North Korea), Kitten (Iran), Spider (eCrime).
+        </li>
+        <li>
+          <b>Source badge.</b> Originating vendor, research, news, or government
+          publication for the item.
+        </li>
+        <li>
+          Timeline dates reflect the report/advisory publication date, not the
+          start of the underlying campaign.
+        </li>
+      </ul>
+    </footer>
+  );
+}
