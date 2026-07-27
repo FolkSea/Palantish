@@ -207,3 +207,22 @@ create policy "allowed read refresh_runs"    on refresh_runs
 
 -- No INSERT/UPDATE/DELETE policies => all client writes are denied by RLS.
 -- The ingest pipeline uses the service-role key, which bypasses RLS.
+
+-- ============================================================================
+-- Grants
+-- ============================================================================
+-- RLS decides which rows a role may see, but the role still needs a table-level
+-- GRANT. Authenticated users get SELECT on the intel tables (rows further
+-- filtered by the allow-list policies above); the service role gets full access
+-- for the ingest pipeline. allowed_users is intentionally NOT granted to
+-- authenticated, so the allow-list is never client-readable.
+grant usage on schema public to anon, authenticated, service_role;
+
+grant select on
+  sources, actors, intel_items, vulnerabilities, breaches, refresh_runs,
+  timeline_events
+to authenticated;
+
+grant all privileges on all tables in schema public to service_role;
+grant all privileges on all sequences in schema public to service_role;
+grant all privileges on all functions in schema public to service_role;
