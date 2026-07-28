@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadDashboard } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
 import { ImportPostButton } from "@/components/ImportPostButton";
+import { SearchPanel } from "@/components/SearchPanel";
 import TimelineTabs from "@/components/TimelineTabs";
 import { ExecutiveSummaryPanel } from "@/components/ExecutiveSummary";
 import { StaleFeedsPanel } from "@/components/StaleFeedsPanel";
@@ -80,6 +81,11 @@ export default async function DashboardPage() {
           </Link>
         </div>
       </header>
+
+      {/* Search */}
+      <div className="mb-4">
+        <SearchPanel />
+      </div>
 
       {/* Breaking ticker (last 24h only; hidden when empty) */}
       {data.breaking.length > 0 ? (

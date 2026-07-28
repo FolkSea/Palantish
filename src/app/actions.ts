@@ -11,6 +11,7 @@ import {
   type ImportResult,
 } from "@/lib/ingest/import-post";
 import { scrapeArticle, assertPublicHttpUrl } from "@/lib/ingest/scrape";
+import { isThreatIntel } from "@/lib/relevance";
 
 async function ensureAllowed(): Promise<string | null> {
   const supabase = await createClient();
@@ -235,4 +236,124 @@ export async function importPostManualAction(
   }
   if (result.ok) refreshDashboard();
   return result;
+}
+
+/* --- Search ---------------------------------------------------------------- */
+
+export type SearchReport = {
+  id: string;
+  title: string;
+  url: string | null;
+  description: string | null;
+  source_name: string | null;
+  published_at: string | null;
+};
+export type SearchBreach = {
+  id: string;
+  org_name: string;
+  url: string | null;
+  summary: string | null;
+  source_name: string | null;
+  event_date: string | null;
+  event_date_label: string | null;
+};
+export type SearchVuln = {
+  id: string;
+  cve_id: string;
+  target: string | null;
+  url: string | null;
+  detail: string | null;
+  status: "confirmed" | "suspected" | "poc";
+  source_name: string | null;
+};
+export type SearchResults = {
+  query: string;
+  reports: SearchReport[];
+  breaches: SearchBreach[];
+  vulns: SearchVuln[];
+};
+
+const SEARCH_LIMIT = 50;
+
+/**
+ * Search intel items, breaches, and vulnerabilities by keyword and return the
+ * matches grouped by section. Honours the same relevance filter and per-user
+ * hidden list as the dashboard; deleted items are already gone from the DB.
+ */
+export async function searchDashboard(query: string): Promise<SearchResults> {
+  const q = (query ?? "").trim();
+  const empty: SearchResults = { query: q, reports: [], breaches: [], vulns: [] };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !isEmailAllowed(user.email)) return empty;
+
+  // Strip characters significant to PostgREST's or()/ilike grammar so the query
+  // is a safe literal substring match.
+  const safe = q.replace(/[,()%_\\*]/g, " ").replace(/\s+/g, " ").trim();
+  if (safe.length < 2) return empty;
+  const like = `%${safe}%`;
+
+  const [intelRes, breachRes, vulnRes, hiddenRes] = await Promise.all([
+    supabase
+      .from("intel_items")
+      .select("id, title, url, description, source_name, published_at, raw_hash")
+      .or(`title.ilike.${like},description.ilike.${like}`)
+      .order("published_at", { ascending: false })
+      .limit(SEARCH_LIMIT),
+    supabase
+      .from("breaches")
+      .select(
+        "id, org_name, url, summary, source_name, event_date, event_date_label, raw_hash",
+      )
+      .or(`org_name.ilike.${like},summary.ilike.${like}`)
+      .order("event_date", { ascending: false })
+      .limit(SEARCH_LIMIT),
+    supabase
+      .from("vulnerabilities")
+      .select("id, cve_id, target, url, detail, status, source_name, raw_hash")
+      .or(`cve_id.ilike.${like},target.ilike.${like},detail.ilike.${like}`)
+      .order("added_at", { ascending: false })
+      .limit(SEARCH_LIMIT),
+    supabase.from("hidden_items").select("raw_hash"),
+  ]);
+
+  const hidden = new Set((hiddenRes.data ?? []).map((r) => r.raw_hash));
+
+  const reports: SearchReport[] = (intelRes.data ?? [])
+    .filter((r) => !hidden.has(r.raw_hash) && isThreatIntel(r.title, r.description))
+    .map((r) => ({
+      id: r.id,
+      title: r.title,
+      url: r.url,
+      description: r.description,
+      source_name: r.source_name,
+      published_at: r.published_at,
+    }));
+  const breaches: SearchBreach[] = (breachRes.data ?? [])
+    .filter((b) => !hidden.has(b.raw_hash) && isThreatIntel(b.org_name, b.summary))
+    .map((b) => ({
+      id: b.id,
+      org_name: b.org_name,
+      url: b.url,
+      summary: b.summary,
+      source_name: b.source_name,
+      event_date: b.event_date,
+      event_date_label: b.event_date_label,
+    }));
+  const vulns: SearchVuln[] = (vulnRes.data ?? [])
+    .filter((v) => !hidden.has(v.raw_hash))
+    .map((v) => ({
+      id: v.id,
+      cve_id: v.cve_id,
+      target: v.target,
+      url: v.url,
+      detail: v.detail,
+      status: v.status,
+      source_name: v.source_name,
+    }));
+
+  return { query: q, reports, breaches, vulns };
 }
