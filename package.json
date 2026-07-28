@@ -10,6 +10,7 @@
     "ingest": "NODE_OPTIONS='--conditions=react-server' tsx scripts/ingest.ts",
     "load:adversaries": "NODE_OPTIONS='--conditions=react-server' tsx scripts/load-adversaries.ts",
     "backfill:adversaries": "NODE_OPTIONS='--conditions=react-server' tsx scripts/backfill-adversaries.ts",
+    "summary": "NODE_OPTIONS='--conditions=react-server' tsx scripts/generate-summary.ts",
     "ascii-check": "tsx scripts/ascii-check.ts",
     "test": "vitest run",
     "db:reset": "supabase db reset",

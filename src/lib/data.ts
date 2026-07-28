@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
+import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
+import { buildEcrimeActorGroups, deriveEcrimeActor } from "@/lib/ecrime";
 
 type Tables = Database["public"]["Tables"];
 type Views = Database["public"]["Views"];
@@ -12,10 +14,40 @@ export type TimelineRow = Views["timeline_events"]["Row"];
 
 export type ActorWithItems = ActorRow & { items: IntelItemRow[] };
 
+export type EcrimeTimelinePoint = {
+  id: string;
+  actor: string;
+  date: string;
+  title: string;
+  summary: string | null;
+  source: string | null;
+  url: string | null;
+};
+
+export type VulnTimelinePoint = {
+  id: string;
+  status: "confirmed" | "poc" | "suspected";
+  date: string;
+  cveId: string;
+  target: string | null;
+  detail: string | null;
+  url: string | null;
+};
+
+export type ExecutiveSummary = {
+  summary: string;
+  source: string;
+  model: string | null;
+  generatedAt: string;
+};
+
 export type DashboardData = {
   compiledAt: string | null;
+  executiveSummary: ExecutiveSummary | null;
   actors: ActorWithItems[];
   timeline: TimelineRow[];
+  ecrimeTimeline: EcrimeTimelinePoint[];
+  vulnTimeline: VulnTimelinePoint[];
   breaking: IntelItemRow[];
   reports: IntelItemRow[];
   vulnerabilities: VulnerabilityRow[];
@@ -30,9 +62,9 @@ const ECRIME_CARD_LIMIT = 6;
  * Loads every section of the dashboard in parallel. All queries run under the
  * caller's RLS context, so only allow-listed authenticated users see data.
  */
-// The timeline graph looks back 30 days (enforced by the timeline_events view).
-// Every other section shows only the last 7 days.
+// Timeline tabs look back 30 days; every non-timeline section shows 7 days.
 const RECENT_DAYS = 7;
+const TIMELINE_DAYS = 30;
 
 function daysAgo(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
@@ -43,6 +75,7 @@ function daysAgo(days: number): string {
 export async function loadDashboard(): Promise<DashboardData> {
   const supabase = await createClient();
   const recentCutoff = daysAgo(RECENT_DAYS);
+  const timelineCutoff = daysAgo(TIMELINE_DAYS);
 
   const [
     actorsRes,
@@ -52,6 +85,8 @@ export async function loadDashboard(): Promise<DashboardData> {
     reportsRes,
     vulnsRes,
     breachesRes,
+    ecrimeAdvRes,
+    summaryRes,
     refreshRes,
   ] = await Promise.all([
     supabase.from("actors").select("*").order("sort_order"),
@@ -61,7 +96,7 @@ export async function loadDashboard(): Promise<DashboardData> {
       .eq("item_type", "actor_activity")
       .gte("published_at", recentCutoff)
       .order("published_at", { ascending: false }),
-    // Timeline: 30-day window (the view enforces the range).
+    // Nation-state timeline: 30-day window (the view enforces the range).
     supabase
       .from("timeline_events")
       .select("*")
@@ -79,16 +114,30 @@ export async function loadDashboard(): Promise<DashboardData> {
       .eq("item_type", "report")
       .gte("published_at", recentCutoff)
       .order("published_at", { ascending: false }),
+    // 30-day window for the vulns tab; the table slices this to 7 days below.
     supabase
       .from("vulnerabilities")
       .select("*")
-      .gte("added_at", recentCutoff)
+      .gte("added_at", timelineCutoff)
       .order("added_at", { ascending: false }),
+    // 30-day window for the eCrime tab; the table/card slice to 7 days below.
     supabase
       .from("breaches")
       .select("*")
-      .gte("event_date", recentCutoff)
+      .gte("event_date", timelineCutoff)
       .order("event_date", { ascending: false, nullsFirst: false }),
+    // eCrime adversary aliases (CrowdStrike cryptonyms) for attribution.
+    supabase
+      .from("adversaries")
+      .select(
+        "name, animal_classifier, description, short_description, motivation, community_identifiers, internal_alternative_names",
+      )
+      .eq("nexus", "other"),
+    supabase
+      .from("executive_summaries")
+      .select("summary, source, model, generated_at")
+      .order("generated_at", { ascending: false })
+      .limit(1),
     supabase
       .from("refresh_runs")
       .select("finished_at, started_at")
@@ -107,15 +156,61 @@ export async function loadDashboard(): Promise<DashboardData> {
   const compiledAt =
     latestRefresh?.finished_at ?? latestRefresh?.started_at ?? null;
 
-  const breaches = breachesRes.data ?? [];
+  const summaryRow = summaryRes.data?.[0];
+  const executiveSummary: ExecutiveSummary | null = summaryRow
+    ? {
+        summary: summaryRow.summary,
+        source: summaryRow.source,
+        model: summaryRow.model,
+        generatedAt: summaryRow.generated_at,
+      }
+    : null;
+
+  // eCrime attribution matcher (catalogue CrowdStrike names + known crews).
+  const ecrimeGroups = buildEcrimeActorGroups(
+    buildGroupsFromAdversaries(ecrimeAdvRes.data ?? []),
+  );
+
+  const breaches30 = breachesRes.data ?? [];
+  const breaches = breaches30.filter((b) => (b.event_date ?? "") >= recentCutoff);
+  const ecrimeTimeline: EcrimeTimelinePoint[] = breaches30
+    .filter((b) => b.event_date)
+    .map((b) => ({
+      id: b.id,
+      actor: deriveEcrimeActor(`${b.org_name} ${b.summary ?? ""}`, ecrimeGroups),
+      date: b.event_date as string,
+      title: b.org_name,
+      summary: b.summary,
+      source: b.source_name,
+      url: b.url,
+    }));
+
+  const vulns30 = vulnsRes.data ?? [];
+  const vulnerabilities = vulns30.filter(
+    (v) => (v.added_at ?? "") >= recentCutoff,
+  );
+  const vulnTimeline: VulnTimelinePoint[] = vulns30
+    .filter((v) => v.added_at)
+    .map((v) => ({
+      id: v.id,
+      status: v.status,
+      date: v.added_at as string,
+      cveId: v.cve_id,
+      target: v.target,
+      detail: v.detail,
+      url: v.url,
+    }));
 
   return {
     compiledAt,
+    executiveSummary,
     actors,
     timeline: timelineRes.data ?? [],
+    ecrimeTimeline,
+    vulnTimeline,
     breaking: breakingRes.data ?? [],
     reports: reportsRes.data ?? [],
-    vulnerabilities: vulnsRes.data ?? [],
+    vulnerabilities,
     breaches,
     // The most significant recent eCrime activity (ransomware / extortion /
     // large-scale breaches) surfaced as its own actor card.

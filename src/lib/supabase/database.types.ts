@@ -198,6 +198,36 @@ export type Database = {
           },
         ]
       }
+      executive_summaries: {
+        Row: {
+          created_at: string
+          generated_at: string
+          id: string
+          model: string | null
+          source: string
+          summary: string
+          window_note: string | null
+        }
+        Insert: {
+          created_at?: string
+          generated_at?: string
+          id?: string
+          model?: string | null
+          source?: string
+          summary: string
+          window_note?: string | null
+        }
+        Update: {
+          created_at?: string
+          generated_at?: string
+          id?: string
+          model?: string | null
+          source?: string
+          summary?: string
+          window_note?: string | null
+        }
+        Relationships: []
+      }
       intel_items: {
         Row: {
           actor_id: string | null

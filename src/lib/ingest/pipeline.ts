@@ -6,6 +6,7 @@ import { selectNewCandidates } from "./dedup";
 import { selectEnricher } from "./enrich/llm";
 import { selectSearchProvider } from "./search";
 import { buildGroupsFromAdversaries } from "./adversaries";
+import { generateAndStoreSummary } from "@/lib/summary/generate";
 import type { EnrichedItem } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -208,6 +209,15 @@ export async function runIngest(): Promise<IngestResult> {
     // Keep-most-recent behaviour: mark actors quiet when they have no items in
     // the 30-day window, active otherwise. Existing rows are never deleted.
     await refreshActorStatuses(db);
+
+    // Regenerate the executive summary from the refreshed data (non-fatal).
+    try {
+      await generateAndStoreSummary(db);
+    } catch (err) {
+      errors.push(
+        `summary: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     await db
       .from("refresh_runs")

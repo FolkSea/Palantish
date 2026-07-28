@@ -2,8 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-/** Renders the compile/refresh timestamp client-side in the viewer's locale. */
-export default function CompiledTime({ iso }: { iso: string | null }) {
+/** Renders a timestamp client-side in the viewer's locale, prefixed by label. */
+export default function CompiledTime({
+  iso,
+  label = "Compiled",
+}: {
+  iso: string | null;
+  label?: string;
+}) {
   const [text, setText] = useState<string>("");
 
   useEffect(() => {
@@ -22,7 +28,7 @@ export default function CompiledTime({ iso }: { iso: string | null }) {
 
   return (
     <span suppressHydrationWarning>
-      Compiled {text || "..."}
+      {label} {text || "..."}
       {iso ? "" : " (no refresh recorded yet)"}
     </span>
   );

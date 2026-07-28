@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { loadDashboard } from "@/lib/data";
-import { Card } from "@/components/Card";
 import CompiledTime from "@/components/CompiledTime";
-import TimelineChart from "@/components/TimelineChart";
+import TimelineTabs from "@/components/TimelineTabs";
+import { ExecutiveSummaryPanel } from "@/components/ExecutiveSummary";
 import {
   Ticker,
   ActorGrid,
@@ -55,25 +55,23 @@ export default async function DashboardPage() {
         </form>
       </header>
 
+      {/* Executive summary */}
+      <div className="mb-4">
+        <ExecutiveSummaryPanel summary={data.executiveSummary} />
+      </div>
+
       {/* Breaking ticker */}
       <div className="mb-4">
         <Ticker items={data.breaking} />
       </div>
 
       <div className="space-y-4">
-        {/* Timeline */}
-        <Card
-          title="Nation-state activity timeline (last 30 days)"
-          subtitle="Dates reflect report/advisory publication, not campaign start. Click a point to open the source."
-        >
-          {data.timeline.length === 0 ? (
-            <p className="py-10 text-center text-[12px] text-slate-400">
-              No timeline events in the last 30 days.
-            </p>
-          ) : (
-            <TimelineChart rows={data.timeline} />
-          )}
-        </Card>
+        {/* Tabbed activity timeline */}
+        <TimelineTabs
+          timeline={data.timeline}
+          ecrimeTimeline={data.ecrimeTimeline}
+          vulnTimeline={data.vulnTimeline}
+        />
 
         {/* Actor cards */}
         <ActorGrid actors={data.actors} ecrime={data.ecrime} />
