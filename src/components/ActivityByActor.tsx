@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import type { ActorWithItems, IntelItemRow } from "@/lib/data";
+import type { ActorWithItems, ActorItem } from "@/lib/data";
 import type { ActorGroupCard, ActorReport } from "@/lib/actor-sections";
 import type { Focus } from "@/components/settings/AccountPanel";
 import {
+  AdversaryBadge,
   ConfidenceBadge,
-  CrowdStrikeBadge,
   SourceBadge,
   StatusPill,
 } from "@/components/Badges";
@@ -200,7 +200,7 @@ function ActorCard({ actor }: { actor: ActorWithItems }) {
   );
 }
 
-function ActorEntry({ item }: { item: IntelItemRow }) {
+function ActorEntry({ item }: { item: ActorItem }) {
   return (
     <div className="border-b border-slate-100 pb-3 last:border-none last:pb-0">
       <ExtLink href={item.url}>{item.title}</ExtLink>
@@ -211,7 +211,7 @@ function ActorEntry({ item }: { item: IntelItemRow }) {
       ) : null}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <ConfidenceBadge value={item.confidence} />
-        <CrowdStrikeBadge name={item.crowdstrike_adversary} />
+        <AdversaryBadge name={item.adversary} />
         <SourceBadge name={item.source_name} />
         {item.published_at ? (
           <span className="text-[10px] text-slate-400">

@@ -107,6 +107,25 @@ export function classifyGroup(c: RawCandidate): GroupEntry | null {
   return matchGroup(haystack(c), sortGroups(GROUP_TABLE));
 }
 
+/**
+ * Surface a specific adversary name mentioned in the text (original casing) when
+ * no CrowdStrike cryptonym applies - e.g. "Salt Typhoon". Generic single-word
+ * aliases (panda/bear/...) are ignored so only real names are shown.
+ */
+export function deriveAdversaryFromText(
+  title: string,
+  description: string | null | undefined,
+  groups: GroupEntry[],
+): string | null {
+  const text = `${title} ${description ?? ""}`;
+  const group = matchGroup(text.toLowerCase(), groups);
+  if (!group) return null;
+  if (group.cs) return group.cs;
+  if (!group.alias.includes(" ")) return null;
+  const idx = text.toLowerCase().indexOf(group.alias);
+  return idx >= 0 ? text.slice(idx, idx + group.alias.length) : null;
+}
+
 export function isMarketing(c: RawCandidate): boolean {
   return MARKETING_RE.test(c.title) || MARKETING_RE.test(c.description ?? "");
 }

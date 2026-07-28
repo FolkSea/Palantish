@@ -66,23 +66,8 @@ export const CS_ANIMAL_BY_NEXUS: Record<Nexus, string> = {
   other: "Spider",
 };
 
-const CS_ANIMAL_STYLE: Record<string, string> = {
-  Panda: "bg-red-50 text-red-700 border-red-200",
-  Bear: "bg-rose-50 text-rose-700 border-rose-200",
-  Chollima: "bg-violet-50 text-violet-700 border-violet-200",
-  Kitten: "bg-orange-50 text-orange-700 border-orange-200",
-  Spider: "bg-slate-100 text-slate-700 border-slate-300",
-};
-
-/** Colour class for a CrowdStrike adversary name (matched by animal suffix). */
-export function csAdversaryClass(name: string): string {
-  const animal = Object.keys(CS_ANIMAL_STYLE).find((a) =>
-    name.toUpperCase().includes(a.toUpperCase()),
-  );
-  return animal
-    ? CS_ANIMAL_STYLE[animal]
-    : "bg-slate-100 text-slate-700 border-slate-300";
-}
+// All adversary-name labels share one red scheme, regardless of nexus/animal.
+export const ADVERSARY_BADGE_CLASS = "border-red-200 bg-red-50 text-red-700";
 
 // Nation-state colours for the timeline scatter + actor accents. Chosen for
 // maximum hue separation so adjacent rows are easy to tell apart (the old red /

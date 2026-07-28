@@ -1,8 +1,8 @@
 import {
+  ADVERSARY_BADGE_CLASS,
   CONFIDENCE_STYLE,
   PRIORITY_STYLE,
   VULN_STATUS_STYLE,
-  csAdversaryClass,
   type Confidence,
   type VulnPriority,
 } from "@/lib/badges";
@@ -30,11 +30,11 @@ export function PriorityBadge({ value }: { value: VulnPriority }) {
   return <span className={`${base} ${s.className}`}>{s.label}</span>;
 }
 
-export function CrowdStrikeBadge({ name }: { name: string | null }) {
+export function AdversaryBadge({ name }: { name: string | null }) {
   if (!name) return null;
   return (
-    <span className={`${base} ${csAdversaryClass(name)}`} title="CrowdStrike adversary">
-      CS: {name}
+    <span className={`${base} ${ADVERSARY_BADGE_CLASS}`} title="Adversary">
+      {name}
     </span>
   );
 }

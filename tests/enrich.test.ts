@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { RulesEnricher } from "@/lib/ingest/enrich/rules";
+import {
+  RulesEnricher,
+  GROUP_TABLE,
+  sortGroups,
+  deriveAdversaryFromText,
+} from "@/lib/ingest/enrich/rules";
 import type { RawCandidate } from "@/lib/ingest/types";
 
 const enricher = new RulesEnricher();
@@ -107,5 +112,29 @@ describe("RulesEnricher classification", () => {
       }),
     );
     expect(out).not.toBeNull();
+  });
+});
+
+describe("deriveAdversaryFromText", () => {
+  const groups = sortGroups(GROUP_TABLE);
+
+  it("returns a specific named mention (original casing) when there is no CS name", () => {
+    expect(
+      deriveAdversaryFromText("Salt Typhoon breached US telecoms", null, groups),
+    ).toBe("Salt Typhoon");
+  });
+
+  it("prefers the CrowdStrike cryptonym when the group has one", () => {
+    expect(
+      deriveAdversaryFromText("Volt Typhoon pre-positions in OT", null, groups),
+    ).toBe("Vanguard Panda");
+  });
+
+  it("ignores generic single-word aliases", () => {
+    expect(deriveAdversaryFromText("A panda in the zoo", null, groups)).toBeNull();
+  });
+
+  it("returns null when nothing matches", () => {
+    expect(deriveAdversaryFromText("Ordinary security update", null, groups)).toBeNull();
   });
 });

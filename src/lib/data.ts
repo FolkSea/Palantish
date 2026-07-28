@@ -4,6 +4,11 @@ import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
 import { buildEcrimeActorGroups, deriveEcrimeActor } from "@/lib/ecrime";
 import { isThreatIntel } from "@/lib/relevance";
 import {
+  GROUP_TABLE,
+  sortGroups,
+  deriveAdversaryFromText,
+} from "@/lib/ingest/enrich/rules";
+import {
   buildActorSectionCards,
   buildHacktivismGroups,
   type ActorGroupCard,
@@ -18,7 +23,10 @@ export type VulnerabilityRow = Tables["vulnerabilities"]["Row"];
 export type BreachRow = Tables["breaches"]["Row"];
 export type TimelineRow = Views["timeline_events"]["Row"];
 
-export type ActorWithItems = ActorRow & { items: IntelItemRow[] };
+// An actor-card item, with a display adversary name (CS cryptonym when set,
+// otherwise a specific name derived from the item text).
+export type ActorItem = IntelItemRow & { adversary: string | null };
+export type ActorWithItems = ActorRow & { items: ActorItem[] };
 
 export type EcrimeTimelinePoint = {
   id: string;
@@ -186,7 +194,17 @@ export async function loadDashboard(): Promise<DashboardData> {
   // and drop anything this user has hidden.
   const keep = (i: { title: string | null; description?: string | null; raw_hash: string }) =>
     isThreatIntel(i.title, i.description) && !hidden.has(i.raw_hash);
-  const activity = (activityRes.data ?? []).filter(keep);
+  // Attach a display adversary name to each item: the CS cryptonym if the
+  // classifier set one, otherwise a specific name mentioned in the item.
+  const nsGroups = sortGroups(GROUP_TABLE);
+  const activity: ActorItem[] = (activityRes.data ?? [])
+    .filter(keep)
+    .map((i) => ({
+      ...i,
+      adversary:
+        i.crowdstrike_adversary ??
+        deriveAdversaryFromText(i.title, i.description, nsGroups),
+    }));
   const actors: ActorWithItems[] = (actorsRes.data ?? []).map((actor) => ({
     ...actor,
     items: activity.filter((i) => i.actor_id === actor.id),
