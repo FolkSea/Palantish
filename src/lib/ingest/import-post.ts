@@ -7,7 +7,7 @@ import {
   siteIdentity,
   type ScrapedArticle,
 } from "./scrape";
-import { selectEnricher } from "./enrich/llm";
+import { selectEnricher } from "./enrich/select";
 import { toAscii } from "@/lib/text";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import { computeHash } from "./dedup";

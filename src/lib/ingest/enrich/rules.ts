@@ -140,9 +140,67 @@ export function classifyConfidence(c: RawCandidate): Confidence {
   return "suspected";
 }
 
+/** Build the persisted item from a candidate + its (optional) matched group. */
+export function buildEnriched(
+  c: RawCandidate,
+  group: GroupEntry | null,
+  itemType: ItemType,
+): EnrichedItem {
+  return {
+    title: c.title,
+    description: c.description,
+    url: c.url,
+    publishedAt: c.publishedAt ?? new Date(),
+    nexus: group?.nexus ?? null,
+    itemType,
+    confidence: classifyConfidence(c),
+    crowdstrikeAdversary: group?.cs ?? null,
+    sourceName: c.sourceName,
+    rawHash: computeHash(c.title, c.url),
+  };
+}
+
+/** Force a candidate into a plain report (used as the keep-by-default fallback). */
+export function buildReport(c: RawCandidate): EnrichedItem {
+  return buildEnriched(c, null, "report");
+}
+
+/**
+ * Deterministic verdict for a candidate:
+ *  - keep:   confident classification (known actor, CVE, breach, breaking, or a
+ *            vendor/research/government report).
+ *  - drop:   clearly not intelligence (marketing, or small-scale eCrime).
+ *  - unsure: an ambiguous generic news post with no threat signal - the caller
+ *            decides (the hybrid enricher escalates these to the LLM).
+ */
+export type RulesVerdict =
+  | { kind: "keep"; item: EnrichedItem }
+  | { kind: "drop" }
+  | { kind: "unsure" };
+
+export function rulesClassify(
+  c: RawCandidate,
+  groups: GroupEntry[],
+): RulesVerdict {
+  if (!c.title || !c.url) return { kind: "drop" };
+  if (isMarketing(c)) return { kind: "drop" };
+
+  const group = matchGroup(haystack(c), groups);
+  // eCrime / "other" nexus only qualifies when clearly large-scale.
+  if (group?.nexus === "other" && !isLargeScaleEcrime(c)) return { kind: "drop" };
+
+  const itemType = classifyItemType(c, group);
+  // A generic news post with no nation-state nexus and no vuln/breach signal is
+  // ambiguous - not obviously marketing, but not obviously intelligence either.
+  if (!group && itemType === "report" && c.sourceCategory === "news") {
+    return { kind: "unsure" };
+  }
+  return { kind: "keep", item: buildEnriched(c, group, itemType) };
+}
+
 /**
  * Rules-based default enricher. Deterministic, no network. Drops marketing and
- * low-signal eCrime. Used whenever the LLM enricher is not configured.
+ * low-signal eCrime, and drops ambiguous news (no LLM to escalate to).
  */
 export class RulesEnricher implements Enricher {
   readonly name = "rules";
@@ -158,33 +216,7 @@ export class RulesEnricher implements Enricher {
   }
 
   async enrich(c: RawCandidate): Promise<EnrichedItem | null> {
-    if (!c.title || !c.url) return null;
-    if (isMarketing(c)) return null;
-
-    const group = matchGroup(haystack(c), this.groups);
-
-    // eCrime / "other" nexus only qualifies when clearly large-scale.
-    if (group?.nexus === "other" && !isLargeScaleEcrime(c)) return null;
-
-    const itemType = classifyItemType(c, group);
-
-    // Drop generic vendor/news posts with no nation-state nexus and no
-    // vuln/breach signal - they are not intelligence for this dashboard.
-    if (!group && itemType === "report" && c.sourceCategory === "news") {
-      return null;
-    }
-
-    return {
-      title: c.title,
-      description: c.description,
-      url: c.url,
-      publishedAt: c.publishedAt ?? new Date(),
-      nexus: group?.nexus ?? null,
-      itemType,
-      confidence: classifyConfidence(c),
-      crowdstrikeAdversary: group?.cs ?? null,
-      sourceName: c.sourceName,
-      rawHash: computeHash(c.title, c.url),
-    };
+    const v = rulesClassify(c, this.groups);
+    return v.kind === "keep" ? v.item : null;
   }
 }

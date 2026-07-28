@@ -6,7 +6,6 @@ import { computeHash } from "@/lib/ingest/dedup";
 import type { Enricher, EnrichedItem, ItemType, RawCandidate } from "@/lib/ingest/types";
 import { RulesEnricher } from "./rules";
 import type { GroupEntry } from "./rules";
-import { serverEnv } from "@/lib/env";
 
 // Classification of RSS/advisory items is a high-volume, low-complexity task,
 // so this defaults to a small fast model. Override with ANTHROPIC_MODEL.
@@ -71,47 +70,65 @@ export class LlmEnricher implements Enricher {
     this.fallback = new RulesEnricher(extraGroups);
   }
 
-  async enrich(c: RawCandidate): Promise<EnrichedItem | null> {
-    if (!c.title || !c.url) return null;
-    try {
-      const message = await this.client.messages.create({
-        model: this.model,
-        max_tokens: 256,
-        system: SYSTEM,
-        messages: [
-          {
-            role: "user",
-            content: `Source: ${c.sourceName} (${c.sourceCategory ?? "unknown"})
+  private async request(c: RawCandidate): Promise<LlmResult | null> {
+    const message = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 256,
+      system: SYSTEM,
+      messages: [
+        {
+          role: "user",
+          content: `Source: ${c.sourceName} (${c.sourceCategory ?? "unknown"})
 Title: ${c.title}
 Description: ${c.description ?? ""}`,
-          },
-        ],
-      });
+        },
+      ],
+    });
+    const text = message.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+    return this.parse(text);
+  }
 
-      const text = message.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text)
-        .join("");
+  private toItem(c: RawCandidate, parsed: LlmResult): EnrichedItem {
+    return {
+      title: c.title,
+      description: c.description,
+      url: c.url,
+      publishedAt: c.publishedAt ?? new Date(),
+      nexus: parsed.nexus,
+      itemType: parsed.itemType,
+      confidence: parsed.confidence,
+      crowdstrikeAdversary: parsed.crowdstrikeAdversary,
+      sourceName: c.sourceName,
+      rawHash: computeHash(c.title, c.url),
+    };
+  }
 
-      const parsed = this.parse(text);
-      if (!parsed || !parsed.relevant) return null;
-
-      return {
-        title: c.title,
-        description: c.description,
-        url: c.url,
-        publishedAt: c.publishedAt ?? new Date(),
-        nexus: parsed.nexus,
-        itemType: parsed.itemType,
-        confidence: parsed.confidence,
-        crowdstrikeAdversary: parsed.crowdstrikeAdversary,
-        sourceName: c.sourceName,
-        rawHash: computeHash(c.title, c.url),
-      };
+  /**
+   * Classify one candidate: the enriched item when relevant, "drop" when the
+   * model judges it irrelevant, or "unavailable" when the call fails or cannot
+   * be parsed (so callers can apply a keep-by-default policy).
+   */
+  async classify(
+    c: RawCandidate,
+  ): Promise<EnrichedItem | "drop" | "unavailable"> {
+    if (!c.title || !c.url) return "drop";
+    try {
+      const parsed = await this.request(c);
+      if (!parsed) return "unavailable";
+      return parsed.relevant ? this.toItem(c, parsed) : "drop";
     } catch {
-      // Never let the LLM break ingestion; degrade to rules.
-      return this.fallback.enrich(c);
+      return "unavailable";
     }
+  }
+
+  async enrich(c: RawCandidate): Promise<EnrichedItem | null> {
+    const r = await this.classify(c);
+    if (r === "drop") return null;
+    if (r === "unavailable") return this.fallback.enrich(c);
+    return r;
   }
 
   private parse(text: string): LlmResult | null {
@@ -148,11 +165,4 @@ Description: ${c.description ?? ""}`,
           : null,
     };
   }
-}
-
-/** Chooses the enricher based on configuration. */
-export function selectEnricher(extraGroups: GroupEntry[] = []): Enricher {
-  const key = serverEnv.anthropicApiKey;
-  if (key) return new LlmEnricher(key, extraGroups);
-  return new RulesEnricher(extraGroups);
 }

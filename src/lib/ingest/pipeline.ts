@@ -3,7 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pullAllFeeds, type FeedSource } from "./feeds";
 import { selectNewCandidates } from "./dedup";
-import { selectEnricher } from "./enrich/llm";
+import { selectEnricher } from "./enrich/select";
 import { selectSearchProvider } from "./search";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import { updateFeedHealth } from "./feed-health";
