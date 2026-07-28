@@ -4,6 +4,7 @@ import {
   SettingsView,
   type SettingsSource,
 } from "@/components/settings/SettingsView";
+import type { HiddenPost } from "@/components/settings/HiddenPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,33 @@ export default async function SettingsPage() {
 
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ?? "";
+
+  // Current user's hidden posts (RLS-scoped), joined with the item details.
+  const { data: hiddenRows } = await supabase
+    .from("hidden_items")
+    .select("raw_hash, created_at")
+    .order("created_at", { ascending: false });
+  const hashes = (hiddenRows ?? []).map((h) => h.raw_hash);
+  const hiddenItemRows = hashes.length
+    ? ((
+        await supabase
+          .from("intel_items")
+          .select("raw_hash, title, url, source_name, published_at")
+          .in("raw_hash", hashes)
+      ).data ?? [])
+    : [];
+  const byHash = new Map(hiddenItemRows.map((r) => [r.raw_hash, r]));
+  const hidden: HiddenPost[] = (hiddenRows ?? []).map((h) => {
+    const it = byHash.get(h.raw_hash);
+    return {
+      rawHash: h.raw_hash,
+      hiddenAt: h.created_at,
+      title: it?.title ?? null,
+      url: it?.url ?? null,
+      sourceName: it?.source_name ?? null,
+      publishedAt: it?.published_at ?? null,
+    };
+  });
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -43,6 +71,7 @@ export default async function SettingsPage() {
         email={user?.email ?? ""}
         displayName={displayName}
         sources={(sources ?? []) as SettingsSource[]}
+        hidden={hidden}
       />
     </div>
   );

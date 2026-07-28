@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AccountPanel } from "./AccountPanel";
 import { SourcesPanel } from "./SourcesPanel";
+import { HiddenPanel, type HiddenPost } from "./HiddenPanel";
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
 
 export type SettingsSource = {
@@ -15,21 +16,24 @@ export type SettingsSource = {
   active: boolean;
 };
 
-type Tab = "account" | "sources";
+type Tab = "account" | "sources" | "hidden";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "account", label: "Account", hint: "Display name and password" },
   { id: "sources", label: "Sources", hint: "Add, edit, or delete feeds" },
+  { id: "hidden", label: "Hidden posts", hint: "Unhide posts you hid" },
 ];
 
 export function SettingsView({
   email,
   displayName,
   sources,
+  hidden,
 }: {
   email: string;
   displayName: string;
   sources: SettingsSource[];
+  hidden: HiddenPost[];
 }) {
   const [tab, setTab] = useState<Tab>("account");
 
@@ -63,8 +67,10 @@ export function SettingsView({
       <div>
         {tab === "account" ? (
           <AccountPanel email={email} displayName={displayName} />
-        ) : (
+        ) : tab === "sources" ? (
           <SourcesPanel initialSources={sources} />
+        ) : (
+          <HiddenPanel initialHidden={hidden} />
         )}
       </div>
     </div>

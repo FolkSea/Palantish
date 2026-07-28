@@ -101,6 +101,31 @@ export async function hideItemAction(
   return { ok: true };
 }
 
+/** Unhide an item the current user previously hid (per-user; RLS-scoped). */
+export async function unhideItemAction(
+  rawHash: string,
+): Promise<ItemMutationResult> {
+  if (!rawHash) return { ok: false, error: "Missing item reference." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !isEmailAllowed(user.email)) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  const { error } = await supabase
+    .from("hidden_items")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("raw_hash", rawHash);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
 /**
  * Default import: heuristic scrape then ingest. If the scrape/extraction fails,
  * the result is marked `recoverable` so the UI can offer the AI or paste
