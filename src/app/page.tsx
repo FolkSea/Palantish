@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { loadDashboard } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
+import { ImportPostButton } from "@/components/ImportPostButton";
 import TimelineTabs from "@/components/TimelineTabs";
 import { ExecutiveSummaryPanel } from "@/components/ExecutiveSummary";
 import { StaleFeedsPanel } from "@/components/StaleFeedsPanel";
@@ -42,6 +43,7 @@ export default async function DashboardPage() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-slate-400">{user?.email}</span>
+          <ImportPostButton />
           <Link
             href="/settings"
             aria-label="Settings"
