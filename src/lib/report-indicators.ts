@@ -2,17 +2,11 @@
 // technique ids from a report's text. Pure and regex-based - no LLM - so it
 // only surfaces indicators that literally appear in the title/description.
 
-export type FileIoc = {
-  sha1: string | null;
-  name: string | null;
-  comment: string | null;
-};
-
 export type Indicators = {
   ips: string[];
   domains: string[];
   uris: string[];
-  files: FileIoc[];
+  files: string[]; // file hashes (MD5 / SHA1 / SHA256)
   mitre: string[];
 };
 
@@ -23,8 +17,8 @@ const FILE_EXT =
 const URI_RE = /\bhttps?:\/\/[^\s"'<>()\]]+/gi;
 const IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 const DOMAIN_RE = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi;
-const SHA1_RE = /\b[a-f0-9]{40}\b/gi;
-const FILE_RE = new RegExp(`\\b[\\w-]{1,64}\\.(?:${FILE_EXT})\\b`, "gi");
+// Match SHA256 (64) / SHA1 (40) / MD5 (32) hex hashes, longest first.
+const HASH_RE = /\b(?:[a-f0-9]{64}|[a-f0-9]{40}|[a-f0-9]{32})\b/gi;
 const EXT_ONLY_RE = new RegExp(`^(?:${FILE_EXT})$`, "i");
 const MITRE_RE = /\bT\d{4}(?:\.\d{3})?\b/g;
 
@@ -35,6 +29,11 @@ function defang(text: string): string {
     .replace(/\[:\]/g, ":")
     .replace(/\[\/\]/g, "/")
     .replace(/\bhxxp(s?)\b/gi, "http$1");
+}
+
+/** Re-defang a plain IP / domain / URI for safe display (never a live link). */
+export function defangForDisplay(value: string): string {
+  return value.replace(/https?:\/\//gi, (m) => m.replace(/^http/i, "hxxp")).replace(/\./g, "[.]");
 }
 
 function uniq(arr: string[]): string[] {
@@ -78,12 +77,7 @@ export function extractIndicators(text: string): Indicators {
       .filter((d) => !ipSet.has(d) && !isFileExt(d) && !uriHosts.has(d)),
   );
 
-  const sha1s = uniq(matchAll(t, SHA1_RE).map((h) => h.toLowerCase()));
-  const fileNames = uniq(matchAll(t, FILE_RE));
-  const files: FileIoc[] = [
-    ...sha1s.map((sha1) => ({ sha1, name: null, comment: null })),
-    ...fileNames.map((name) => ({ sha1: null, name, comment: null })),
-  ];
+  const files = uniq(matchAll(t, HASH_RE).map((h) => h.toLowerCase()));
 
   const mitre = uniq(matchAll(t, MITRE_RE).map((m) => m.toUpperCase()));
 

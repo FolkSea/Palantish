@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { extractIndicators, type Indicators } from "@/lib/report-indicators";
+import {
+  extractIndicators,
+  defangForDisplay,
+  type Indicators,
+} from "@/lib/report-indicators";
 import { fetchReportViewAction } from "@/app/actions";
 import { formatDate } from "@/lib/format";
 
@@ -44,11 +48,6 @@ function ReportModal({
   report: ReportModalData;
   onClose: () => void;
 }) {
-  const indicators = useMemo(
-    () => extractIndicators(`${report.title} ${report.description ?? ""}`),
-    [report],
-  );
-
   // Show the live page when its headers allow framing; otherwise embed a
   // server-fetched HTML snapshot (bypasses X-Frame-Options); and only if even
   // that fails, fall back to scraped text under a notice bar.
@@ -59,25 +58,40 @@ function ReportModal({
     | { status: "fallback"; text: string | null; error?: string }
   >({ status: "loading" });
 
+  // The scraped article body drives IOC extraction regardless of how the
+  // Details pane is rendered (live frame, snapshot, or text).
+  const [detailsText, setDetailsText] = useState("");
+
   useEffect(() => {
     if (!report.url) {
       setView({ status: "fallback", text: null, error: "No report link available." });
+      setDetailsText("");
       return;
     }
     const url = report.url;
     let active = true;
     setView({ status: "loading" });
+    setDetailsText("");
     fetchReportViewAction(url).then((r) => {
       if (!active) return;
       if (r.ok && r.frameable) setView({ status: "frame", url });
       else if (r.ok && r.html) setView({ status: "embed", html: r.html });
       else if (r.ok) setView({ status: "fallback", text: r.text || null });
       else setView({ status: "fallback", text: null, error: r.error });
+      setDetailsText(r.ok ? r.text : "");
     });
     return () => {
       active = false;
     };
   }, [report.url]);
+
+  const indicators = useMemo(
+    () =>
+      extractIndicators(
+        `${report.title} ${report.description ?? ""} ${detailsText}`,
+      ),
+    [report.title, report.description, detailsText],
+  );
 
   return (
     <div
@@ -267,7 +281,15 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-[12px] italic text-slate-400">{children}</p>;
 }
 
-function IocList({ title, items }: { title: string; items: string[] }) {
+function IocList({
+  title,
+  items,
+  defang,
+}: {
+  title: string;
+  items: string[];
+  defang?: boolean;
+}) {
   return (
     <div>
       <p className="mb-1 text-[11px] font-medium text-slate-500">
@@ -277,7 +299,7 @@ function IocList({ title, items }: { title: string; items: string[] }) {
         <ul className="space-y-0.5">
           {items.map((v) => (
             <li key={v} className="break-all font-mono text-[12px] text-slate-700">
-              {v}
+              {defang ? defangForDisplay(v) : v}
             </li>
           ))}
         </ul>
@@ -291,43 +313,11 @@ function IocList({ title, items }: { title: string; items: string[] }) {
 function IocView({ indicators }: { indicators: Indicators }) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <IocList title="IP Addresses" items={indicators.ips} />
-        <IocList title="Domains" items={indicators.domains} />
-        <IocList title="URIs" items={indicators.uris} />
-      </div>
-      <div>
-        <p className="mb-1 text-[11px] font-medium text-slate-500">
-          Files ({indicators.files.length})
-        </p>
-        {indicators.files.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[12px]">
-              <thead>
-                <tr className="text-left text-[10px] uppercase tracking-wide text-slate-400">
-                  <th className="py-1 pr-3 font-medium">SHA1</th>
-                  <th className="py-1 pr-3 font-medium">Name</th>
-                  <th className="py-1 font-medium">Comment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {indicators.files.map((f, i) => (
-                  <tr key={i} className="border-t border-slate-100">
-                    <td className="break-all py-1 pr-3 font-mono text-slate-700">
-                      {f.sha1 ?? "-"}
-                    </td>
-                    <td className="py-1 pr-3 font-mono text-slate-700">
-                      {f.name ?? "-"}
-                    </td>
-                    <td className="py-1 text-slate-500">{f.comment ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <Empty>None.</Empty>
-        )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <IocList title="IP Addresses" items={indicators.ips} defang />
+        <IocList title="Domains" items={indicators.domains} defang />
+        <IocList title="URIs" items={indicators.uris} defang />
+        <IocList title="File Hashes" items={indicators.files} />
       </div>
     </div>
   );
