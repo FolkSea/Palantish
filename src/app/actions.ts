@@ -17,6 +17,8 @@ import {
 } from "@/lib/ingest/scrape";
 import { isThreatIntel } from "@/lib/relevance";
 import { normalizeIndicator, type Indicators } from "@/lib/report-indicators";
+import { discoverTechniques } from "@/lib/mitre/discover";
+import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 
 async function ensureAllowed(): Promise<string | null> {
   const supabase = await createClient();
@@ -289,7 +291,7 @@ export async function persistReportIndicatorsAction(
   const unauth = await ensureAllowed();
   if (unauth) return { ok: false, error: unauth };
 
-  const rows: { value: string; ioc_type: string }[] = [
+  const rows: IocRow[] = [
     ...indicators.ips.map((value) => ({ value, ioc_type: "ip" })),
     ...indicators.domains.map((value) => ({ value, ioc_type: "domain" })),
     ...indicators.uris.map((value) => ({ value, ioc_type: "uri" })),
@@ -297,6 +299,20 @@ export async function persistReportIndicatorsAction(
   ].filter((r) => r.value.trim().length > 0);
   if (rows.length === 0) return { ok: true, linked: 0 };
 
+  return linkReportIocs(rawHash, rows);
+}
+
+type IocRow = { value: string; ioc_type: string };
+
+/**
+ * Upsert IOC rows (deduped by value) and link them to a report. onConflict does
+ * not touch `comment`, so a value that already exists keeps any comment set on
+ * it. Shared by indicator persistence and MITRE discovery.
+ */
+async function linkReportIocs(
+  rawHash: string,
+  rows: IocRow[],
+): Promise<{ ok: boolean; linked?: number; error?: string }> {
   const db = createAdminClient();
 
   const item = await db
@@ -307,8 +323,6 @@ export async function persistReportIndicatorsAction(
   if (!item.data) return { ok: false, error: "Report not found." };
   const intelItemId = item.data.id;
 
-  // Upsert IOCs by value; onConflict does not touch `comment`, so a value that
-  // already exists keeps any comment previously set on it.
   const upserted = await db
     .from("iocs")
     .upsert(rows, { onConflict: "value" })
@@ -325,6 +339,48 @@ export async function persistReportIndicatorsAction(
   if (linkErr) return { ok: false, error: linkErr.message };
 
   return { ok: true, linked: links.length };
+}
+
+/* --- MITRE ATT&CK discovery ------------------------------------------------ */
+
+export type DiscoverTechniquesResult =
+  | { ok: true; techniques: DiscoveredTechnique[] }
+  | { ok: false; error: string };
+
+/**
+ * Use the LLM to infer the MITRE ATT&CK techniques a report describes, then
+ * store the technique codes as IOCs (ioc_type 'mitre') linked to the report so
+ * they are searchable like any other indicator. Returns code + name for display.
+ */
+export async function discoverTechniquesAction(
+  rawHash: string | null,
+  text: string,
+): Promise<DiscoverTechniquesResult> {
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+  if (!text || !text.trim()) {
+    return { ok: false, error: "No report text to analyse yet." };
+  }
+
+  let techniques: DiscoveredTechnique[];
+  try {
+    techniques = await discoverTechniques(text);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Technique discovery failed.",
+    };
+  }
+
+  if (rawHash && techniques.length) {
+    const rows: IocRow[] = techniques.map((t) => ({
+      value: t.code,
+      ioc_type: "mitre",
+    }));
+    await linkReportIocs(rawHash, rows); // best-effort; display is unaffected
+  }
+
+  return { ok: true, techniques };
 }
 
 /* --- Search ---------------------------------------------------------------- */

@@ -6,7 +6,9 @@ import { extractIndicators, indicatorCount } from "@/lib/report-indicators";
 import {
   fetchReportViewAction,
   persistReportIndicatorsAction,
+  discoverTechniquesAction,
 } from "@/app/actions";
+import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 import { formatDate } from "@/lib/format";
 
 export type ReportModalData = {
@@ -139,6 +141,25 @@ export function ReportModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawHash, detailsText, count]);
 
+  // MITRE ATT&CK discovery (LLM). Only runs when the user clicks Discover.
+  const [techniques, setTechniques] = useState<DiscoveredTechnique[] | null>(
+    null,
+  );
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
+
+  function runDiscover() {
+    if (discovering || !detailsText) return;
+    setDiscovering(true);
+    setDiscoverError(null);
+    const text = `${report.title} ${report.description ?? ""} ${detailsText}`;
+    discoverTechniquesAction(rawHash ?? null, text).then((r) => {
+      setDiscovering(false);
+      if (r.ok) setTechniques(r.techniques);
+      else setDiscoverError(r.error);
+    });
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-[5px]"
@@ -251,8 +272,43 @@ export function ReportModal({
               <IocItems items={indicators.files} />
             </CollapsibleCard>
 
-            <CollapsibleCard title="MITRE ATT&CK" count={indicators.mitre.length}>
-              {indicators.mitre.length ? (
+            <CollapsibleCard
+              title="MITRE ATT&CK"
+              count={techniques ? techniques.length : indicators.mitre.length}
+              action={
+                <button
+                  type="button"
+                  onClick={runDiscover}
+                  disabled={discovering || !detailsText}
+                  title="Infer ATT&CK techniques from the report with AI"
+                  className="rounded border border-[#e5e7eb] bg-white px-2 py-0.5 text-[10px] font-medium text-[#1d4ed8] hover:bg-slate-50 disabled:opacity-50"
+                >
+                  {discovering ? "Discovering..." : "Discover"}
+                </button>
+              }
+            >
+              {discovering ? (
+                <Empty>Analysing the report...</Empty>
+              ) : discoverError ? (
+                <p className="text-[12px] text-red-600">{discoverError}</p>
+              ) : techniques ? (
+                techniques.length ? (
+                  <ul className="space-y-1">
+                    {techniques.map((t) => (
+                      <li key={t.code} className="text-[12px] leading-snug">
+                        <span className="font-mono font-medium text-slate-800">
+                          {t.code}
+                        </span>
+                        {t.name && t.name !== t.code ? (
+                          <span className="text-slate-500"> - {t.name}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <Empty>No techniques identified.</Empty>
+                )
+              ) : indicators.mitre.length ? (
                 <div className="flex flex-wrap gap-1.5">
                   {indicators.mitre.map((t) => (
                     <span
@@ -264,7 +320,7 @@ export function ReportModal({
                   ))}
                 </div>
               ) : (
-                <Empty>No techniques identified.</Empty>
+                <Empty>Use Discover to infer techniques from the report.</Empty>
               )}
             </CollapsibleCard>
 
@@ -355,46 +411,51 @@ function ReportBody({ view, url }: { view: ViewState; url: string | null }) {
 function CollapsibleCard({
   title,
   count,
+  action,
   defaultOpen = true,
   children,
 }: {
   title: string;
   count?: number;
+  action?: React.ReactNode;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50"
-      >
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          {title}
-          {typeof count === "number" ? (
-            <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-medium text-slate-500">
-              {count}
-            </span>
-          ) : null}
-        </span>
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-          className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`}
+      <div className="flex items-center gap-1 pr-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex flex-1 items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50"
         >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {title}
+            {typeof count === "number" ? (
+              <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-medium text-slate-500">
+                {count}
+              </span>
+            ) : null}
+          </span>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+        {action ? <div className="shrink-0">{action}</div> : null}
+      </div>
       {open ? (
         <div className="border-t border-[#e5e7eb] px-3 py-2">{children}</div>
       ) : null}
