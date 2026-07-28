@@ -3,14 +3,12 @@ import { loadDashboard } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
 import TimelineTabs from "@/components/TimelineTabs";
 import { ExecutiveSummaryPanel } from "@/components/ExecutiveSummary";
+import { Ticker, ActorGrid, Footnote } from "@/components/DashboardSections";
 import {
-  Ticker,
-  ActorGrid,
   VulnTable,
   BreachTable,
   ReportsList,
-  Footnote,
-} from "@/components/DashboardSections";
+} from "@/components/PaginatedSections";
 
 // Always render fresh intel; never cache the authenticated dashboard.
 export const dynamic = "force-dynamic";
