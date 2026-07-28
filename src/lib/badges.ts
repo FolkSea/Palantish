@@ -69,6 +69,52 @@ export const CS_ANIMAL_BY_NEXUS: Record<Nexus, string> = {
 // All adversary-name labels share one red scheme, regardless of nexus/animal.
 export const ADVERSARY_BADGE_CLASS = "border-red-200 bg-red-50 text-red-700";
 
+// Animal used for an UNIDentified actor attributed to a nexus (eCrime = Spider).
+export const UNID_ANIMAL_BY_NEXUS: Record<Nexus, string> = {
+  china: "Panda",
+  russia: "Bear",
+  north_korea: "Chollima",
+  iran: "Kitten",
+  rest_of_world: "Bat",
+  other: "Spider",
+};
+
+// Values that name only an animal or a placeholder, i.e. not a specific group.
+const GENERIC_ADVERSARY = new Set([
+  "",
+  "BEAR",
+  "PANDA",
+  "CHOLLIMA",
+  "KITTEN",
+  "SPIDER",
+  "BAT",
+  "TIGER",
+  "JACKAL",
+  "UNKNOWN",
+  "UNID",
+  "UNATTRIBUTED",
+  "N/A",
+]);
+
+/** True when the name identifies a specific group (not a bare animal/placeholder). */
+export function isSpecificAdversary(name: string | null | undefined): boolean {
+  if (!name) return false;
+  return !GENERIC_ADVERSARY.has(name.trim().toUpperCase());
+}
+
+/**
+ * Final adversary label for an item attributed to `nexus`: the specific group
+ * name when there is one, otherwise "UNID <animal>" (e.g. UNID BEAR / UNID SPIDER).
+ */
+export function adversaryLabel(
+  name: string | null | undefined,
+  nexus: Nexus,
+): string {
+  return isSpecificAdversary(name)
+    ? (name as string)
+    : `UNID ${UNID_ANIMAL_BY_NEXUS[nexus]}`;
+}
+
 // Nation-state colours for the timeline scatter + actor accents. Chosen for
 // maximum hue separation so adjacent rows are easy to tell apart (the old red /
 // rose China/Russia pair was nearly indistinguishable). Paired with distinct

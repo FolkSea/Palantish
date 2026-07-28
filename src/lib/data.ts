@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
 import { buildEcrimeActorGroups, deriveEcrimeActor } from "@/lib/ecrime";
 import { isThreatIntel } from "@/lib/relevance";
+import { adversaryLabel, type Nexus } from "@/lib/badges";
 import {
   GROUP_TABLE,
   sortGroups,
@@ -194,20 +195,25 @@ export async function loadDashboard(): Promise<DashboardData> {
   // and drop anything this user has hidden.
   const keep = (i: { title: string | null; description?: string | null; raw_hash: string }) =>
     isThreatIntel(i.title, i.description) && !hidden.has(i.raw_hash);
-  // Attach a display adversary name to each item: the CS cryptonym if the
+  // Resolve a specific adversary name per item: the CS cryptonym if the
   // classifier set one, otherwise a specific name mentioned in the item.
   const nsGroups = sortGroups(GROUP_TABLE);
-  const activity: ActorItem[] = (activityRes.data ?? [])
-    .filter(keep)
-    .map((i) => ({
-      ...i,
-      adversary:
-        i.crowdstrike_adversary ??
-        deriveAdversaryFromText(i.title, i.description, nsGroups),
-    }));
+  const activityBase = (activityRes.data ?? []).filter(keep).map((i) => ({
+    ...i,
+    adversary:
+      i.crowdstrike_adversary ??
+      deriveAdversaryFromText(i.title, i.description, nsGroups),
+  }));
+  // Every country-attributed item gets a label: the specific name, or a
+  // "UNID <animal>" fallback keyed by the actor's nexus.
   const actors: ActorWithItems[] = (actorsRes.data ?? []).map((actor) => ({
     ...actor,
-    items: activity.filter((i) => i.actor_id === actor.id),
+    items: activityBase
+      .filter((i) => i.actor_id === actor.id)
+      .map((i) => ({
+        ...i,
+        adversary: adversaryLabel(i.adversary, actor.nexus as Nexus),
+      })),
   }));
 
   const latestRefresh = refreshRes.data?.[0];

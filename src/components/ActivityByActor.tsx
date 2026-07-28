@@ -68,7 +68,12 @@ export function ActivityByActor({
           {ecrimeCards.length ? (
             <CardGrid>
               {ecrimeCards.map((c) => (
-                <GroupCard key={c.name} card={c} accent={ECRIME_ACCENT} />
+                <GroupCard
+                  key={c.name}
+                  card={c}
+                  accent={ECRIME_ACCENT}
+                  unattributedLabel="UNID SPIDER"
+                />
               ))}
             </CardGrid>
           ) : (
@@ -226,7 +231,18 @@ function ActorEntry({ item }: { item: ActorItem }) {
   );
 }
 
-function GroupCard({ card, accent }: { card: ActorGroupCard; accent: string }) {
+function GroupCard({
+  card,
+  accent,
+  unattributedLabel = null,
+}: {
+  card: ActorGroupCard;
+  accent: string;
+  unattributedLabel?: string | null;
+}) {
+  // Named cards label items with the crew/collective; the Unattributed card
+  // uses the section fallback (e.g. UNID SPIDER for eCrime) when provided.
+  const actorLabel = card.name === "Unattributed" ? unattributedLabel : card.name;
   return (
     <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
       <div
@@ -244,7 +260,7 @@ function GroupCard({ card, accent }: { card: ActorGroupCard; accent: string }) {
       </div>
       <div className="flex-1 space-y-3 px-4 py-3">
         {card.items.map((r) => (
-          <GroupItem key={r.id} report={r} actor={card.name} />
+          <GroupItem key={r.id} report={r} actor={actorLabel} />
         ))}
       </div>
     </div>
@@ -256,7 +272,7 @@ function GroupItem({
   actor,
 }: {
   report: ActorReport;
-  actor: string;
+  actor: string | null;
 }) {
   return (
     <div className="border-b border-slate-100 pb-3 last:border-none last:pb-0">
@@ -267,8 +283,8 @@ function GroupItem({
         </p>
       ) : null}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {/* Attributed items carry the actor as a red label ("Unattributed" has none). */}
-        <AdversaryBadge name={actor === "Unattributed" ? null : actor} />
+        {/* Attributed items carry the actor as a red label. */}
+        <AdversaryBadge name={actor} />
         <SourceBadge name={report.sourceName} />
         {report.date ? (
           <span className="text-[10px] text-slate-400">
