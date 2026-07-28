@@ -6,7 +6,7 @@ import {
   updateActor,
   deleteActor,
 } from "@/app/settings/catalogue-actions";
-import type { ActorRecord, ActorInput } from "@/lib/actor-catalogue";
+import { MOTIVATIONS, type ActorRecord, type ActorInput } from "@/lib/actor-catalogue";
 
 const inputCls =
   "w-full rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-[12px] text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
@@ -104,13 +104,19 @@ export function ActorsPanel({
           placeholder="Filter family..."
           aria-label="Filter by family"
         />
-        <input
+        <select
           className={inputCls}
           value={motivationF}
           onChange={(e) => setMotivationF(e.target.value)}
-          placeholder="Filter motivation..."
           aria-label="Filter by motivation"
-        />
+        >
+          <option value="">All motivations</option>
+          {MOTIVATIONS.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
         <input
           className={inputCls}
           value={aliasesF}
@@ -205,7 +211,7 @@ function ActorForm({
 }) {
   const [name, setName] = useState(actor?.name ?? "");
   const [animal, setAnimal] = useState(actor?.animal_classifier ?? "");
-  const [motivation, setMotivation] = useState(list(actor?.motivation ?? null));
+  const [motivation, setMotivation] = useState(actor?.motivation?.[0] ?? "");
   const [aliases, setAliases] = useState(list(actor?.community_identifiers ?? null));
   const [description, setDescription] = useState(actor?.description ?? "");
   const [saving, setSaving] = useState(false);
@@ -263,14 +269,20 @@ function ActorForm({
       </label>
       <label className="block">
         <span className="mb-1 block text-[11px] font-medium text-slate-600">
-          Motivation (comma-separated)
+          Motivation
         </span>
-        <input
+        <select
           className={inputCls}
           value={motivation}
           onChange={(e) => setMotivation(e.target.value)}
-          placeholder="Espionage, eCrime"
-        />
+        >
+          <option value="">- None -</option>
+          {MOTIVATIONS.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
       </label>
       <label className="block">
         <span className="mb-1 block text-[11px] font-medium text-slate-600">

@@ -25,6 +25,9 @@ export type ActorResult =
   | { ok: true; actor: ActorRecord }
   | { ok: false; error: string };
 
+// Motivation categories used across the adversary catalogue.
+export const MOTIVATIONS = ["StateSponsored", "Criminal", "Hacktivism"];
+
 /* --- Actor families (animal -> focus / country) --------------------------- */
 
 export type FamilyFocus = "ecrime" | "nation_state" | "hacktivism";
