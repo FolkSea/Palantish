@@ -115,6 +115,55 @@ export function isLargeScaleEcrime(c: RawCandidate): boolean {
   return LARGE_SCALE_RE.test(haystack(c));
 }
 
+// Known hacktivist collectives (distinctive, ASCII-only names). Single source of
+// truth, also used by the activity-by-actor hacktivism section.
+export const KNOWN_HACKTIVISM_NAMES = [
+  "Anonymous Sudan",
+  "NoName057(16)",
+  "NoName057",
+  "KillNet",
+  "IT Army of Ukraine",
+  "SiegedSec",
+  "GhostSec",
+  "Cyber Av3ngers",
+  "Handala",
+  "Mysterious Team Bangladesh",
+  "Team Insane PK",
+  "RipperSec",
+  "Dark Storm Team",
+  "Turk Hack Team",
+  "SylhetGang",
+  "CyberVolk",
+  "Holy League",
+  "Hunt3r Kill3rs",
+];
+
+const HACKTIVISM_RE = /\bhacktivis(?:m|t|ts)\b/i;
+
+/** Hacktivist collective aliases, sorted longest-first for matching. */
+export function buildHacktivismGroups(): GroupEntry[] {
+  return sortGroups(
+    KNOWN_HACKTIVISM_NAMES.map((n) => ({
+      alias: n.toLowerCase(),
+      nexus: "other" as const,
+      cs: n,
+    })),
+  );
+}
+
+const HACKTIVISM_GROUPS = buildHacktivismGroups();
+
+/** True when text reads as hacktivism (independent of a named collective). */
+export function hasHacktivismKeyword(text: string): boolean {
+  return HACKTIVISM_RE.test(text);
+}
+
+/** True when the candidate names a hacktivist collective or reads as hacktivism. */
+export function isHacktivism(c: RawCandidate): boolean {
+  const hay = haystack(c);
+  return HACKTIVISM_RE.test(hay) || matchGroup(hay, HACKTIVISM_GROUPS) !== null;
+}
+
 export function classifyItemType(
   c: RawCandidate,
   group: GroupEntry | null,
@@ -190,6 +239,12 @@ export function rulesClassify(
   if (group?.nexus === "other" && !isLargeScaleEcrime(c)) return { kind: "drop" };
 
   const itemType = classifyItemType(c, group);
+  // Hacktivist activity (named collective or explicit hacktivism) is genuine
+  // intelligence - keep it rather than letting it fall into the ambiguous
+  // news bucket where it could be dropped.
+  if (isHacktivism(c)) {
+    return { kind: "keep", item: buildEnriched(c, group, itemType) };
+  }
   // A generic news post with no nation-state nexus and no vuln/breach signal is
   // ambiguous - not obviously marketing, but not obviously intelligence either.
   if (!group && itemType === "report" && c.sourceCategory === "news") {

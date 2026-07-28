@@ -87,4 +87,25 @@ describe("RulesEnricher classification", () => {
     );
     expect(out).toBeNull();
   });
+
+  it("keeps hacktivist activity by named collective", async () => {
+    const out = await enricher.enrich(
+      candidate({
+        title: "KillNet launches DDoS attacks against European banks",
+        description: "The pro-Russia hacktivist collective claimed the campaign.",
+        sourceCategory: "news",
+      }),
+    );
+    expect(out).not.toBeNull();
+  });
+
+  it("keeps generic hacktivism reporting via keyword", async () => {
+    const out = await enricher.enrich(
+      candidate({
+        title: "Hacktivists deface government portals in coordinated push",
+        sourceCategory: "news",
+      }),
+    );
+    expect(out).not.toBeNull();
+  });
 });

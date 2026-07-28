@@ -1,6 +1,13 @@
 import type { Database } from "@/lib/supabase/database.types";
 import type { GroupEntry } from "@/lib/ingest/enrich/rules";
-import { sortGroups, matchGroup } from "@/lib/ingest/enrich/rules";
+import {
+  matchGroup,
+  buildHacktivismGroups,
+  hasHacktivismKeyword,
+} from "@/lib/ingest/enrich/rules";
+
+// Re-exported so existing importers (lib/data) keep a single import site.
+export { buildHacktivismGroups };
 
 type BreachRow = Database["public"]["Tables"]["breaches"]["Row"];
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
@@ -21,41 +28,6 @@ export type ActorGroupCard = {
   name: string;
   items: ActorReport[];
 };
-
-// Known hacktivist collectives (distinctive, ASCII-only names).
-export const KNOWN_HACKTIVISM_NAMES = [
-  "Anonymous Sudan",
-  "NoName057(16)",
-  "NoName057",
-  "KillNet",
-  "IT Army of Ukraine",
-  "SiegedSec",
-  "GhostSec",
-  "Cyber Av3ngers",
-  "Handala",
-  "Mysterious Team Bangladesh",
-  "Team Insane PK",
-  "RipperSec",
-  "Dark Storm Team",
-  "Turk Hack Team",
-  "SylhetGang",
-  "CyberVolk",
-  "Holy League",
-  "Hunt3r Kill3rs",
-];
-
-const HACKTIVISM_RE = /\bhacktivis(?:m|t|ts)\b/i;
-
-/** Group list for hacktivist collectives, longest-first for matching. */
-export function buildHacktivismGroups(): GroupEntry[] {
-  return sortGroups(
-    KNOWN_HACKTIVISM_NAMES.map((n) => ({
-      alias: n.toLowerCase(),
-      nexus: "other" as const,
-      cs: n,
-    })),
-  );
-}
 
 function breachToReport(b: BreachRow): ActorReport {
   return {
@@ -128,7 +100,7 @@ export function buildActorSectionCards(
     const text = `${r.title} ${r.description ?? ""}`;
     const h = matchGroup(text.toLowerCase(), hacktivismGroups)?.cs;
     if (h) push(hack, h, intelToReport(r));
-    else if (HACKTIVISM_RE.test(text)) push(hack, "Unattributed", intelToReport(r));
+    else if (hasHacktivismKeyword(text)) push(hack, "Unattributed", intelToReport(r));
   }
 
   return { ecrimeCards: toCards(ecrime), hacktivismCards: toCards(hack) };

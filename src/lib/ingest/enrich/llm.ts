@@ -31,7 +31,7 @@ DROP (relevant=false) anything that is not genuine threat intelligence, includin
 - podcasts, newsletters, and "week in review" / roundup posts;
 - opinion or thought-leadership pieces;
 - consumer-lifestyle, general-privacy, or legal/policy stories with no attacker, malware, or vulnerability substance.
-KEEP only reporting with concrete threat substance: threat-actor operations and campaigns, malware/tooling analysis, vulnerabilities and exploits, breaches/leaks/extortion, and government or vendor security advisories.
+KEEP only reporting with concrete threat substance: threat-actor operations and campaigns, malware/tooling analysis, vulnerabilities and exploits, breaches/leaks/extortion, hacktivist operations (DDoS, website defacement, or data leaks by ideologically-motivated collectives such as Anonymous, KillNet, Anonymous Sudan, or NoName057(16)), and government or vendor security advisories.
 Only include eCrime/ransomware when large-scale (many victims, major sector impact, or a well-known active campaign).
 
 Return ONLY strict JSON matching this shape:
