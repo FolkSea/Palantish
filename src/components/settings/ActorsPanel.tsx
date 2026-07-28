@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   addActor,
   updateActor,
@@ -22,6 +22,23 @@ export function ActorsPanel({
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [familyF, setFamilyF] = useState("");
+  const [motivationF, setMotivationF] = useState("");
+  const [aliasesF, setAliasesF] = useState("");
+
+  const filtered = useMemo(() => {
+    const f = familyF.trim().toLowerCase();
+    const m = motivationF.trim().toLowerCase();
+    const al = aliasesF.trim().toLowerCase();
+    return actors.filter((a) => {
+      if (f && !(a.animal_classifier ?? "").toLowerCase().includes(f)) return false;
+      if (m && !list(a.motivation).toLowerCase().includes(m)) return false;
+      if (al && !list(a.community_identifiers).toLowerCase().includes(al))
+        return false;
+      return true;
+    });
+  }, [actors, familyF, motivationF, aliasesF]);
 
   function upsertLocal(a: ActorRecord) {
     setActors((prev) => {
@@ -46,7 +63,8 @@ export function ActorsPanel({
     <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-[13px] font-semibold text-slate-900">
-          Actors ({actors.length})
+          Actors ({filtered.length}
+          {filtered.length !== actors.length ? ` of ${actors.length}` : ""})
         </h2>
         {editing === null ? (
           <button
@@ -78,12 +96,36 @@ export function ActorsPanel({
         />
       ) : null}
 
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <input
+          className={inputCls}
+          value={familyF}
+          onChange={(e) => setFamilyF(e.target.value)}
+          placeholder="Filter family..."
+          aria-label="Filter by family"
+        />
+        <input
+          className={inputCls}
+          value={motivationF}
+          onChange={(e) => setMotivationF(e.target.value)}
+          placeholder="Filter motivation..."
+          aria-label="Filter by motivation"
+        />
+        <input
+          className={inputCls}
+          value={aliasesF}
+          onChange={(e) => setAliasesF(e.target.value)}
+          placeholder="Filter aliases..."
+          aria-label="Filter by aliases"
+        />
+      </div>
+
       <div className="mt-3 overflow-x-auto">
         <table className="w-full border-collapse text-[12px]">
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
               <th className="py-1.5 pr-3 font-medium">Name</th>
-              <th className="py-1.5 pr-3 font-medium">Animal</th>
+              <th className="py-1.5 pr-3 font-medium">Family</th>
               <th className="py-1.5 pr-3 font-medium">Motivation</th>
               <th className="py-1.5 pr-3 font-medium">Aliases</th>
               <th className="py-1.5 pr-3 font-medium">Description</th>
@@ -91,7 +133,7 @@ export function ActorsPanel({
             </tr>
           </thead>
           <tbody>
-            {actors.map((a) =>
+            {filtered.map((a) =>
               editing === a.id ? (
                 <tr key={a.id}>
                   <td colSpan={6} className="py-2">
