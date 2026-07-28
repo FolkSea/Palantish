@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AccountPanel } from "./AccountPanel";
+import { AccountPanel, type Focus } from "./AccountPanel";
 import { SourcesPanel } from "./SourcesPanel";
 import { HiddenPanel, type HiddenPost } from "./HiddenPanel";
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
@@ -27,11 +27,13 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
 export function SettingsView({
   email,
   displayName,
+  focus,
   sources,
   hidden,
 }: {
   email: string;
   displayName: string;
+  focus: Focus;
   sources: SettingsSource[];
   hidden: HiddenPost[];
 }) {
@@ -66,7 +68,11 @@ export function SettingsView({
 
       <div>
         {tab === "account" ? (
-          <AccountPanel email={email} displayName={displayName} />
+          <AccountPanel
+            email={email}
+            displayName={displayName}
+            focus={focus}
+          />
         ) : tab === "sources" ? (
           <SourcesPanel initialSources={sources} />
         ) : (

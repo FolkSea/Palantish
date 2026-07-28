@@ -5,6 +5,7 @@ import {
   type SettingsSource,
 } from "@/components/settings/SettingsView";
 import type { HiddenPost } from "@/components/settings/HiddenPanel";
+import type { Focus } from "@/components/settings/AccountPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,8 @@ export default async function SettingsPage() {
 
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ?? "";
+  const focus = ((user?.user_metadata?.focus as string | undefined) ??
+    "all") as Focus;
 
   // Current user's hidden posts (RLS-scoped), joined with the item details.
   const { data: hiddenRows } = await supabase
@@ -111,6 +114,7 @@ export default async function SettingsPage() {
       <SettingsView
         email={user?.email ?? ""}
         displayName={displayName}
+        focus={focus}
         sources={(sources ?? []) as SettingsSource[]}
         hidden={hidden}
       />

@@ -26,12 +26,22 @@ const inputCls =
 const btnCls =
   "rounded-md bg-slate-900 px-3 py-2 text-[13px] font-medium text-white transition hover:bg-slate-700 disabled:opacity-60";
 
+export type Focus = "nation_state" | "ecrime" | "hacktivism" | "all";
+export const FOCUS_OPTIONS: { value: Focus; label: string }[] = [
+  { value: "nation_state", label: "Nation State" },
+  { value: "ecrime", label: "eCrime" },
+  { value: "hacktivism", label: "Hacktivism" },
+  { value: "all", label: "All" },
+];
+
 export function AccountPanel({
   email,
   displayName,
+  focus,
 }: {
   email: string;
   displayName: string;
+  focus: Focus;
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -39,6 +49,10 @@ export function AccountPanel({
   const [name, setName] = useState(displayName);
   const [nameNote, setNameNote] = useState<Note>(null);
   const [nameSaving, setNameSaving] = useState(false);
+
+  const [focusValue, setFocusValue] = useState<Focus>(focus);
+  const [focusNote, setFocusNote] = useState<Note>(null);
+  const [focusSaving, setFocusSaving] = useState(false);
 
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
@@ -58,6 +72,19 @@ export function AccountPanel({
     if (error) setNameNote({ kind: "error", text: error.message });
     else {
       setNameNote({ kind: "ok", text: "Display name saved." });
+      router.refresh();
+    }
+  }
+
+  async function saveFocus(value: Focus) {
+    setFocusValue(value);
+    setFocusSaving(true);
+    setFocusNote(null);
+    const { error } = await supabase.auth.updateUser({ data: { focus: value } });
+    setFocusSaving(false);
+    if (error) setFocusNote({ kind: "error", text: error.message });
+    else {
+      setFocusNote({ kind: "ok", text: "Focus saved." });
       router.refresh();
     }
   }
@@ -127,6 +154,30 @@ export function AccountPanel({
           </button>
           <Notice note={nameNote} />
         </form>
+
+        <div className="mt-4 max-w-sm">
+          <label className="block">
+            <span className="mb-1 block text-[12px] font-medium text-slate-600">
+              Focus
+            </span>
+            <select
+              className={inputCls}
+              value={focusValue}
+              disabled={focusSaving}
+              onChange={(e) => saveFocus(e.target.value as Focus)}
+            >
+              {FOCUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="mt-1 text-[11px] text-slate-500">
+            Which threat area to focus the dashboard on.
+          </p>
+          <Notice note={focusNote} />
+        </div>
       </section>
 
       {/* Password reset */}
