@@ -82,6 +82,39 @@ describe("prioritiseVulns", () => {
     ]);
   });
 
+  it("breaks same-publication-date ties by ingestion time (newest first)", () => {
+    const out = prioritiseVulns([
+      row("CVE-SAME-A", "confirmed", "2026-07-28", {
+        created_at: "2026-07-28T09:44:35Z",
+      }),
+      row("CVE-SAME-B", "confirmed", "2026-07-28", {
+        created_at: "2026-07-28T10:05:11Z",
+      }),
+    ]);
+    // Same added_at, so the later created_at (B) must come first.
+    expect(out.map((v) => v.cve_id)).toEqual(["CVE-SAME-B", "CVE-SAME-A"]);
+  });
+
+  it("uses the latest report's ingestion time for the tie-break", () => {
+    const out = prioritiseVulns([
+      row("CVE-MULTI", "poc", "2026-07-28", {
+        created_at: "2026-07-28T08:00:00Z",
+      }),
+      row("CVE-MULTI", "confirmed", "2026-07-28", {
+        created_at: "2026-07-28T12:00:00Z",
+      }),
+      row("CVE-SOLO", "poc", "2026-07-28", {
+        created_at: "2026-07-28T10:00:00Z",
+      }),
+      row("CVE-SOLO", "confirmed", "2026-07-28", {
+        created_at: "2026-07-28T11:00:00Z",
+      }),
+    ]);
+    // Both critical, same date; CVE-MULTI's latest ingest (12:00) beats
+    // CVE-SOLO's latest (11:00).
+    expect(out.map((v) => v.cve_id)).toEqual(["CVE-MULTI", "CVE-SOLO"]);
+  });
+
   it("groups CVE ids case-insensitively", () => {
     const out = prioritiseVulns([
       row("cve-2026-9", "poc"),

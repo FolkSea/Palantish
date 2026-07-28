@@ -10,7 +10,8 @@ export type PrioritisedVuln = {
   detail: string | null;
   url: string | null;
   source_name: string | null;
-  added_at: string;
+  added_at: string; // most recent report's publication date (primary recency)
+  created_at: string; // latest ingestion timestamp, breaks same-day ties
   statuses: VulnStatus[]; // distinct contributing statuses (poc, confirmed, suspected)
   reportCount: number;
   priority: VulnPriority;
@@ -79,6 +80,12 @@ export function prioritiseVulns(rows: VulnerabilityRow[]): PrioritisedVuln[] {
     const statuses = (["poc", "confirmed", "suspected"] as VulnStatus[]).filter(
       (s) => present.has(s),
     );
+    // Latest ingestion timestamp across the CVE's reports, used to break
+    // same-publication-date ties so the freshest item still sorts first.
+    const latestCreated = group.reduce(
+      (max, r) => (r.created_at > max ? r.created_at : max),
+      group[0].created_at,
+    );
 
     result.push({
       cve_id: rep.cve_id,
@@ -87,16 +94,21 @@ export function prioritiseVulns(rows: VulnerabilityRow[]): PrioritisedVuln[] {
       url: rep.url ?? firstNonNull(byRecent, (r) => r.url),
       source_name: rep.source_name ?? firstNonNull(byRecent, (r) => r.source_name),
       added_at: rep.added_at,
+      created_at: latestCreated,
       statuses,
       reportCount: group.length,
       priority,
     });
   }
 
+  // Sort by priority, then most-recent-first within each priority: publication
+  // date, then ingestion timestamp (breaks same-day ties), then CVE id (stable).
   result.sort(
     (a, b) =>
       PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] ||
-      cmpDateDesc(a.added_at, b.added_at),
+      cmpDateDesc(a.added_at, b.added_at) ||
+      cmpDateDesc(a.created_at, b.created_at) ||
+      a.cve_id.localeCompare(b.cve_id),
   );
   return result;
 }
