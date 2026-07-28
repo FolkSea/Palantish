@@ -24,7 +24,13 @@ export const CONFIDENCE_STYLE: Record<
 // Vulnerability status uses the same vocabulary as confidence.
 export const VULN_STATUS_STYLE = CONFIDENCE_STYLE;
 
-export type Nexus = "china" | "russia" | "north_korea" | "iran" | "other";
+export type Nexus =
+  | "china"
+  | "russia"
+  | "north_korea"
+  | "iran"
+  | "rest_of_world"
+  | "other";
 
 /**
  * CrowdStrike animal cryptonym per nation-state / eCrime nexus. Used to colour
@@ -35,6 +41,7 @@ export const CS_ANIMAL_BY_NEXUS: Record<Nexus, string> = {
   russia: "Bear",
   north_korea: "Chollima",
   iran: "Kitten",
+  rest_of_world: "Tiger",
   other: "Spider",
 };
 
@@ -62,6 +69,7 @@ export const COUNTRY_COLOR: Record<string, string> = {
   Iran: "#ea580c", // orange
   China: "#dc2626", // red
   Russia: "#e11d48", // rose
+  "Rest of World": "#0d9488", // teal
 };
 
 // Discrete y-axis row order for the timeline (top to bottom).
@@ -70,6 +78,7 @@ export const TIMELINE_COUNTRIES = [
   "Iran",
   "China",
   "Russia",
+  "Rest of World",
 ] as const;
 
 export const NEXUS_ACCENT: Record<Nexus, string> = {
@@ -77,5 +86,6 @@ export const NEXUS_ACCENT: Record<Nexus, string> = {
   russia: "#e11d48",
   north_korea: "#7c3aed",
   iran: "#ea580c",
+  rest_of_world: "#0d9488",
   other: "#475569",
 };

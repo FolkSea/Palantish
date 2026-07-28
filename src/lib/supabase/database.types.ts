@@ -399,7 +399,13 @@ export type Database = {
       is_allowed_user: { Args: never; Returns: boolean }
     }
     Enums: {
-      actor_nexus: "china" | "russia" | "north_korea" | "iran" | "other"
+      actor_nexus:
+        | "china"
+        | "russia"
+        | "north_korea"
+        | "iran"
+        | "other"
+        | "rest_of_world"
       actor_status: "active" | "quiet"
       confidence_level: "confirmed" | "suspected" | "poc"
       item_type: "actor_activity" | "breach" | "vuln" | "report" | "breaking"
@@ -536,7 +542,14 @@ export const Constants = {
   },
   public: {
     Enums: {
-      actor_nexus: ["china", "russia", "north_korea", "iran", "other"],
+      actor_nexus: [
+        "china",
+        "russia",
+        "north_korea",
+        "iran",
+        "other",
+        "rest_of_world",
+      ],
       actor_status: ["active", "quiet"],
       confidence_level: ["confirmed", "suspected", "poc"],
       item_type: ["actor_activity", "breach", "vuln", "report", "breaking"],

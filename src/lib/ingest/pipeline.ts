@@ -75,7 +75,7 @@ export async function runIngest(): Promise<IngestResult> {
         db
           .from("adversaries")
           .select(
-            "name, animal_classifier, description, short_description, community_identifiers, internal_alternative_names",
+            "name, animal_classifier, description, short_description, motivation, community_identifiers, internal_alternative_names",
           ),
       ]);
 

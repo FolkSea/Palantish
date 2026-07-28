@@ -10,9 +10,14 @@ describe("deriveNexus", () => {
     expect(deriveNexus({ animal_classifier: "KITTEN" })).toBe("iran");
   });
 
-  it("treats eCrime/other animals as other", () => {
+  it("treats SPIDER/JACKAL as other (eCrime / hacktivist)", () => {
     expect(deriveNexus({ animal_classifier: "SPIDER" })).toBe("other");
-    expect(deriveNexus({ animal_classifier: "TIGER" })).toBe("other");
+    expect(deriveNexus({ animal_classifier: "JACKAL" })).toBe("other");
+  });
+
+  it("treats other state-animal cryptonyms as rest_of_world", () => {
+    expect(deriveNexus({ animal_classifier: "TIGER" })).toBe("rest_of_world");
+    expect(deriveNexus({ animal_classifier: "BUFFALO" })).toBe("rest_of_world");
   });
 
   it("falls back to the description for unclassified adversaries", () => {
@@ -22,9 +27,19 @@ describe("deriveNexus", () => {
         description: "An Iran-nexus adversary targeting telecoms.",
       }),
     ).toBe("iran");
-    expect(deriveNexus({ animal_classifier: null, description: "Unknown" })).toBe(
-      "other",
-    );
+  });
+
+  it("uses StateSponsored motivation for unclassified state actors", () => {
+    expect(
+      deriveNexus({
+        animal_classifier: null,
+        description: "Targets government entities.",
+        motivation: ["StateSponsored"],
+      }),
+    ).toBe("rest_of_world");
+    expect(
+      deriveNexus({ animal_classifier: null, motivation: ["Criminal"] }),
+    ).toBe("other");
   });
 });
 

@@ -10,18 +10,23 @@ export type AdversaryRecord = {
   animal_classifier?: string | null;
   description?: string | null;
   short_description?: string | null;
+  motivation?: string[] | null;
   community_identifiers?: string[] | null;
   internal_alternative_names?: string[] | null;
 };
 
-// CrowdStrike animal cryptonyms map to a nation-state nexus. Everything else
-// (SPIDER eCrime, JACKAL hacktivist, TIGER/WOLF/etc. other nations) is "other".
+// The four tracked nation-states map from their CrowdStrike animal cryptonym.
 const ANIMAL_NEXUS: Record<string, Nexus> = {
   PANDA: "china",
   BEAR: "russia",
   CHOLLIMA: "north_korea",
   KITTEN: "iran",
 };
+
+// Non-state cryptonyms: SPIDER (eCrime) and JACKAL (hacktivist) -> "other".
+// Every other animal (TIGER, WOLF, BUFFALO, SPHINX, ...) is a state-sponsored
+// adversary from a country outside the big four -> "rest_of_world".
+const NON_STATE_ANIMALS = new Set(["SPIDER", "JACKAL"]);
 
 const DESC_NEXUS: Array<[RegExp, Nexus]> = [
   [/\b(north korea|dprk)[ -]?nexus/i, "north_korea"],
@@ -31,16 +36,27 @@ const DESC_NEXUS: Array<[RegExp, Nexus]> = [
 ];
 
 /**
- * Derive the nexus for an adversary. The animal classifier is authoritative
- * (CrowdStrike taxonomy); for unclassified adversaries we fall back to the
- * "<country>-nexus" phrasing used consistently in the descriptions.
+ * Derive the nexus for an adversary:
+ *   - the four tracked nation-states from their animal cryptonym;
+ *   - other state-animal cryptonyms -> rest_of_world;
+ *   - SPIDER / JACKAL -> other (eCrime / hacktivist);
+ *   - unclassified: a "<country>-nexus" phrase pins one of the four, otherwise
+ *     a StateSponsored motivation -> rest_of_world, else other.
  */
 export function deriveNexus(a: AdversaryRecord): Nexus {
   const animal = a.animal_classifier?.toUpperCase();
-  if (animal) return ANIMAL_NEXUS[animal] ?? "other";
+  if (animal) {
+    if (ANIMAL_NEXUS[animal]) return ANIMAL_NEXUS[animal];
+    return NON_STATE_ANIMALS.has(animal) ? "other" : "rest_of_world";
+  }
+
   const desc = `${a.description ?? ""} ${a.short_description ?? ""}`;
   for (const [re, nexus] of DESC_NEXUS) if (re.test(desc)) return nexus;
-  return "other";
+
+  const stateSponsored = (a.motivation ?? []).some(
+    (m) => m.toLowerCase() === "statesponsored",
+  );
+  return stateSponsored ? "rest_of_world" : "other";
 }
 
 // Aliases shorter than this are too generic to match safely.

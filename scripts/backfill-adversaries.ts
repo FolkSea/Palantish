@@ -25,7 +25,7 @@ async function main() {
       db
         .from("adversaries")
         .select(
-          "name, animal_classifier, description, short_description, community_identifiers, internal_alternative_names",
+          "name, animal_classifier, description, short_description, motivation, community_identifiers, internal_alternative_names",
         ),
       db.from("actors").select("id, nexus"),
       db.from("intel_items").select("id, title, description, item_type, actor_id, crowdstrike_adversary"),
