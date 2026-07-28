@@ -31,13 +31,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      {/* Breaking ticker (last 24h only; hidden when empty), pinned to the top */}
-      {data.breaking.length > 0 ? (
-        <div className="mb-4">
-          <Ticker items={data.breaking} />
-        </div>
-      ) : null}
-
       {/* Header */}
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -87,6 +80,13 @@ export default async function DashboardPage() {
           </Link>
         </div>
       </header>
+
+      {/* Breaking ticker (last 24h only; hidden when empty) */}
+      {data.breaking.length > 0 ? (
+        <div className="mb-4">
+          <Ticker items={data.breaking} />
+        </div>
+      ) : null}
 
       {/* Executive summary */}
       <div className="mb-4">
