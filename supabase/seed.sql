@@ -26,7 +26,8 @@ on conflict (nexus) do nothing;
 -- RSS / source catalogue -----------------------------------------------------
 insert into sources (name, url, category, feed_url) values
   ('Microsoft Security Blog', 'https://www.microsoft.com/en-us/security/blog/', 'vendor',     'https://www.microsoft.com/en-us/security/blog/feed/'),
-  ('Microsoft MSRC',          'https://msrc.microsoft.com/blog/',                'vendor',     'https://msrc.microsoft.com/blog/rss/'),
+  ('Microsoft Threat Intelligence', 'https://www.microsoft.com/en-us/security/blog/', 'research', 'https://www.microsoft.com/en-us/security/blog/feed/atom/'),
+  ('Microsoft MSRC',          'https://msrc.microsoft.com/update-guide/',        'vendor',     'https://api.msrc.microsoft.com/update-guide/rss'),
   ('CrowdStrike',             'https://www.crowdstrike.com/en-us/blog/',         'vendor',     'https://www.crowdstrike.com/en-us/blog/feed'),
   ('SentinelLabs',            'https://www.sentinelone.com/labs/',               'research',   'https://www.sentinelone.com/labs/feed/'),
   ('Kaspersky Securelist',    'https://securelist.com/',                         'research',   'https://securelist.com/feed/'),

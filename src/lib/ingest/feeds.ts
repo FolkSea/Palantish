@@ -10,6 +10,12 @@ export type FeedSource = {
 
 const parser = new Parser({ timeout: 15000 });
 
+// Take at most this many (newest) items per feed. Guards against firehose feeds
+// (e.g. the MSRC Security Update Guide returns thousands of CVE entries) that
+// would otherwise dump a huge batch on the first ingest. Normal feeds return
+// far fewer than this, so they are unaffected.
+const MAX_ITEMS_PER_FEED = 40;
+
 function toDate(value: string | undefined): Date | null {
   if (!value) return null;
   const d = new Date(value);
@@ -44,7 +50,7 @@ export async function pullFeed(
   if (!source.feed_url) return { candidates: [], latestItemAt: null };
   try {
     const feed = await parser.parseURL(source.feed_url);
-    const candidates: RawCandidate[] = (feed.items ?? [])
+    const all: RawCandidate[] = (feed.items ?? [])
       .filter((i) => i.title && i.link)
       .map((i) => ({
         title: toAscii(i.title),
@@ -54,6 +60,13 @@ export async function pullFeed(
         sourceName: source.name,
         sourceCategory: source.category,
       }));
+    // Keep only the newest MAX_ITEMS_PER_FEED (undated items sort last).
+    const candidates = [...all]
+      .sort(
+        (a, b) =>
+          (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0),
+      )
+      .slice(0, MAX_ITEMS_PER_FEED);
     const latestItemAt = candidates.reduce<Date | null>((max, c) => {
       if (!c.publishedAt) return max;
       return !max || c.publishedAt > max ? c.publishedAt : max;
