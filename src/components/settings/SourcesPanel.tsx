@@ -7,10 +7,17 @@ import {
   updateSource,
   deleteSource,
   type SourceCategory,
+  type FeedType,
   type SourceInput,
 } from "@/app/settings/actions";
 
 const CATEGORIES: SourceCategory[] = ["vendor", "research", "news", "government"];
+const FEED_TYPES: FeedType[] = ["rss", "manual", "scraper"];
+const TYPE_LABEL: Record<FeedType, string> = {
+  rss: "RSS",
+  manual: "Manual",
+  scraper: "Custom Scraper",
+};
 
 const inputCls =
   "w-full rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-[12px] text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
@@ -92,7 +99,8 @@ export function SourcesPanel({
             <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
               <th className="py-1.5 pr-3 font-medium">Name</th>
               <th className="py-1.5 pr-3 font-medium">Category</th>
-              <th className="py-1.5 pr-3 font-medium">Feed URL</th>
+              <th className="py-1.5 pr-3 font-medium">Type</th>
+              <th className="py-1.5 pr-3 font-medium">URL</th>
               <th className="py-1.5 pr-3 font-medium">Active</th>
               <th className="py-1.5 font-medium">Actions</th>
             </tr>
@@ -101,7 +109,7 @@ export function SourcesPanel({
             {sources.map((s) =>
               editing === s.id ? (
                 <tr key={s.id}>
-                  <td colSpan={5} className="py-2">
+                  <td colSpan={6} className="py-2">
                     <SourceForm
                       source={s}
                       onCancel={() => setEditing(null)}
@@ -118,8 +126,11 @@ export function SourcesPanel({
                     {s.name}
                   </td>
                   <td className="py-2 pr-3 text-slate-600">{s.category}</td>
-                  <td className="max-w-[280px] truncate py-2 pr-3 text-slate-500">
-                    {s.feed_url ?? "(manual - no feed)"}
+                  <td className="py-2 pr-3 whitespace-nowrap text-slate-600">
+                    {TYPE_LABEL[s.feed_type]}
+                  </td>
+                  <td className="max-w-[260px] truncate py-2 pr-3 text-slate-500">
+                    {(s.feed_type === "rss" ? s.feed_url : s.url) ?? "-"}
                   </td>
                   <td className="py-2 pr-3">
                     <span
@@ -175,6 +186,7 @@ function SourceForm({
   const [category, setCategory] = useState<SourceCategory>(
     source?.category ?? "vendor",
   );
+  const [feedType, setFeedType] = useState<FeedType>(source?.feed_type ?? "rss");
   const [feedUrl, setFeedUrl] = useState(source?.feed_url ?? "");
   const [url, setUrl] = useState(source?.url ?? "");
   const [active, setActive] = useState(source?.active ?? true);
@@ -185,7 +197,7 @@ function SourceForm({
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const input: SourceInput = { name, url, category, feedUrl, active };
+    const input: SourceInput = { name, url, category, feedType, feedUrl, active };
     const res = source
       ? await updateSource(source.id, input)
       : await addSource(input);
@@ -231,18 +243,37 @@ function SourceForm({
       </label>
       <label className="block sm:col-span-2">
         <span className="mb-1 block text-[11px] font-medium text-slate-600">
-          Feed URL (RSS/Atom; leave blank for a manual source)
+          Type
         </span>
-        <input
+        <select
           className={inputCls}
-          value={feedUrl}
-          onChange={(e) => setFeedUrl(e.target.value)}
-          placeholder="https://example.com/feed/"
-        />
+          value={feedType}
+          onChange={(e) => setFeedType(e.target.value as FeedType)}
+        >
+          {FEED_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {TYPE_LABEL[t]}
+            </option>
+          ))}
+        </select>
       </label>
+      {feedType === "rss" ? (
+        <label className="block sm:col-span-2">
+          <span className="mb-1 block text-[11px] font-medium text-slate-600">
+            Feed URL (RSS/Atom)
+          </span>
+          <input
+            className={inputCls}
+            value={feedUrl}
+            onChange={(e) => setFeedUrl(e.target.value)}
+            placeholder="https://example.com/feed/"
+          />
+        </label>
+      ) : null}
       <label className="block sm:col-span-2">
         <span className="mb-1 block text-[11px] font-medium text-slate-600">
-          Homepage URL (optional)
+          {feedType === "manual" ? "Blog URL" : "Blog / homepage URL"}
+          {feedType === "scraper" ? " (scraper target)" : ""}
         </span>
         <input
           className={inputCls}

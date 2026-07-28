@@ -15,7 +15,7 @@ export default async function SettingsPage() {
 
   const { data: sources } = await supabase
     .from("sources")
-    .select("id, name, url, category, feed_url, active")
+    .select("id, name, url, category, feed_type, feed_url, active")
     .order("category")
     .order("name");
 

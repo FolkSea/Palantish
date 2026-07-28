@@ -329,6 +329,7 @@ export type Database = {
           active: boolean
           category: Database["public"]["Enums"]["source_category"]
           created_at: string
+          feed_type: string
           feed_url: string | null
           id: string
           last_error: string | null
@@ -342,6 +343,7 @@ export type Database = {
           active?: boolean
           category: Database["public"]["Enums"]["source_category"]
           created_at?: string
+          feed_type?: string
           feed_url?: string | null
           id?: string
           last_error?: string | null
@@ -355,6 +357,7 @@ export type Database = {
           active?: boolean
           category?: Database["public"]["Enums"]["source_category"]
           created_at?: string
+          feed_type?: string
           feed_url?: string | null
           id?: string
           last_error?: string | null

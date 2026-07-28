@@ -48,3 +48,6 @@ insert into sources (name, url, category, feed_url) values
   ('TRM Labs',                'https://www.trmlabs.com/insights',                'research',   null),
   ('Hunt.io',                 'https://hunt.io/blog',                            'research',   null)
 on conflict (name) do nothing;
+
+-- Sources without an RSS feed URL are manual (blog URL only).
+update sources set feed_type = 'manual' where feed_url is null;

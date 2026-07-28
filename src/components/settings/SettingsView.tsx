@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { AccountPanel } from "./AccountPanel";
 import { SourcesPanel } from "./SourcesPanel";
-import type { SourceCategory } from "@/app/settings/actions";
+import type { SourceCategory, FeedType } from "@/app/settings/actions";
 
 export type SettingsSource = {
   id: string;
   name: string;
   url: string | null;
   category: SourceCategory;
+  feed_type: FeedType;
   feed_url: string | null;
   active: boolean;
 };

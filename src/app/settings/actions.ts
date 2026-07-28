@@ -9,10 +9,14 @@ import { toAscii } from "@/lib/text";
 export type SourceCategory = "vendor" | "research" | "news" | "government";
 const CATEGORIES: SourceCategory[] = ["vendor", "research", "news", "government"];
 
+export type FeedType = "rss" | "manual" | "scraper";
+const FEED_TYPES: FeedType[] = ["rss", "manual", "scraper"];
+
 export type SourceInput = {
   name: string;
   url: string;
   category: SourceCategory;
+  feedType: FeedType;
   feedUrl: string;
   active: boolean;
 };
@@ -25,6 +29,7 @@ export type SourceResult = {
     name: string;
     url: string | null;
     category: SourceCategory;
+    feed_type: FeedType;
     feed_url: string | null;
     active: boolean;
   };
@@ -45,20 +50,27 @@ function clean(input: SourceInput): SourceResult | null {
   if (!name) return { ok: false, error: "Name is required." };
   if (!CATEGORIES.includes(input.category))
     return { ok: false, error: "Invalid category." };
+  if (!FEED_TYPES.includes(input.feedType))
+    return { ok: false, error: "Invalid feed type." };
+  if (input.feedType === "rss" && !input.feedUrl.trim())
+    return { ok: false, error: "An RSS source needs a feed URL." };
   return null;
 }
 
 function normalise(input: SourceInput) {
+  const isRss = input.feedType === "rss";
   return {
     name: toAscii(input.name).trim(),
     url: input.url.trim() || null,
     category: input.category,
-    feed_url: input.feedUrl.trim() || null,
+    feed_type: input.feedType,
+    // Only RSS sources carry a feed URL; manual/scraper use the blog URL.
+    feed_url: isRss ? input.feedUrl.trim() || null : null,
     active: input.active,
   };
 }
 
-const SELECT = "id, name, url, category, feed_url, active";
+const SELECT = "id, name, url, category, feed_type, feed_url, active";
 
 export async function addSource(input: SourceInput): Promise<SourceResult> {
   const unauth = await requireAllowed();
