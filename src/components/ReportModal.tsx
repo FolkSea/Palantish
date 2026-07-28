@@ -14,7 +14,7 @@ import {
   getReportIndicatorsAction,
 } from "@/app/actions";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
-import { techniqueTooltip } from "@/lib/mitre/techniques";
+import { techniqueInfo } from "@/lib/mitre/techniques";
 import { formatDate } from "@/lib/format";
 
 export type ReportModalData = {
@@ -198,6 +198,30 @@ export function ReportModal({
     });
   }
 
+  // Techniques to display (code + name); names come from the model when a
+  // technique was discovered, otherwise from the local ATT&CK reference.
+  const mitreList: DiscoveredTechnique[] = techniques
+    ? techniques.map((t) => ({
+        code: t.code,
+        name:
+          t.name && t.name !== t.code
+            ? t.name
+            : techniqueInfo(t.code)?.name ?? "",
+      }))
+    : mitreCodes.map((code) => ({
+        code,
+        name: techniqueInfo(code)?.name ?? "",
+      }));
+
+  // Custom hover tooltip (native title fires unreliably inside scroll panels).
+  const [tip, setTip] = useState<{ text: string; top: number; right: number } | null>(
+    null,
+  );
+  function showTip(e: React.MouseEvent, text: string) {
+    const r = e.currentTarget.getBoundingClientRect();
+    setTip({ text, top: r.bottom + 6, right: window.innerWidth - r.right });
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-[5px]"
@@ -312,7 +336,7 @@ export function ReportModal({
 
             <CollapsibleCard
               title="MITRE ATT&CK"
-              count={techniques ? techniques.length : mitreCodes.length}
+              count={mitreList.length}
               action={
                 <button
                   type="button"
@@ -329,39 +353,27 @@ export function ReportModal({
                 <Empty>Analysing the report...</Empty>
               ) : discoverError ? (
                 <p className="text-[12px] text-red-600">{discoverError}</p>
-              ) : techniques ? (
-                techniques.length ? (
-                  <ul className="space-y-1">
-                    {techniques.map((t) => (
+              ) : mitreList.length ? (
+                <ul className="space-y-1">
+                  {mitreList.map((t) => {
+                    const desc = techniqueInfo(t.code)?.description ?? "";
+                    return (
                       <li
                         key={t.code}
-                        title={techniqueTooltip(t.code)}
-                        className="cursor-help text-[12px] leading-snug"
+                        onMouseEnter={desc ? (e) => showTip(e, desc) : undefined}
+                        onMouseLeave={desc ? () => setTip(null) : undefined}
+                        className={`text-[12px] leading-snug ${desc ? "cursor-help" : ""}`}
                       >
                         <span className="font-mono font-medium text-slate-800">
                           {t.code}
                         </span>
-                        {t.name && t.name !== t.code ? (
-                          <span className="text-slate-500"> - {t.name}</span>
+                        {t.name ? (
+                          <span className="text-slate-600"> - {t.name}</span>
                         ) : null}
                       </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <Empty>No techniques identified.</Empty>
-                )
-              ) : mitreCodes.length ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {mitreCodes.map((t) => (
-                    <span
-                      key={t}
-                      title={techniqueTooltip(t)}
-                      className="cursor-help rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-700"
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
+                    );
+                  })}
+                </ul>
               ) : (
                 <Empty>Use Discover to infer techniques from the report.</Empty>
               )}
@@ -377,6 +389,16 @@ export function ReportModal({
             report iframe still reach the window listeners. */}
         {dragging ? (
           <div className="fixed inset-0 z-[60] cursor-col-resize select-none" />
+        ) : null}
+
+        {/* Technique description tooltip (fixed, so it escapes card/panel overflow). */}
+        {tip ? (
+          <div
+            className="pointer-events-none fixed z-[70] max-w-xs rounded-md bg-slate-800 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg"
+            style={{ top: tip.top, right: tip.right }}
+          >
+            {tip.text}
+          </div>
         ) : null}
       </div>
     </div>
