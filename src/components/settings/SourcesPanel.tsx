@@ -12,12 +12,14 @@ import {
 } from "@/app/settings/actions";
 
 const CATEGORIES: SourceCategory[] = ["vendor", "research", "news", "government"];
-const FEED_TYPES: FeedType[] = ["rss", "manual", "scraper"];
 const TYPE_LABEL: Record<FeedType, string> = {
   rss: "RSS",
   manual: "Manual",
   scraper: "Custom Scraper",
 };
+// Users may only choose RSS or Manual. Custom Scraper is reserved for the dev
+// team to enable later; it still displays if a source is already set to it.
+const SELECTABLE_TYPES: FeedType[] = ["rss", "manual"];
 
 const inputCls =
   "w-full rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-[12px] text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
@@ -250,7 +252,10 @@ function SourceForm({
           value={feedType}
           onChange={(e) => setFeedType(e.target.value as FeedType)}
         >
-          {FEED_TYPES.map((t) => (
+          {(source?.feed_type === "scraper"
+            ? [...SELECTABLE_TYPES, "scraper" as FeedType]
+            : SELECTABLE_TYPES
+          ).map((t) => (
             <option key={t} value={t}>
               {TYPE_LABEL[t]}
             </option>
