@@ -10,8 +10,8 @@ import {
   SourceBadge,
   StatusPill,
 } from "@/components/Badges";
-import { ExtLink } from "@/components/ExtLink";
 import { ItemActions } from "@/components/ItemActions";
+import { ReportTitle } from "@/components/ReportModal";
 import { NEXUS_ACCENT, type Nexus } from "@/lib/badges";
 import { formatDate } from "@/lib/format";
 
@@ -208,7 +208,17 @@ function ActorCard({ actor }: { actor: ActorWithItems }) {
 function ActorEntry({ item }: { item: ActorItem }) {
   return (
     <div className="border-b border-slate-100 pb-3 last:border-none last:pb-0">
-      <ExtLink href={item.url}>{item.title}</ExtLink>
+      <ReportTitle
+        report={{
+          title: item.title,
+          url: item.url,
+          description: item.description,
+          sourceName: item.source_name,
+          date: item.published_at,
+          adversary: item.adversary,
+          confidence: item.confidence,
+        }}
+      />
       {item.description ? (
         <p className="mt-1 text-[12px] leading-snug text-slate-600">
           {item.description}
@@ -276,7 +286,16 @@ function GroupItem({
 }) {
   return (
     <div className="border-b border-slate-100 pb-3 last:border-none last:pb-0">
-      <ExtLink href={report.url}>{report.title}</ExtLink>
+      <ReportTitle
+        report={{
+          title: report.title,
+          url: report.url,
+          description: report.description,
+          sourceName: report.sourceName,
+          date: report.date,
+          adversary: actor,
+        }}
+      />
       {report.description ? (
         <p className="mt-1 text-[12px] leading-snug text-slate-600">
           {report.description}

@@ -9,6 +9,7 @@ import {
   VulnStatusBadge,
 } from "@/components/Badges";
 import { ExtLink } from "@/components/ExtLink";
+import { ReportTitle } from "@/components/ReportModal";
 import { usePaginated, PaginationFooter } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
 import { prioritiseVulns } from "@/lib/vuln-priority";
@@ -153,7 +154,16 @@ export function ReportsList({ items }: { items: IntelItemRow[] }) {
                   <SourceBadge name={r.source_name} />
                 </span>
                 <span className="flex-1">
-                  <ExtLink href={r.url}>{r.title}</ExtLink>
+                  <ReportTitle
+                    report={{
+                      title: r.title,
+                      url: r.url,
+                      description: r.description,
+                      sourceName: r.source_name,
+                      date: r.published_at,
+                      confidence: r.confidence,
+                    }}
+                  />
                   {r.description ? (
                     <span className="block text-slate-500">{r.description}</span>
                   ) : null}
