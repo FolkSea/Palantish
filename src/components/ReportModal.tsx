@@ -2,11 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  extractIndicators,
-  indicatorCount,
-  type Indicators,
-} from "@/lib/report-indicators";
+import { extractIndicators, indicatorCount } from "@/lib/report-indicators";
 import {
   fetchReportViewAction,
   persistReportIndicatorsAction,
@@ -23,6 +19,12 @@ export type ReportModalData = {
   confidence?: string | null;
   rawHash?: string | null;
 };
+
+type ViewState =
+  | { status: "loading" }
+  | { status: "frame"; url: string }
+  | { status: "embed"; html: string }
+  | { status: "fallback"; text: string | null; error?: string };
 
 /**
  * Renders a report title as a button that opens an ~80% details modal instead
@@ -65,12 +67,7 @@ export function ReportModal({
   // Show the live page when its headers allow framing; otherwise embed a
   // server-fetched HTML snapshot (bypasses X-Frame-Options); and only if even
   // that fails, fall back to scraped text under a notice bar.
-  const [view, setView] = useState<
-    | { status: "loading" }
-    | { status: "frame"; url: string }
-    | { status: "embed"; html: string }
-    | { status: "fallback"; text: string | null; error?: string }
-  >({ status: "loading" });
+  const [view, setView] = useState<ViewState>({ status: "loading" });
 
   // The scraped article body drives IOC extraction regardless of how the
   // Details pane is rendered (live frame, snapshot, or text).
@@ -124,11 +121,12 @@ export function ReportModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full flex-col rounded-lg border border-[#e5e7eb] bg-white shadow-xl"
+        className="flex w-full overflow-hidden rounded-lg border border-[#e5e7eb] bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-[#e5e7eb] px-5 py-3">
-          <div className="min-w-0">
+        {/* Left (3): title + the imported report */}
+        <div className="flex min-w-0 flex-[3] flex-col border-r border-[#e5e7eb]">
+          <header className="shrink-0 border-b border-[#e5e7eb] px-5 py-3">
             {report.url ? (
               <a
                 href={report.url}
@@ -165,131 +163,211 @@ export function ReportModal({
                 </span>
               ) : null}
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="shrink-0 rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
-          >
-            Close
-          </button>
-        </header>
-
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4 text-[13px]">
-          <Section title="Summary">
-            {report.description ? (
-              <p className="leading-relaxed text-slate-700">
-                {report.description}
-              </p>
-            ) : (
-              <Empty>No summary available.</Empty>
-            )}
-          </Section>
-
-          <Section title="Details">
-            <div className="h-[62vh] overflow-hidden rounded-md border border-[#e5e7eb]">
-              {view.status === "loading" ? (
-                <div className="flex h-full items-center justify-center bg-slate-50">
-                  <Empty>Loading the full report...</Empty>
-                </div>
-              ) : view.status === "frame" ? (
-                <iframe
-                  src={view.url}
-                  title="Full report"
-                  className="h-full w-full"
-                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                  referrerPolicy="no-referrer"
-                  loading="lazy"
-                />
-              ) : view.status === "embed" ? (
-                <iframe
-                  srcDoc={view.html}
-                  title="Full report"
-                  className="h-full w-full"
-                  sandbox="allow-scripts allow-popups"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <div className="flex h-full flex-col">
-                  <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12px] font-medium text-amber-800">
-                    Unable to retrieve web page. Attempting to scrape text.
-                  </div>
-                  <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-3">
-                    {view.text ? (
-                      <div className="space-y-2 leading-relaxed text-slate-700">
-                        {view.text.split("\n").map((para, i) => (
-                          <p key={i}>{para}</p>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-[12px] text-slate-500">
-                        <p>
-                          Could not load the report text
-                          {view.error ? ` (${view.error})` : ""}.
-                        </p>
-                        {report.url ? (
-                          <a
-                            href={report.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[#1d4ed8] hover:underline"
-                          >
-                            Open the report at the source
-                          </a>
-                        ) : null}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+          </header>
+          <div className="flex-1 overflow-hidden p-3">
+            <div className="h-full overflow-hidden rounded-md border border-[#e5e7eb]">
+              <ReportBody view={view} url={report.url} />
             </div>
-          </Section>
+          </div>
+        </div>
 
-          <Section title="IOCs">
-            <IocView indicators={indicators} />
-          </Section>
+        {/* Right (1): collapsible information cards */}
+        <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
+          <div className="flex shrink-0 items-center justify-between border-b border-[#e5e7eb] px-3 py-2">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              Report details
+            </span>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
+            >
+              Close
+            </button>
+          </div>
+          <div className="flex-1 space-y-2 overflow-y-auto p-3 text-[13px]">
+            <CollapsibleCard title="Summary">
+              {report.description ? (
+                <p className="leading-relaxed text-slate-700">
+                  {report.description}
+                </p>
+              ) : (
+                <Empty>No summary available.</Empty>
+              )}
+            </CollapsibleCard>
 
-          <Section title="MITRE ATT&CK">
-            {indicators.mitre.length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {indicators.mitre.map((t) => (
-                  <span
-                    key={t}
-                    className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-700"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <Empty>No techniques identified.</Empty>
-            )}
-          </Section>
+            <CollapsibleCard title="IP Addresses" count={indicators.ips.length}>
+              <IocItems items={indicators.ips} />
+            </CollapsibleCard>
 
-          <Section title="Visibility Gaps">
-            <Empty>Not yet available - to be generated.</Empty>
-          </Section>
+            <CollapsibleCard title="Domains" count={indicators.domains.length}>
+              <IocItems items={indicators.domains} />
+            </CollapsibleCard>
+
+            <CollapsibleCard title="URIs" count={indicators.uris.length}>
+              <IocItems items={indicators.uris} />
+            </CollapsibleCard>
+
+            <CollapsibleCard title="Hashes" count={indicators.files.length}>
+              <IocItems items={indicators.files} />
+            </CollapsibleCard>
+
+            <CollapsibleCard title="MITRE ATT&CK" count={indicators.mitre.length}>
+              {indicators.mitre.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {indicators.mitre.map((t) => (
+                    <span
+                      key={t}
+                      className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-700"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <Empty>No techniques identified.</Empty>
+              )}
+            </CollapsibleCard>
+
+            <CollapsibleCard title="Visibility Gaps">
+              <Empty>Not yet available - to be generated.</Empty>
+            </CollapsibleCard>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function Section({
+/** The imported report body: live frame, server-fetched snapshot, or scraped
+ * text (with a notice bar), depending on what the server could retrieve. */
+function ReportBody({ view, url }: { view: ViewState; url: string | null }) {
+  if (view.status === "loading") {
+    return (
+      <div className="flex h-full items-center justify-center bg-slate-50">
+        <Empty>Loading the full report...</Empty>
+      </div>
+    );
+  }
+  if (view.status === "frame") {
+    return (
+      <iframe
+        src={view.url}
+        title="Full report"
+        className="h-full w-full"
+        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+        referrerPolicy="no-referrer"
+        loading="lazy"
+      />
+    );
+  }
+  if (view.status === "embed") {
+    return (
+      <iframe
+        srcDoc={view.html}
+        title="Full report"
+        className="h-full w-full"
+        sandbox="allow-scripts allow-popups"
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+  return (
+    <div className="flex h-full flex-col">
+      <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12px] font-medium text-amber-800">
+        Unable to retrieve web page. Attempting to scrape text.
+      </div>
+      <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-3">
+        {view.text ? (
+          <div className="space-y-2 leading-relaxed text-slate-700">
+            {view.text.split("\n").map((para, i) => (
+              <p key={i}>{para}</p>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[12px] text-slate-500">
+            <p>
+              Could not load the report text
+              {view.error ? ` (${view.error})` : ""}.
+            </p>
+            {url ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#1d4ed8] hover:underline"
+              >
+                Open the report at the source
+              </a>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CollapsibleCard({
   title,
+  count,
+  defaultOpen = true,
   children,
 }: {
   title: string;
+  count?: number;
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <section>
-      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-        {title}
-      </h3>
-      {children}
-    </section>
+    <div className="overflow-hidden rounded-md border border-[#e5e7eb] bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50"
+      >
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          {title}
+          {typeof count === "number" ? (
+            <span className="rounded-full bg-slate-100 px-1.5 text-[10px] font-medium text-slate-500">
+              {count}
+            </span>
+          ) : null}
+        </span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className={`shrink-0 text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`}
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </button>
+      {open ? (
+        <div className="border-t border-[#e5e7eb] px-3 py-2">{children}</div>
+      ) : null}
+    </div>
+  );
+}
+
+function IocItems({ items }: { items: string[] }) {
+  if (!items.length) return <Empty>None.</Empty>;
+  return (
+    <ul className="space-y-0.5">
+      {items.map((v) => (
+        <li key={v} className="break-all font-mono text-[12px] text-slate-700">
+          {v}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -304,38 +382,4 @@ function Meta({ label, value }: { label: string; value: string | null }) {
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-[12px] italic text-slate-400">{children}</p>;
-}
-
-function IocList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <p className="mb-1 text-[11px] font-medium text-slate-500">
-        {title} ({items.length})
-      </p>
-      {items.length ? (
-        <ul className="space-y-0.5">
-          {items.map((v) => (
-            <li key={v} className="break-all font-mono text-[12px] text-slate-700">
-              {v}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <Empty>None.</Empty>
-      )}
-    </div>
-  );
-}
-
-function IocView({ indicators }: { indicators: Indicators }) {
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <IocList title="IP Addresses" items={indicators.ips} />
-        <IocList title="Domains" items={indicators.domains} />
-        <IocList title="URIs" items={indicators.uris} />
-        <IocList title="File Hashes" items={indicators.files} />
-      </div>
-    </div>
-  );
 }
