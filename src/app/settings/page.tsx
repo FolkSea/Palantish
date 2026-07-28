@@ -29,15 +29,56 @@ export default async function SettingsPage() {
     .select("raw_hash, created_at")
     .order("created_at", { ascending: false });
   const hashes = (hiddenRows ?? []).map((h) => h.raw_hash);
-  const hiddenItemRows = hashes.length
-    ? ((
-        await supabase
-          .from("intel_items")
-          .select("raw_hash, title, url, source_name, published_at")
-          .in("raw_hash", hashes)
-      ).data ?? [])
-    : [];
-  const byHash = new Map(hiddenItemRows.map((r) => [r.raw_hash, r]));
+  // A hidden hash may point at an intel item, a breach, or a vulnerability;
+  // resolve display fields from whichever table holds it.
+  const byHash = new Map<
+    string,
+    {
+      title: string | null;
+      url: string | null;
+      sourceName: string | null;
+      publishedAt: string | null;
+    }
+  >();
+  if (hashes.length) {
+    const [intelRows, breachRows, vulnRows] = await Promise.all([
+      supabase
+        .from("intel_items")
+        .select("raw_hash, title, url, source_name, published_at")
+        .in("raw_hash", hashes),
+      supabase
+        .from("breaches")
+        .select("raw_hash, org_name, url, source_name, event_date")
+        .in("raw_hash", hashes),
+      supabase
+        .from("vulnerabilities")
+        .select("raw_hash, cve_id, url, source_name, added_at")
+        .in("raw_hash", hashes),
+    ]);
+    for (const r of intelRows.data ?? [])
+      byHash.set(r.raw_hash, {
+        title: r.title,
+        url: r.url,
+        sourceName: r.source_name,
+        publishedAt: r.published_at,
+      });
+    for (const r of breachRows.data ?? [])
+      if (!byHash.has(r.raw_hash))
+        byHash.set(r.raw_hash, {
+          title: r.org_name,
+          url: r.url,
+          sourceName: r.source_name,
+          publishedAt: r.event_date,
+        });
+    for (const r of vulnRows.data ?? [])
+      if (!byHash.has(r.raw_hash))
+        byHash.set(r.raw_hash, {
+          title: r.cve_id,
+          url: r.url,
+          sourceName: r.source_name,
+          publishedAt: r.added_at,
+        });
+  }
   const hidden: HiddenPost[] = (hiddenRows ?? []).map((h) => {
     const it = byHash.get(h.raw_hash);
     return {
@@ -45,8 +86,8 @@ export default async function SettingsPage() {
       hiddenAt: h.created_at,
       title: it?.title ?? null,
       url: it?.url ?? null,
-      sourceName: it?.source_name ?? null,
-      publishedAt: it?.published_at ?? null,
+      sourceName: it?.sourceName ?? null,
+      publishedAt: it?.publishedAt ?? null,
     };
   });
 

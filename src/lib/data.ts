@@ -206,8 +206,8 @@ export async function loadDashboard(): Promise<DashboardData> {
     buildGroupsFromAdversaries(ecrimeAdvRes.data ?? []),
   );
 
-  const breaches30 = (breachesRes.data ?? []).filter((b) =>
-    isThreatIntel(b.org_name, b.summary),
+  const breaches30 = (breachesRes.data ?? []).filter(
+    (b) => isThreatIntel(b.org_name, b.summary) && !hidden.has(b.raw_hash),
   );
   const breaches = breaches30.filter((b) => (b.event_date ?? "") >= recentCutoff);
   const ecrimeTimeline: EcrimeTimelinePoint[] = breaches30

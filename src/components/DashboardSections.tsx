@@ -127,6 +127,9 @@ function EcrimeCard({
                 <span className="text-[10px] text-slate-400">
                   {b.event_date_label ?? formatDate(b.event_date)}
                 </span>
+                <span className="ml-auto">
+                  <ItemActions rawHash={b.raw_hash} />
+                </span>
               </div>
             </div>
           ))

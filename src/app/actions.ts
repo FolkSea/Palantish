@@ -48,25 +48,50 @@ export async function deleteItemAction(
   }
 
   const db = createAdminClient();
-  // Keep url/title for the blocklist record, then remove the row.
-  const { data: row } = await db
+
+  // The item lives in one of three tables (intel_items / breaches /
+  // vulnerabilities); capture url + a title for the audit record, then remove
+  // it wherever it is. raw_hash is unique across tables.
+  let url: string | null = null;
+  let title: string | null = null;
+  const intel = await db
     .from("intel_items")
     .select("url, title")
     .eq("raw_hash", rawHash)
     .maybeSingle();
-  const { error: delErr } = await db
-    .from("intel_items")
-    .delete()
-    .eq("raw_hash", rawHash);
+  if (intel.data) {
+    url = intel.data.url;
+    title = intel.data.title;
+  } else {
+    const breach = await db
+      .from("breaches")
+      .select("url, org_name")
+      .eq("raw_hash", rawHash)
+      .maybeSingle();
+    if (breach.data) {
+      url = breach.data.url;
+      title = breach.data.org_name;
+    } else {
+      const vuln = await db
+        .from("vulnerabilities")
+        .select("url, cve_id")
+        .eq("raw_hash", rawHash)
+        .maybeSingle();
+      if (vuln.data) {
+        url = vuln.data.url;
+        title = vuln.data.cve_id;
+      }
+    }
+  }
+
+  const del1 = await db.from("intel_items").delete().eq("raw_hash", rawHash);
+  const del2 = await db.from("breaches").delete().eq("raw_hash", rawHash);
+  const del3 = await db.from("vulnerabilities").delete().eq("raw_hash", rawHash);
+  const delErr = del1.error ?? del2.error ?? del3.error;
   if (delErr) return { ok: false, error: delErr.message };
 
   const { error: blockErr } = await db.from("deleted_items").upsert(
-    {
-      raw_hash: rawHash,
-      url: row?.url ?? null,
-      title: row?.title ?? null,
-      deleted_by: user.id,
-    },
+    { raw_hash: rawHash, url, title, deleted_by: user.id },
     { onConflict: "raw_hash", ignoreDuplicates: true },
   );
   if (blockErr) return { ok: false, error: blockErr.message };
