@@ -1,6 +1,8 @@
 import "server-only";
 
+import Anthropic from "@anthropic-ai/sdk";
 import { toAscii } from "@/lib/text";
+import { serverEnv } from "@/lib/env";
 
 export type ScrapedArticle = {
   title: string;
@@ -13,6 +15,7 @@ export type ScrapedArticle = {
 
 const FETCH_TIMEOUT_MS = 20000;
 const UA = "Mozilla/5.0 (compatible; ThreatDashboardBot/1.0; +manual-import)";
+const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
 
 /** Reject non-http(s) URLs and obvious internal/loopback hosts (basic SSRF guard). */
 export function assertPublicHttpUrl(raw: string): URL {
@@ -71,6 +74,22 @@ function parseDate(value: string | null): Date | null {
   return Number.isNaN(t) ? null : new Date(t);
 }
 
+function metaPublished(html: string): Date | null {
+  return parseDate(
+    metaContent(html, [
+      "article:published_time",
+      "article:published",
+      "og:article:published_time",
+      "datepublished",
+      "date",
+      "dc.date",
+      "dc.date.issued",
+      "parsely-pub-date",
+      "sailthru.date",
+    ]) ?? attr(html.match(/<time\b[^>]*>/i)?.[0] ?? "", "datetime"),
+  );
+}
+
 /** Extract the main body text (article scope if present, else body), tag-stripped. */
 function bodyExcerpt(html: string): string | null {
   const article = html.match(/<article\b[\s\S]*?<\/article>/i)?.[0];
@@ -86,14 +105,17 @@ function bodyExcerpt(html: string): string | null {
   return text || null;
 }
 
-/**
- * Fetch a blog/article URL and extract a normalised summary for ingestion.
- * Uses Open Graph / Twitter / standard meta tags, falling back to <title> and
- * the article body. Never returns non-ASCII (everything runs through toAscii).
- */
-export async function scrapeArticle(rawUrl: string): Promise<ScrapedArticle> {
-  const target = assertPublicHttpUrl(rawUrl.trim());
+type FetchedPage = {
+  html: string;
+  finalUrl: string;
+  domain: string;
+  siteName: string;
+};
 
+/** Fetch a URL and return its HTML plus derived site identity. Throws on any
+ * network / status / content-type problem so callers can offer a fallback. */
+async function fetchPage(rawUrl: string): Promise<FetchedPage> {
+  const target = assertPublicHttpUrl(rawUrl.trim());
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let res: Response;
@@ -110,21 +132,41 @@ export async function scrapeArticle(rawUrl: string): Promise<ScrapedArticle> {
   } finally {
     clearTimeout(timer);
   }
-
   if (!res.ok) throw new Error(`The page returned HTTP ${res.status}.`);
-  const contentType = res.headers.get("content-type") ?? "";
-  if (!/html/i.test(contentType)) {
+  if (!/html/i.test(res.headers.get("content-type") ?? "")) {
     throw new Error("That URL is not an HTML page.");
   }
   const html = await res.text();
   const finalUrl = res.url || target.toString();
-  const finalHost = (() => {
+  const host = (() => {
     try {
       return new URL(finalUrl);
     } catch {
       return target;
     }
   })();
+  const domain = host.hostname.replace(/^www\./, "");
+  const siteName =
+    toAscii(metaContent(html, ["og:site_name", "application-name"]) ?? "").trim() ||
+    domain;
+  return { html, finalUrl, domain, siteName };
+}
+
+/** Derive a site identity from a bare URL (no fetch), for the paste fallback. */
+export function siteIdentity(rawUrl: string): { finalUrl: string; domain: string; siteName: string } {
+  const u = assertPublicHttpUrl(rawUrl.trim());
+  const domain = u.hostname.replace(/^www\./, "");
+  return { finalUrl: u.toString(), domain, siteName: domain };
+}
+
+/**
+ * Fetch a blog/article URL and extract a normalised summary using Open Graph /
+ * meta tags, falling back to <title> and the article body. Never returns
+ * non-ASCII. Throws when the page cannot be fetched or has no title, so the
+ * caller can offer the AI or paste fallback.
+ */
+export async function scrapeArticle(rawUrl: string): Promise<ScrapedArticle> {
+  const { html, finalUrl, domain, siteName } = await fetchPage(rawUrl);
 
   const title =
     toAscii(
@@ -140,24 +182,81 @@ export async function scrapeArticle(rawUrl: string): Promise<ScrapedArticle> {
     (ogDescription ? toAscii(ogDescription).trim() : null) ??
     (body ? body.slice(0, 500) : null);
 
-  const publishedAt = parseDate(
-    metaContent(html, [
-      "article:published_time",
-      "article:published",
-      "og:article:published_time",
-      "datepublished",
-      "date",
-      "dc.date",
-      "dc.date.issued",
-      "parsely-pub-date",
-      "sailthru.date",
-    ]) ?? attr(html.match(/<time\b[^>]*>/i)?.[0] ?? "", "datetime"),
-  );
+  return {
+    title,
+    description,
+    publishedAt: metaPublished(html),
+    finalUrl,
+    siteName,
+    domain,
+  };
+}
 
-  const domain = finalHost.hostname.replace(/^www\./, "");
-  const siteName =
-    toAscii(metaContent(html, ["og:site_name", "application-name"]) ?? "").trim() ||
-    domain;
+type AiExtract = { title: string | null; summary: string | null; publishedDate: string | null };
+
+function parseAiJson(text: string): AiExtract | null {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try {
+    const o = JSON.parse(match[0]) as Record<string, unknown>;
+    return {
+      title: typeof o.title === "string" ? o.title : null,
+      summary: typeof o.summary === "string" ? o.summary : null,
+      publishedDate: typeof o.publishedDate === "string" ? o.publishedDate : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fallback reader: fetch the page, then use the LLM to pull a title, summary and
+ * date out of the raw text when the heuristic scraper could not. Requires an
+ * Anthropic API key; throws (so the caller can offer paste) if unavailable or if
+ * the page has no readable text.
+ */
+export async function scrapeArticleWithAI(rawUrl: string): Promise<ScrapedArticle> {
+  const { html, finalUrl, domain, siteName } = await fetchPage(rawUrl);
+
+  const key = serverEnv.anthropicApiKey;
+  if (!key) {
+    throw new Error("AI reading is not configured. Paste the text instead.");
+  }
+  const titleHint = toAscii(
+    metaContent(html, ["og:title", "twitter:title"]) ?? tagText(html, "title") ?? "",
+  ).trim();
+  const text = bodyExcerpt(html) ?? "";
+  if (!text && !titleHint) {
+    throw new Error("The page has no readable text. Paste the text instead.");
+  }
+
+  const client = new Anthropic({ apiKey: key });
+  const message = await client.messages.create({
+    model: AI_MODEL,
+    max_tokens: 512,
+    system:
+      "You extract article metadata from raw web page text. Return ONLY strict JSON " +
+      '{"title": string, "summary": string, "publishedDate": string|null}. ' +
+      "summary is 2-4 plain sentences describing the article's substance. " +
+      "publishedDate is ISO 8601 (YYYY-MM-DD) if stated, else null. Use ASCII only.",
+    messages: [
+      {
+        role: "user",
+        content: `URL: ${finalUrl}\nTitle hint: ${titleHint || "(none)"}\n\nPage text:\n${text.slice(0, 12000)}`,
+      },
+    ],
+  });
+  const out = message.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+  const parsed = parseAiJson(out);
+
+  const title = toAscii(parsed?.title || titleHint).trim();
+  if (!title) throw new Error("AI could not identify a title. Paste the text instead.");
+  const summary = parsed?.summary ? toAscii(parsed.summary).trim().slice(0, 800) : null;
+  const description = summary ?? (text ? text.slice(0, 500) : null);
+  const publishedAt = parseDate(parsed?.publishedDate ?? null) ?? metaPublished(html);
 
   return { title, description, publishedAt, finalUrl, siteName, domain };
 }

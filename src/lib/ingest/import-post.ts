@@ -1,8 +1,14 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { scrapeArticle } from "./scrape";
+import {
+  scrapeArticle,
+  scrapeArticleWithAI,
+  siteIdentity,
+  type ScrapedArticle,
+} from "./scrape";
 import { selectEnricher } from "./enrich/llm";
+import { toAscii } from "@/lib/text";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import { computeHash } from "./dedup";
 import type { EnrichedItem, RawCandidate } from "./types";
@@ -23,7 +29,7 @@ export type ImportResult =
       sourceName: string;
       sourceCreated: boolean;
     }
-  | { ok: false; error: string };
+  | { ok: false; error: string; recoverable?: boolean };
 
 function domainOf(u: string | null): string {
   if (!u) return "";
@@ -43,16 +49,15 @@ function uniqueName(base: string, taken: Set<string>): string {
 }
 
 /**
- * Manually import a single blog post/article by URL: scrape it, attach it to a
- * source (creating a manual source when the blog is not yet tracked), classify
- * it with the same enricher the pipeline uses, and persist it. Manual imports
- * are always kept even if the classifier would drop them as low-signal; the
- * classification is used only for routing and badges.
+ * Persist an already-extracted article: attach it to a source (creating a manual
+ * source when the blog is not yet tracked), classify it with the same enricher
+ * the pipeline uses, and store it. Manual imports are always kept even if the
+ * classifier would drop them as low-signal; the classification only drives
+ * routing and badges.
  *
  * The executive summary is deliberately NOT regenerated here.
  */
-export async function importBlogPost(rawUrl: string): Promise<ImportResult> {
-  const article = await scrapeArticle(rawUrl);
+export async function ingestArticle(article: ScrapedArticle): Promise<ImportResult> {
   const db = createAdminClient();
 
   // Resolve the source by domain, or create a manual one.
@@ -203,4 +208,38 @@ export async function importBlogPost(rawUrl: string): Promise<ImportResult> {
     sourceName: source.name,
     sourceCreated,
   };
+}
+
+/** Default path: heuristic scrape of the URL, then ingest. */
+export async function importBlogPost(rawUrl: string): Promise<ImportResult> {
+  return ingestArticle(await scrapeArticle(rawUrl));
+}
+
+/** Fallback: let the LLM read the fetched page, then ingest. */
+export async function importBlogPostWithAI(rawUrl: string): Promise<ImportResult> {
+  return ingestArticle(await scrapeArticleWithAI(rawUrl));
+}
+
+/**
+ * Fallback: ingest a title + body the user pasted from the blog (no fetch). The
+ * URL is still used to attach/create the source and as the item link.
+ */
+export async function importPastedPost(
+  rawUrl: string,
+  title: string,
+  body: string,
+): Promise<ImportResult> {
+  const { finalUrl, domain, siteName } = siteIdentity(rawUrl);
+  const cleanTitle = toAscii(title).trim();
+  if (!cleanTitle) return { ok: false, error: "A title is required." };
+  const cleanBody = toAscii(body).replace(/\s+/g, " ").trim();
+  const article: ScrapedArticle = {
+    title: cleanTitle,
+    description: cleanBody ? cleanBody.slice(0, 2000) : null,
+    publishedAt: null,
+    finalUrl,
+    siteName,
+    domain,
+  };
+  return ingestArticle(article);
 }
