@@ -14,6 +14,7 @@ import {
   getReportIndicatorsAction,
 } from "@/app/actions";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
+import { techniqueTooltip } from "@/lib/mitre/techniques";
 import { formatDate } from "@/lib/format";
 
 export type ReportModalData = {
@@ -332,7 +333,11 @@ export function ReportModal({
                 techniques.length ? (
                   <ul className="space-y-1">
                     {techniques.map((t) => (
-                      <li key={t.code} className="text-[12px] leading-snug">
+                      <li
+                        key={t.code}
+                        title={techniqueTooltip(t.code)}
+                        className="cursor-help text-[12px] leading-snug"
+                      >
                         <span className="font-mono font-medium text-slate-800">
                           {t.code}
                         </span>
@@ -350,7 +355,8 @@ export function ReportModal({
                   {mitreCodes.map((t) => (
                     <span
                       key={t}
-                      className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-700"
+                      title={techniqueTooltip(t)}
+                      className="cursor-help rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-700"
                     >
                       {t}
                     </span>
