@@ -198,6 +198,30 @@ export type Database = {
           },
         ]
       }
+      deleted_items: {
+        Row: {
+          deleted_at: string
+          deleted_by: string | null
+          raw_hash: string
+          title: string | null
+          url: string | null
+        }
+        Insert: {
+          deleted_at?: string
+          deleted_by?: string | null
+          raw_hash: string
+          title?: string | null
+          url?: string | null
+        }
+        Update: {
+          deleted_at?: string
+          deleted_by?: string | null
+          raw_hash?: string
+          title?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
       executive_summaries: {
         Row: {
           created_at: string
@@ -225,6 +249,24 @@ export type Database = {
           source?: string
           summary?: string
           window_note?: string | null
+        }
+        Relationships: []
+      }
+      hidden_items: {
+        Row: {
+          created_at: string
+          raw_hash: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          raw_hash: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          raw_hash?: string
+          user_id?: string
         }
         Relationships: []
       }

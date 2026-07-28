@@ -101,13 +101,17 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
 
   // Dedup across all three target tables.
   const rawHash = computeHash(article.title, article.finalUrl);
-  const [iDup, vDup, bDup] = await Promise.all([
+  const [iDup, vDup, bDup, delDup] = await Promise.all([
     db.from("intel_items").select("id", { count: "exact", head: true }).eq("raw_hash", rawHash),
     db.from("vulnerabilities").select("id", { count: "exact", head: true }).eq("raw_hash", rawHash),
     db.from("breaches").select("id", { count: "exact", head: true }).eq("raw_hash", rawHash),
+    db.from("deleted_items").select("raw_hash", { count: "exact", head: true }).eq("raw_hash", rawHash),
   ]);
   if ((iDup.count ?? 0) + (vDup.count ?? 0) + (bDup.count ?? 0) > 0) {
     return { ok: false, error: "That post has already been imported." };
+  }
+  if ((delDup.count ?? 0) > 0) {
+    return { ok: false, error: "That post was deleted and will not be re-imported." };
   }
 
   // Classify with the shared enricher (LLM when configured, else rules).

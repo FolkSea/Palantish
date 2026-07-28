@@ -6,6 +6,7 @@ import {
   StatusPill,
 } from "@/components/Badges";
 import { ExtLink } from "@/components/ExtLink";
+import { ItemActions } from "@/components/ItemActions";
 import { NEXUS_ACCENT, type Nexus } from "@/lib/badges";
 import { formatDate } from "@/lib/format";
 import type { ActorWithItems, BreachRow, IntelItemRow } from "@/lib/data";
@@ -193,6 +194,9 @@ function ActorEntry({ item }: { item: IntelItemRow }) {
             {formatDate(item.published_at)}
           </span>
         ) : null}
+        <span className="ml-auto">
+          <ItemActions rawHash={item.raw_hash} />
+        </span>
       </div>
     </div>
   );

@@ -170,11 +170,18 @@ export async function loadDashboard(): Promise<DashboardData> {
       .limit(1),
   ]);
 
+  // Items the current user has hidden (RLS scopes this query to their own rows).
+  const { data: hiddenRows } = await supabase
+    .from("hidden_items")
+    .select("raw_hash");
+  const hidden = new Set((hiddenRows ?? []).map((r) => r.raw_hash));
+
   // Keep only genuine threat-intel posts across the dashboard (drop marketing,
-  // corporate/business news, event promos, podcasts, and lifestyle content).
-  const activity = (activityRes.data ?? []).filter((i) =>
-    isThreatIntel(i.title, i.description),
-  );
+  // corporate/business news, event promos, podcasts, and lifestyle content),
+  // and drop anything this user has hidden.
+  const keep = (i: { title: string | null; description?: string | null; raw_hash: string }) =>
+    isThreatIntel(i.title, i.description) && !hidden.has(i.raw_hash);
+  const activity = (activityRes.data ?? []).filter(keep);
   const actors: ActorWithItems[] = (actorsRes.data ?? []).map((actor) => ({
     ...actor,
     items: activity.filter((i) => i.actor_id === actor.id),
@@ -238,12 +245,8 @@ export async function loadDashboard(): Promise<DashboardData> {
     timeline: timelineRes.data ?? [],
     ecrimeTimeline,
     vulnTimeline,
-    breaking: (breakingRes.data ?? []).filter((i) =>
-      isThreatIntel(i.title, i.description),
-    ),
-    reports: (reportsRes.data ?? []).filter((i) =>
-      isThreatIntel(i.title, i.description),
-    ),
+    breaking: (breakingRes.data ?? []).filter(keep),
+    reports: (reportsRes.data ?? []).filter(keep),
     vulnerabilities,
     breaches,
     // The most significant recent eCrime activity (ransomware / extortion /

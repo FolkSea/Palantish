@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { Card, EmptyState } from "@/components/Card";
+import { ItemActions } from "@/components/ItemActions";
 import {
   PriorityBadge,
   SourceBadge,
@@ -157,8 +158,11 @@ export function ReportsList({ items }: { items: IntelItemRow[] }) {
                     <span className="block text-slate-500">{r.description}</span>
                   ) : null}
                 </span>
-                <span className="shrink-0 text-[10px] text-slate-400">
-                  {formatDate(r.published_at)}
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className="text-[10px] text-slate-400">
+                    {formatDate(r.published_at)}
+                  </span>
+                  <ItemActions rawHash={r.raw_hash} />
                 </span>
               </li>
             ))}

@@ -95,15 +95,19 @@ export async function runIngest(): Promise<IngestResult> {
       .map((s) => ({ name: s.name, feed_url: s.feed_url, category: s.category }));
 
     // Existing dedup hashes across all target tables ------------------------
-    const [intelHashes, vulnHashes, breachHashes] = await Promise.all([
-      db.from("intel_items").select("raw_hash"),
-      db.from("vulnerabilities").select("raw_hash"),
-      db.from("breaches").select("raw_hash"),
-    ]);
+    const [intelHashes, vulnHashes, breachHashes, deletedHashes] =
+      await Promise.all([
+        db.from("intel_items").select("raw_hash"),
+        db.from("vulnerabilities").select("raw_hash"),
+        db.from("breaches").select("raw_hash"),
+        // Blocklist: items an operator permanently deleted must not return.
+        db.from("deleted_items").select("raw_hash"),
+      ]);
     const existing = new Set<string>([
       ...(intelHashes.data ?? []).map((r) => r.raw_hash),
       ...(vulnHashes.data ?? []).map((r) => r.raw_hash),
       ...(breachHashes.data ?? []).map((r) => r.raw_hash),
+      ...(deletedHashes.data ?? []).map((r) => r.raw_hash),
     ]);
 
     // Pull + augment ---------------------------------------------------------

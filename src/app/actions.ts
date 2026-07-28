@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailAllowed } from "@/lib/env";
 import {
   ingestArticle,
@@ -25,6 +26,79 @@ function refreshDashboard() {
   // cached executive summary.
   revalidatePath("/");
   revalidatePath("/settings");
+}
+
+export type ItemMutationResult = { ok: boolean; error?: string };
+
+/**
+ * Permanently delete an intel item from the database and add its content hash
+ * to the blocklist so the ingest pipeline never re-imports it. Global (affects
+ * every viewer), auth-checked.
+ */
+export async function deleteItemAction(
+  rawHash: string,
+): Promise<ItemMutationResult> {
+  if (!rawHash) return { ok: false, error: "Missing item reference." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !isEmailAllowed(user.email)) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  const db = createAdminClient();
+  // Keep url/title for the blocklist record, then remove the row.
+  const { data: row } = await db
+    .from("intel_items")
+    .select("url, title")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  const { error: delErr } = await db
+    .from("intel_items")
+    .delete()
+    .eq("raw_hash", rawHash);
+  if (delErr) return { ok: false, error: delErr.message };
+
+  const { error: blockErr } = await db.from("deleted_items").upsert(
+    {
+      raw_hash: rawHash,
+      url: row?.url ?? null,
+      title: row?.title ?? null,
+      deleted_by: user.id,
+    },
+    { onConflict: "raw_hash", ignoreDuplicates: true },
+  );
+  if (blockErr) return { ok: false, error: blockErr.message };
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/**
+ * Hide an item for the current user only. Persisted per-user; RLS ensures the
+ * row is scoped to the authenticated user.
+ */
+export async function hideItemAction(
+  rawHash: string,
+): Promise<ItemMutationResult> {
+  if (!rawHash) return { ok: false, error: "Missing item reference." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !isEmailAllowed(user.email)) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  const { error } = await supabase.from("hidden_items").upsert(
+    { user_id: user.id, raw_hash: rawHash },
+    { onConflict: "user_id,raw_hash", ignoreDuplicates: true },
+  );
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/");
+  return { ok: true };
 }
 
 /**
