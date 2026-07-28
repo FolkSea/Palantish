@@ -1,5 +1,6 @@
 import Parser from "rss-parser";
 import type { RawCandidate } from "./types";
+import { toAscii } from "@/lib/text";
 
 export type FeedSource = {
   name: string;
@@ -17,11 +18,8 @@ function toDate(value: string | undefined): Date | null {
 
 function clean(html: string | undefined): string | null {
   if (!html) return null;
-  // Strip tags and collapse whitespace; keep it short.
-  const text = html
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  // Strip tags, then decode entities and force ASCII (drops &#8211; etc.).
+  const text = toAscii(html.replace(/<[^>]*>/g, " "));
   return text ? text.slice(0, 500) : null;
 }
 
@@ -38,7 +36,7 @@ export async function pullFeed(
     const candidates: RawCandidate[] = (feed.items ?? [])
       .filter((i) => i.title && i.link)
       .map((i) => ({
-        title: i.title!.trim(),
+        title: toAscii(i.title),
         url: i.link!.trim(),
         description: clean(i.contentSnippet ?? i.content ?? i.summary),
         publishedAt: toDate(i.isoDate ?? i.pubDate),

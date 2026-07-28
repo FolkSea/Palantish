@@ -2,6 +2,7 @@ import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
 import { serverEnv } from "@/lib/env";
+import { toAscii } from "@/lib/text";
 import { computeAggregates, type Aggregates, type Db } from "./aggregates";
 
 const DEFAULT_MODEL = "claude-sonnet-5";
@@ -96,6 +97,9 @@ export async function generateAndStoreSummary(db: Db): Promise<GeneratedSummary>
   } else {
     result = { summary: rulesSummary(aggregates), source: "rules", model: null };
   }
+
+  // Force ASCII (drops any smart punctuation the model may emit).
+  result.summary = toAscii(result.summary, true);
 
   await db.from("executive_summaries").insert({
     summary: result.summary,
