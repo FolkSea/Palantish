@@ -24,6 +24,27 @@ export const CONFIDENCE_STYLE: Record<
 // Vulnerability status uses the same vocabulary as confidence.
 export const VULN_STATUS_STYLE = CONFIDENCE_STYLE;
 
+// Derived priority for the exploits/vulnerabilities table (see lib/vuln-priority).
+export type VulnPriority = "critical" | "high" | "medium";
+
+export const PRIORITY_STYLE: Record<
+  VulnPriority,
+  { label: string; className: string }
+> = {
+  critical: {
+    label: "CRITICAL",
+    className: "bg-red-100 text-red-800 border-red-300",
+  },
+  high: {
+    label: "HIGH",
+    className: "bg-orange-50 text-orange-700 border-orange-300",
+  },
+  medium: {
+    label: "MEDIUM",
+    className: "bg-yellow-50 text-yellow-800 border-yellow-300",
+  },
+};
+
 export type Nexus =
   | "china"
   | "russia"

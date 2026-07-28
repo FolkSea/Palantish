@@ -1,25 +1,37 @@
 "use client";
 
+import { useMemo } from "react";
 import { Card, EmptyState } from "@/components/Card";
-import { SourceBadge, VulnStatusBadge } from "@/components/Badges";
+import {
+  PriorityBadge,
+  SourceBadge,
+  VulnStatusBadge,
+} from "@/components/Badges";
 import { ExtLink } from "@/components/ExtLink";
 import { usePaginated, PaginationFooter } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
+import { prioritiseVulns } from "@/lib/vuln-priority";
 import type { BreachRow, IntelItemRow, VulnerabilityRow } from "@/lib/data";
 
 /* --- Trending exploits & vulnerabilities ---------------------------------- */
 export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
-  const p = usePaginated(rows);
+  // Collapse to one row per CVE, assign a priority from the statuses present,
+  // sort by priority (then recency), and drop Low-priority CVEs.
+  const prioritised = useMemo(() => prioritiseVulns(rows), [rows]);
+  const p = usePaginated(prioritised);
   return (
     <Card title="Trending exploits and vulnerabilities">
-      {rows.length === 0 ? (
-        <EmptyState>No vulnerabilities loaded yet.</EmptyState>
+      {prioritised.length === 0 ? (
+        <EmptyState>
+          No PoC or confirmed-exploited vulnerabilities right now.
+        </EmptyState>
       ) : (
         <>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[12px]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                  <th className="py-1.5 pr-3 font-medium">Priority</th>
                   <th className="py-1.5 pr-3 font-medium">CVE / ID</th>
                   <th className="py-1.5 pr-3 font-medium">Target</th>
                   <th className="py-1.5 pr-3 font-medium">Status</th>
@@ -28,18 +40,33 @@ export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
               </thead>
               <tbody>
                 {p.pageItems.map((v) => (
-                  <tr key={v.id} className="border-t border-slate-100 align-top">
+                  <tr
+                    key={v.cve_id}
+                    className="border-t border-slate-100 align-top"
+                  >
+                    <td className="py-2 pr-3">
+                      <PriorityBadge value={v.priority} />
+                    </td>
                     <td className="py-2 pr-3 whitespace-nowrap">
                       <ExtLink href={v.url}>{v.cve_id}</ExtLink>
                     </td>
                     <td className="py-2 pr-3 text-slate-700">{v.target}</td>
                     <td className="py-2 pr-3">
-                      <VulnStatusBadge value={v.status} />
+                      <span className="flex flex-wrap gap-1">
+                        {v.statuses.map((s) => (
+                          <VulnStatusBadge key={s} value={s} />
+                        ))}
+                      </span>
                     </td>
                     <td className="py-2 text-slate-600">
                       {v.detail}{" "}
-                      <span className="ml-1 inline-block align-middle">
+                      <span className="ml-1 inline-flex items-center gap-1 align-middle">
                         <SourceBadge name={v.source_name} />
+                        {v.reportCount > 1 ? (
+                          <span className="text-[10px] text-slate-400">
+                            +{v.reportCount - 1} more
+                          </span>
+                        ) : null}
                       </span>
                     </td>
                   </tr>

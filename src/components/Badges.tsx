@@ -1,8 +1,10 @@
 import {
   CONFIDENCE_STYLE,
+  PRIORITY_STYLE,
   VULN_STATUS_STYLE,
   csAdversaryClass,
   type Confidence,
+  type VulnPriority,
 } from "@/lib/badges";
 
 const base =
@@ -20,6 +22,11 @@ export function VulnStatusBadge({
   value: "confirmed" | "suspected" | "poc";
 }) {
   const s = VULN_STATUS_STYLE[value];
+  return <span className={`${base} ${s.className}`}>{s.label}</span>;
+}
+
+export function PriorityBadge({ value }: { value: VulnPriority }) {
+  const s = PRIORITY_STYLE[value];
   return <span className={`${base} ${s.className}`}>{s.label}</span>;
 }
 
