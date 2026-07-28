@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
 import { buildEcrimeActorGroups, deriveEcrimeActor } from "@/lib/ecrime";
+import { isThreatIntel } from "@/lib/relevance";
 
 type Tables = Database["public"]["Tables"];
 type Views = Database["public"]["Views"];
@@ -169,7 +170,11 @@ export async function loadDashboard(): Promise<DashboardData> {
       .limit(1),
   ]);
 
-  const activity = activityRes.data ?? [];
+  // Keep only genuine threat-intel posts across the dashboard (drop marketing,
+  // corporate/business news, event promos, podcasts, and lifestyle content).
+  const activity = (activityRes.data ?? []).filter((i) =>
+    isThreatIntel(i.title, i.description),
+  );
   const actors: ActorWithItems[] = (actorsRes.data ?? []).map((actor) => ({
     ...actor,
     items: activity.filter((i) => i.actor_id === actor.id),
@@ -194,7 +199,9 @@ export async function loadDashboard(): Promise<DashboardData> {
     buildGroupsFromAdversaries(ecrimeAdvRes.data ?? []),
   );
 
-  const breaches30 = breachesRes.data ?? [];
+  const breaches30 = (breachesRes.data ?? []).filter((b) =>
+    isThreatIntel(b.org_name, b.summary),
+  );
   const breaches = breaches30.filter((b) => (b.event_date ?? "") >= recentCutoff);
   const ecrimeTimeline: EcrimeTimelinePoint[] = breaches30
     .filter((b) => b.event_date)
@@ -231,8 +238,12 @@ export async function loadDashboard(): Promise<DashboardData> {
     timeline: timelineRes.data ?? [],
     ecrimeTimeline,
     vulnTimeline,
-    breaking: breakingRes.data ?? [],
-    reports: reportsRes.data ?? [],
+    breaking: (breakingRes.data ?? []).filter((i) =>
+      isThreatIntel(i.title, i.description),
+    ),
+    reports: (reportsRes.data ?? []).filter((i) =>
+      isThreatIntel(i.title, i.description),
+    ),
     vulnerabilities,
     breaches,
     // The most significant recent eCrime activity (ransomware / extortion /

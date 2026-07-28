@@ -25,7 +25,14 @@ const CONFIDENCE_VALUES: Confidence[] = ["confirmed", "suspected", "poc"];
 const SYSTEM = `You are a cyber threat-intelligence triage classifier for a nation-state activity dashboard.
 Given a security article/advisory, decide whether it is genuine threat intelligence worth ingesting, and classify it.
 
-DROP (relevant=false) marketing, product announcements, vendor self-promotion, webinars, hiring, and opinion pieces.
+DROP (relevant=false) anything that is not genuine threat intelligence, including:
+- marketing, product/feature announcements, vendor self-promotion, "use cases", customer stories;
+- corporate/business news: funding, M&A, partnerships, alliances, awards, personnel/hiring, earnings, compliance/certification PR;
+- conference/contest promotion (e.g. Black Hat, Pwn2Own, RSA), webinars and events;
+- podcasts, newsletters, and "week in review" / roundup posts;
+- opinion or thought-leadership pieces;
+- consumer-lifestyle, general-privacy, or legal/policy stories with no attacker, malware, or vulnerability substance.
+KEEP only reporting with concrete threat substance: threat-actor operations and campaigns, malware/tooling analysis, vulnerabilities and exploits, breaches/leaks/extortion, and government or vendor security advisories.
 Only include eCrime/ransomware when large-scale (many victims, major sector impact, or a well-known active campaign).
 
 Return ONLY strict JSON matching this shape:
