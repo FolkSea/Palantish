@@ -31,11 +31,6 @@ function defang(text: string): string {
     .replace(/\bhxxp(s?)\b/gi, "http$1");
 }
 
-/** Re-defang a plain IP / domain / URI for safe display (never a live link). */
-export function defangForDisplay(value: string): string {
-  return value.replace(/https?:\/\//gi, (m) => m.replace(/^http/i, "hxxp")).replace(/\./g, "[.]");
-}
-
 function uniq(arr: string[]): string[] {
   return [...new Set(arr)];
 }

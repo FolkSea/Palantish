@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  extractIndicators,
-  defangForDisplay,
-  type Indicators,
-} from "@/lib/report-indicators";
+import { extractIndicators, type Indicators } from "@/lib/report-indicators";
 import { fetchReportViewAction } from "@/app/actions";
 import { formatDate } from "@/lib/format";
 
@@ -281,15 +277,7 @@ function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-[12px] italic text-slate-400">{children}</p>;
 }
 
-function IocList({
-  title,
-  items,
-  defang,
-}: {
-  title: string;
-  items: string[];
-  defang?: boolean;
-}) {
+function IocList({ title, items }: { title: string; items: string[] }) {
   return (
     <div>
       <p className="mb-1 text-[11px] font-medium text-slate-500">
@@ -299,7 +287,7 @@ function IocList({
         <ul className="space-y-0.5">
           {items.map((v) => (
             <li key={v} className="break-all font-mono text-[12px] text-slate-700">
-              {defang ? defangForDisplay(v) : v}
+              {v}
             </li>
           ))}
         </ul>
@@ -314,9 +302,9 @@ function IocView({ indicators }: { indicators: Indicators }) {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <IocList title="IP Addresses" items={indicators.ips} defang />
-        <IocList title="Domains" items={indicators.domains} defang />
-        <IocList title="URIs" items={indicators.uris} defang />
+        <IocList title="IP Addresses" items={indicators.ips} />
+        <IocList title="Domains" items={indicators.domains} />
+        <IocList title="URIs" items={indicators.uris} />
         <IocList title="File Hashes" items={indicators.files} />
       </div>
     </div>
