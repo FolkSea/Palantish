@@ -76,7 +76,7 @@ export default async function DashboardPage() {
         </Card>
 
         {/* Actor cards */}
-        <ActorGrid actors={data.actors} />
+        <ActorGrid actors={data.actors} ecrime={data.ecrime} />
 
         {/* Vulns + breaches side by side on wide screens */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

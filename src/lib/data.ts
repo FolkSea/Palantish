@@ -20,7 +20,11 @@ export type DashboardData = {
   reports: IntelItemRow[];
   vulnerabilities: VulnerabilityRow[];
   breaches: BreachRow[];
+  ecrime: BreachRow[];
 };
+
+// Number of eCrime items surfaced in the "most significant eCrime" actor card.
+const ECRIME_CARD_LIMIT = 6;
 
 /**
  * Loads every section of the dashboard in parallel. All queries run under the
@@ -103,6 +107,8 @@ export async function loadDashboard(): Promise<DashboardData> {
   const compiledAt =
     latestRefresh?.finished_at ?? latestRefresh?.started_at ?? null;
 
+  const breaches = breachesRes.data ?? [];
+
   return {
     compiledAt,
     actors,
@@ -110,6 +116,9 @@ export async function loadDashboard(): Promise<DashboardData> {
     breaking: breakingRes.data ?? [],
     reports: reportsRes.data ?? [],
     vulnerabilities: vulnsRes.data ?? [],
-    breaches: breachesRes.data ?? [],
+    breaches,
+    // The most significant recent eCrime activity (ransomware / extortion /
+    // large-scale breaches) surfaced as its own actor card.
+    ecrime: breaches.slice(0, ECRIME_CARD_LIMIT),
   };
 }

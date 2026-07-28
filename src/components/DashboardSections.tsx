@@ -53,11 +53,22 @@ export function Ticker({ items }: { items: IntelItemRow[] }) {
   );
 }
 
-/* --- Nation-state activity by actor --------------------------------------- */
-export function ActorGrid({ actors }: { actors: ActorWithItems[] }) {
-  if (!actors.length)
+/* --- Activity by actor ---------------------------------------------------- */
+export function ActorGrid({
+  actors,
+  ecrime,
+}: {
+  actors: ActorWithItems[];
+  ecrime: BreachRow[];
+}) {
+  // Nation-state cards come from the four state actors; the "other" nexus is
+  // rendered as a dedicated eCrime card fed from significant breach activity.
+  const nationStates = actors.filter((a) => a.nexus !== "other");
+  const ecrimeActor = actors.find((a) => a.nexus === "other");
+
+  if (!nationStates.length && !ecrime.length)
     return (
-      <Card title="Nation-state activity by actor">
+      <Card title="Activity by actor">
         <EmptyState>No actor reporting loaded yet.</EmptyState>
       </Card>
     );
@@ -65,14 +76,73 @@ export function ActorGrid({ actors }: { actors: ActorWithItems[] }) {
   return (
     <section>
       <h2 className="mb-2 text-[13px] font-semibold text-slate-900">
-        Nation-state activity by actor
+        Activity by actor
       </h2>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {actors.map((a) => (
+        {nationStates.map((a) => (
           <ActorCard key={a.id} actor={a} />
         ))}
+        <EcrimeCard items={ecrime} trackedGroups={ecrimeActor?.tracked_groups} />
       </div>
     </section>
+  );
+}
+
+/* Most significant eCrime activity - built from recent large-scale breach and
+   ransomware/extortion reporting, shown alongside the nation-state actors. */
+function EcrimeCard({
+  items,
+  trackedGroups,
+}: {
+  items: BreachRow[];
+  trackedGroups?: string | null;
+}) {
+  const accent = NEXUS_ACCENT.other;
+  return (
+    <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
+      <div
+        className="rounded-t-[10px] border-b border-[#e5e7eb] px-4 py-2.5"
+        style={{ borderTop: `3px solid ${accent}` }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-[13px] font-semibold text-slate-900">
+            eCrime (most significant)
+          </h3>
+          <StatusPill status={items.length > 0 ? "active" : "quiet"} />
+        </div>
+        <p className="mt-1 text-[11px] text-slate-500">
+          Tracked: {trackedGroups ?? "Large-scale ransomware, extortion, and eCrime clusters"}
+        </p>
+      </div>
+
+      <div className="flex-1 space-y-3 px-4 py-3">
+        {items.length === 0 ? (
+          <p className="text-[12px] text-slate-400">
+            No new reporting in the current window.
+          </p>
+        ) : (
+          items.map((b) => (
+            <div
+              key={b.id}
+              className="border-b border-slate-100 pb-3 last:border-none last:pb-0"
+            >
+              <ExtLink href={b.url}>{b.org_name}</ExtLink>
+              {b.summary ? (
+                <p className="mt-1 text-[12px] leading-snug text-slate-600">
+                  {b.summary}
+                </p>
+              ) : null}
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <SourceBadge name={b.source_name} />
+                <span className="text-[10px] text-slate-400">
+                  {b.event_date_label ?? formatDate(b.event_date)}
+                </span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 
