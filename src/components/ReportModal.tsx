@@ -49,11 +49,13 @@ function ReportModal({
     [report],
   );
 
-  // Prefer embedding the live page in an iframe; when the site's framing headers
-  // block that, fall back to the server-scraped article text with a notice bar.
+  // Show the live page when its headers allow framing; otherwise embed a
+  // server-fetched HTML snapshot (bypasses X-Frame-Options); and only if even
+  // that fails, fall back to scraped text under a notice bar.
   const [view, setView] = useState<
     | { status: "loading" }
     | { status: "frame"; url: string }
+    | { status: "embed"; html: string }
     | { status: "fallback"; text: string | null; error?: string }
   >({ status: "loading" });
 
@@ -68,6 +70,7 @@ function ReportModal({
     fetchReportViewAction(url).then((r) => {
       if (!active) return;
       if (r.ok && r.frameable) setView({ status: "frame", url });
+      else if (r.ok && r.html) setView({ status: "embed", html: r.html });
       else if (r.ok) setView({ status: "fallback", text: r.text || null });
       else setView({ status: "fallback", text: null, error: r.error });
     });
@@ -159,6 +162,14 @@ function ReportModal({
                   sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
                   referrerPolicy="no-referrer"
                   loading="lazy"
+                />
+              ) : view.status === "embed" ? (
+                <iframe
+                  srcDoc={view.html}
+                  title="Full report"
+                  className="h-full w-full"
+                  sandbox="allow-scripts allow-popups"
+                  referrerPolicy="no-referrer"
                 />
               ) : (
                 <div className="flex h-full flex-col">

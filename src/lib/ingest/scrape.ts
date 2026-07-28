@@ -14,7 +14,18 @@ export type ScrapedArticle = {
 };
 
 const FETCH_TIMEOUT_MS = 20000;
-const UA = "Mozilla/5.0 (compatible; ThreatDashboardBot/1.0; +manual-import)";
+// Present as a normal desktop browser so sites that vary output (or block bots)
+// return the same HTML a person clicking the link would see.
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+const BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent": UA,
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Upgrade-Insecure-Requests": "1",
+};
 const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
 
 /** Reject non-http(s) URLs and obvious internal/loopback hosts (basic SSRF guard). */
@@ -139,7 +150,7 @@ async function fetchPage(rawUrl: string): Promise<FetchedPage> {
     res = await fetch(target, {
       redirect: "follow",
       signal: controller.signal,
-      headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml" },
+      headers: BROWSER_HEADERS,
     });
   } catch (err) {
     throw new Error(
@@ -300,15 +311,39 @@ function articleParagraphs(html: string): string {
     .join("\n");
 }
 
-export type ArticleView = { frameable: boolean; text: string };
+/**
+ * Prepare fetched HTML for rendering in a sandboxed `srcdoc` iframe. Injects a
+ * `<base>` so the page's relative CSS, images, scripts and links resolve against
+ * the source, and drops any page-level CSP/framing meta that would otherwise
+ * block those subresources. Scripts are kept so bodies that render client-side
+ * still populate; the iframe is sandboxed without `allow-same-origin`, so this
+ * HTML runs in an opaque origin and can neither reach our page nor bust out.
+ */
+function prepareEmbedHtml(html: string, baseUrl: string): string {
+  const base = `<base href="${baseUrl.replace(/"/g, "%22")}">`;
+  const cleaned = html.replace(
+    /<meta[^>]+http-equiv=["']?(?:content-security-policy|x-frame-options)["']?[^>]*>/gi,
+    "",
+  );
+  return /<head[^>]*>/i.test(cleaned)
+    ? cleaned.replace(/<head([^>]*)>/i, `<head$1>${base}`)
+    : `${base}${cleaned}`;
+}
+
+export type ArticleView = { frameable: boolean; html: string; text: string };
 
 /**
- * Fetch a report URL once and return both whether the page allows this origin
- * to embed it in an iframe and its article body as plain text (paragraph-broken)
- * for the fallback render. Throws on fetch / non-HTML failures so the caller can
- * fall back to the source link.
+ * Fetch a report URL once (as a browser) and return everything the details
+ * modal needs to display it: whether the page's headers allow embedding the
+ * live URL, a self-contained HTML snapshot for a sandboxed `srcdoc` render when
+ * they do not, and the scraped article text as a final fallback. Throws on
+ * fetch / non-HTML failures so the caller can fall back to the source link.
  */
 export async function fetchArticleView(rawUrl: string): Promise<ArticleView> {
-  const { html, frameable } = await fetchPage(rawUrl);
-  return { frameable, text: articleParagraphs(html) };
+  const { html, frameable, finalUrl } = await fetchPage(rawUrl);
+  return {
+    frameable,
+    html: prepareEmbedHtml(html, finalUrl),
+    text: articleParagraphs(html),
+  };
 }

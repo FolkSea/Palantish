@@ -245,14 +245,14 @@ export async function importPostManualAction(
 /* --- Report view ----------------------------------------------------------- */
 
 export type ReportViewResult =
-  | { ok: true; frameable: boolean; text: string }
+  | { ok: true; frameable: boolean; html: string; text: string }
   | { ok: false; error: string };
 
 /**
- * Inspect a report URL server-side and tell the details modal how to show it:
- * `frameable` reports whether the page's framing headers permit embedding the
- * live page in an iframe, and `text` is the scraped article body used as the
- * fallback when it does not (or when the fetch fails on the client side).
+ * Fetch a report URL server-side (as a browser) and tell the details modal how
+ * to show it: `frameable` reports whether the page's framing headers permit
+ * embedding the live URL; `html` is a sandboxed snapshot to render via `srcdoc`
+ * when they do not; and `text` is the scraped article body as a final fallback.
  */
 export async function fetchReportViewAction(
   url: string,
@@ -262,8 +262,8 @@ export async function fetchReportViewAction(
   if (unauth) return { ok: false, error: unauth };
   try {
     assertPublicHttpUrl(url.trim());
-    const { frameable, text } = await fetchArticleView(url.trim());
-    return { ok: true, frameable, text };
+    const { frameable, html, text } = await fetchArticleView(url.trim());
+    return { ok: true, frameable, html, text };
   } catch (err) {
     return {
       ok: false,
