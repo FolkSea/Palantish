@@ -297,6 +297,46 @@ export type Database = {
         }
         Relationships: []
       }
+      intel_item_iocs: {
+        Row: {
+          created_at: string
+          intel_item_id: string
+          ioc_id: string
+        }
+        Insert: {
+          created_at?: string
+          intel_item_id: string
+          ioc_id: string
+        }
+        Update: {
+          created_at?: string
+          intel_item_id?: string
+          ioc_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_item_iocs_intel_item_id_fkey"
+            columns: ["intel_item_id"]
+            isOneToOne: false
+            referencedRelation: "intel_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intel_item_iocs_intel_item_id_fkey"
+            columns: ["intel_item_id"]
+            isOneToOne: false
+            referencedRelation: "timeline_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intel_item_iocs_ioc_id_fkey"
+            columns: ["ioc_id"]
+            isOneToOne: false
+            referencedRelation: "iocs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       intel_items: {
         Row: {
           actor_id: string | null
@@ -365,6 +405,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      iocs: {
+        Row: {
+          comment: string | null
+          created_at: string
+          id: string
+          ioc_type: string
+          updated_at: string
+          value: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          ioc_type: string
+          updated_at?: string
+          value: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          ioc_type?: string
+          updated_at?: string
+          value?: string
+        }
+        Relationships: []
       }
       refresh_runs: {
         Row: {
