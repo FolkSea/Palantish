@@ -244,14 +244,20 @@ function GroupCard({ card, accent }: { card: ActorGroupCard; accent: string }) {
       </div>
       <div className="flex-1 space-y-3 px-4 py-3">
         {card.items.map((r) => (
-          <GroupItem key={r.id} report={r} />
+          <GroupItem key={r.id} report={r} actor={card.name} />
         ))}
       </div>
     </div>
   );
 }
 
-function GroupItem({ report }: { report: ActorReport }) {
+function GroupItem({
+  report,
+  actor,
+}: {
+  report: ActorReport;
+  actor: string;
+}) {
   return (
     <div className="border-b border-slate-100 pb-3 last:border-none last:pb-0">
       <ExtLink href={report.url}>{report.title}</ExtLink>
@@ -261,6 +267,8 @@ function GroupItem({ report }: { report: ActorReport }) {
         </p>
       ) : null}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {/* Attributed items carry the actor as a red label ("Unattributed" has none). */}
+        <AdversaryBadge name={actor === "Unattributed" ? null : actor} />
         <SourceBadge name={report.sourceName} />
         {report.date ? (
           <span className="text-[10px] text-slate-400">
