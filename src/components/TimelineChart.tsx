@@ -13,7 +13,11 @@ import {
   type TooltipItem,
 } from "chart.js";
 import "chartjs-adapter-date-fns";
-import { COUNTRY_COLOR, TIMELINE_COUNTRIES } from "@/lib/badges";
+import {
+  COUNTRY_COLOR,
+  COUNTRY_POINT_STYLE,
+  TIMELINE_COUNTRIES,
+} from "@/lib/badges";
 import type { TimelineRow } from "@/lib/data";
 
 ChartJS.register(LinearScale, TimeScale, PointElement, Tooltip, Legend);
@@ -52,9 +56,12 @@ export default function TimelineChart({ rows }: { rows: TimelineRow[] }) {
         label: country,
         data: points,
         backgroundColor: COUNTRY_COLOR[country],
-        borderColor: COUNTRY_COLOR[country],
-        pointRadius: 5,
-        pointHoverRadius: 7,
+        // White halo so overlapping same-colour dots stay individually legible.
+        borderColor: "#ffffff",
+        borderWidth: 1,
+        pointStyle: COUNTRY_POINT_STYLE[country],
+        pointRadius: 6,
+        pointHoverRadius: 8,
       };
     });
 
@@ -103,7 +110,12 @@ export default function TimelineChart({ rows }: { rows: TimelineRow[] }) {
     plugins: {
       legend: {
         position: "bottom",
-        labels: { boxWidth: 10, font: { size: 11 }, color: "#374151" },
+        labels: {
+          usePointStyle: true,
+          pointStyleWidth: 12,
+          font: { size: 11 },
+          color: "#374151",
+        },
       },
       tooltip: {
         callbacks: {
