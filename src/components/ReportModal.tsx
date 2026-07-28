@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   extractIndicators,
   indicatorCount,
@@ -28,6 +29,7 @@ export type ReportModalData = {
  * of navigating. Inside the modal the title is a hyperlink to the source.
  */
 export function ReportTitle({ report }: { report: ReportModalData }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -39,13 +41,21 @@ export function ReportTitle({ report }: { report: ReportModalData }) {
         {report.title}
       </button>
       {open ? (
-        <ReportModal report={report} onClose={() => setOpen(false)} />
+        <ReportModal
+          report={report}
+          onClose={() => {
+            setOpen(false);
+            // Refresh the dashboard on exit so any IOCs persisted while viewing
+            // are reflected.
+            router.refresh();
+          }}
+        />
       ) : null}
     </>
   );
 }
 
-function ReportModal({
+export function ReportModal({
   report,
   onClose,
 }: {

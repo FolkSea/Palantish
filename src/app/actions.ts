@@ -336,6 +336,7 @@ export type SearchReport = {
   description: string | null;
   source_name: string | null;
   published_at: string | null;
+  raw_hash: string;
 };
 export type SearchBreach = {
   id: string;
@@ -485,6 +486,7 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
         description: r.description,
         source_name: r.source_name,
         published_at: r.published_at,
+        raw_hash: r.raw_hash,
       });
     }
   };

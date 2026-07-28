@@ -21,6 +21,19 @@ type BreachInsert = Database["public"]["Tables"]["breaches"]["Insert"];
 
 const CVE_RE = /\bCVE-\d{4}-\d{3,7}\b/i;
 
+// Fields needed to open the imported item in the report modal. Shape matches
+// the client ReportModalData; only populated for reports (intel route).
+export type ImportedReport = {
+  title: string;
+  url: string | null;
+  description: string | null;
+  sourceName: string | null;
+  date: string | null;
+  adversary: string | null;
+  confidence: string | null;
+  rawHash: string;
+};
+
 export type ImportResult =
   | {
       ok: true;
@@ -29,6 +42,7 @@ export type ImportResult =
       itemType: string;
       sourceName: string;
       sourceCreated: boolean;
+      report?: ImportedReport;
     }
   | { ok: false; error: string; recoverable?: boolean };
 
@@ -181,11 +195,21 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
       .from("breaches")
       .upsert(row, { onConflict: "raw_hash", ignoreDuplicates: true });
     if (error) return { ok: false, error: `Insert failed: ${error.message}` };
-  } else {
+  }
+
+  let report: ImportedReport | undefined;
+  if (route === "intel") {
     const { data: actors } = await db.from("actors").select("id, nexus");
     const actorId = enriched.nexus
       ? ((actors ?? []).find((a) => a.nexus === enriched.nexus)?.id ?? null)
       : null;
+    const adversaryLabel = computeAdversaryLabel(
+      enriched.crowdstrikeAdversary,
+      enriched.nexus,
+      enriched.title,
+      enriched.description,
+      sortGroups(GROUP_TABLE),
+    );
     const row: IntelInsert = {
       actor_id: actorId,
       title: enriched.title,
@@ -194,13 +218,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
       published_at: publishedDate,
       confidence: enriched.confidence,
       crowdstrike_adversary: enriched.crowdstrikeAdversary,
-      adversary_label: computeAdversaryLabel(
-        enriched.crowdstrikeAdversary,
-        enriched.nexus,
-        enriched.title,
-        enriched.description,
-        sortGroups(GROUP_TABLE),
-      ),
+      adversary_label: adversaryLabel,
       source_name: source.name,
       source_id: source.id,
       item_type: enriched.itemType,
@@ -210,6 +228,16 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
       .from("intel_items")
       .upsert(row, { onConflict: "raw_hash", ignoreDuplicates: true });
     if (error) return { ok: false, error: `Insert failed: ${error.message}` };
+    report = {
+      title: enriched.title,
+      url: enriched.url,
+      description: enriched.description,
+      sourceName: source.name,
+      date: publishedDate,
+      adversary: adversaryLabel,
+      confidence: enriched.confidence ?? null,
+      rawHash,
+    };
   }
 
   return {
@@ -219,6 +247,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     itemType: enriched.itemType,
     sourceName: source.name,
     sourceCreated,
+    report,
   };
 }
 

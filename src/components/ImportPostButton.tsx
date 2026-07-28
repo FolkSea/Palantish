@@ -8,6 +8,7 @@ import {
   importPostManualAction,
 } from "@/app/actions";
 import type { ImportResult } from "@/lib/ingest/import-post";
+import { ReportModal, type ReportModalData } from "@/components/ReportModal";
 
 function truncate(s: string, n = 70): string {
   return s.length > n ? `${s.slice(0, n - 1)}...` : s;
@@ -26,6 +27,8 @@ export function ImportPostButton() {
   const [urlInput, setUrlInput] = useState("");
   const [pasteTitle, setPasteTitle] = useState("");
   const [pasteBody, setPasteBody] = useState("");
+  // The just-imported report, shown in the same modal as a list click.
+  const [imported, setImported] = useState<ReportModalData | null>(null);
 
   function onSuccess(res: Extract<ImportResult, { ok: true }>) {
     const added = res.sourceCreated ? ` New source added: ${res.sourceName}.` : "";
@@ -38,7 +41,14 @@ export function ImportPostButton() {
     setUrlInput("");
     setPasteTitle("");
     setPasteBody("");
-    router.refresh();
+    if (res.report) {
+      // Open the imported report in the modal; the dashboard is refreshed when
+      // the modal is closed (see the ReportModal onClose below).
+      setImported(res.report);
+    } else {
+      // Vulnerabilities / breaches have no report modal - refresh immediately.
+      router.refresh();
+    }
   }
 
   function openImport() {
@@ -281,6 +291,16 @@ export function ImportPostButton() {
             </button>
           </div>
         </Modal>
+      ) : null}
+
+      {imported ? (
+        <ReportModal
+          report={imported}
+          onClose={() => {
+            setImported(null);
+            router.refresh();
+          }}
+        />
       ) : null}
 
       {toast ? (

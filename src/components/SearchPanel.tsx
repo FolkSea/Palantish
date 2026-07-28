@@ -9,6 +9,7 @@ import {
   type SearchVuln,
 } from "@/app/actions";
 import { ExtLink } from "@/components/ExtLink";
+import { ReportTitle } from "@/components/ReportModal";
 import { SourceBadge, VulnStatusBadge } from "@/components/Badges";
 import { formatDate } from "@/lib/format";
 
@@ -156,7 +157,16 @@ function ReportRow({ r }: { r: SearchReport }) {
         <SourceBadge name={r.source_name} />
       </span>
       <span className="flex-1">
-        <ExtLink href={r.url}>{r.title}</ExtLink>
+        <ReportTitle
+          report={{
+            title: r.title,
+            url: r.url,
+            description: r.description,
+            sourceName: r.source_name,
+            date: r.published_at,
+            rawHash: r.raw_hash,
+          }}
+        />
         {r.description ? (
           <span className="block truncate text-slate-500">{r.description}</span>
         ) : null}
