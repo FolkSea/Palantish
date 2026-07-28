@@ -2,11 +2,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { extractIndicators, indicatorCount } from "@/lib/report-indicators";
+import {
+  extractIndicators,
+  indicatorCount,
+  type Indicators,
+} from "@/lib/report-indicators";
 import {
   fetchReportViewAction,
   persistReportIndicatorsAction,
   discoverTechniquesAction,
+  getReportIndicatorsAction,
 } from "@/app/actions";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 import { formatDate } from "@/lib/format";
@@ -122,7 +127,28 @@ export function ReportModal({
     };
   }, [report.url]);
 
-  const indicators = useMemo(
+  const rawHash = report.rawHash;
+
+  // Prefer indicators already stored (and curated) in the DB; extraction is only
+  // a fallback for reports that have none stored yet. `stored` is null until the
+  // lookup resolves.
+  const [stored, setStored] = useState<Indicators | null>(null);
+  useEffect(() => {
+    if (!rawHash) {
+      setStored(null);
+      return;
+    }
+    let active = true;
+    setStored(null);
+    getReportIndicatorsAction(rawHash).then((r) => {
+      if (active && r.ok) setStored(r.indicators);
+    });
+    return () => {
+      active = false;
+    };
+  }, [rawHash]);
+
+  const extracted = useMemo(
     () =>
       extractIndicators(
         `${report.title} ${report.description ?? ""} ${detailsText}`,
@@ -130,16 +156,27 @@ export function ReportModal({
     [report.title, report.description, detailsText],
   );
 
-  // Persist the extracted IOCs and link them to this report so they become
-  // searchable. Idempotent server-side; runs once the body text has loaded.
-  const rawHash = report.rawHash;
-  const count = indicatorCount(indicators);
+  const hasStoredIocs =
+    !!stored &&
+    stored.ips.length +
+      stored.domains.length +
+      stored.uris.length +
+      stored.files.length >
+      0;
+  // IOC cards use stored indicators when the report has them, else extracted.
+  const indicators: Indicators = hasStoredIocs ? stored! : extracted;
+  // MITRE default list: stored technique codes when present, else regex-extracted.
+  const mitreCodes = stored && stored.mitre.length ? stored.mitre : extracted.mitre;
+
+  // Persist extracted IOCs only when the DB has none yet, so opening a report
+  // reuses stored data instead of re-extracting and re-writing it every time.
+  const extractedCount = indicatorCount(extracted);
   useEffect(() => {
-    if (!rawHash || !detailsText || count === 0) return;
-    persistReportIndicatorsAction(rawHash, indicators).catch(() => {});
-    // Re-runs only when the linked report or its indicator set changes.
+    if (!rawHash || !detailsText || stored === null || hasStoredIocs) return;
+    if (extractedCount === 0) return;
+    persistReportIndicatorsAction(rawHash, extracted).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawHash, detailsText, count]);
+  }, [rawHash, detailsText, stored, hasStoredIocs, extractedCount]);
 
   // MITRE ATT&CK discovery (LLM). Only runs when the user clicks Discover.
   const [techniques, setTechniques] = useState<DiscoveredTechnique[] | null>(
@@ -274,7 +311,7 @@ export function ReportModal({
 
             <CollapsibleCard
               title="MITRE ATT&CK"
-              count={techniques ? techniques.length : indicators.mitre.length}
+              count={techniques ? techniques.length : mitreCodes.length}
               action={
                 <button
                   type="button"
@@ -308,9 +345,9 @@ export function ReportModal({
                 ) : (
                   <Empty>No techniques identified.</Empty>
                 )
-              ) : indicators.mitre.length ? (
+              ) : mitreCodes.length ? (
                 <div className="flex flex-wrap gap-1.5">
-                  {indicators.mitre.map((t) => (
+                  {mitreCodes.map((t) => (
                     <span
                       key={t}
                       className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[11px] font-medium text-slate-700"

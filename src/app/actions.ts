@@ -341,6 +341,56 @@ async function linkReportIocs(
   return { ok: true, linked: links.length };
 }
 
+/**
+ * Read a report's stored indicators (IOCs + MITRE codes) from the database,
+ * grouped by type. Empty arrays when the report has none yet, so the modal can
+ * fall back to on-the-fly extraction. MITRE codes are returned in `mitre`.
+ */
+export async function getReportIndicatorsAction(
+  rawHash: string,
+): Promise<{ ok: true; indicators: Indicators } | { ok: false; error: string }> {
+  const empty: Indicators = { ips: [], domains: [], uris: [], files: [], mitre: [] };
+  if (!rawHash) return { ok: true, indicators: empty };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !isEmailAllowed(user.email)) {
+    return { ok: false, error: "Not authorized." };
+  }
+
+  const item = await supabase
+    .from("intel_items")
+    .select("id")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (!item.data) return { ok: true, indicators: empty };
+
+  const links = await supabase
+    .from("intel_item_iocs")
+    .select("ioc_id")
+    .eq("intel_item_id", item.data.id);
+  const iocIds = (links.data ?? []).map((r) => r.ioc_id);
+  if (iocIds.length === 0) return { ok: true, indicators: empty };
+
+  const iocsRes = await supabase
+    .from("iocs")
+    .select("value, ioc_type")
+    .in("id", iocIds);
+  if (iocsRes.error) return { ok: false, error: iocsRes.error.message };
+
+  const grouped: Indicators = { ips: [], domains: [], uris: [], files: [], mitre: [] };
+  for (const ioc of iocsRes.data ?? []) {
+    if (ioc.ioc_type === "ip") grouped.ips.push(ioc.value);
+    else if (ioc.ioc_type === "domain") grouped.domains.push(ioc.value);
+    else if (ioc.ioc_type === "uri") grouped.uris.push(ioc.value);
+    else if (ioc.ioc_type === "file_hash") grouped.files.push(ioc.value);
+    else if (ioc.ioc_type === "mitre") grouped.mitre.push(ioc.value);
+  }
+  return { ok: true, indicators: grouped };
+}
+
 /* --- MITRE ATT&CK discovery ------------------------------------------------ */
 
 export type DiscoverTechniquesResult =
