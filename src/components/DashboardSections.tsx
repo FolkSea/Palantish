@@ -12,18 +12,32 @@ import type { ActorWithItems, BreachRow, IntelItemRow } from "@/lib/data";
 
 /* --- Breaking news ticker -------------------------------------------------- */
 export function Ticker({ items }: { items: IntelItemRow[] }) {
+  // Only rendered when there are last-24h items; the caller passes an already
+  // filtered list, and an empty list hides the whole section.
   if (!items.length) return null;
+
+  const row = items.map((i) => (
+    <span key={i.id} className="mx-5 inline-flex items-center gap-1.5">
+      <span className="text-slate-400">{formatDate(i.published_at)}</span>
+      <ExtLink href={i.url}>{i.title}</ExtLink>
+    </span>
+  ));
+
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[10px] border border-[#e5e7eb] bg-white px-4 py-2 text-[12px]">
-      <span className="shrink-0 rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+    <div className="ticker-pause flex items-center gap-3 overflow-hidden rounded-[10px] border border-[#e5e7eb] bg-white px-4 py-2 text-[12px]">
+      <span className="z-10 shrink-0 rounded bg-slate-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
         Breaking
       </span>
-      {items.map((i) => (
-        <span key={i.id} className="inline-flex items-center gap-1.5">
-          <span className="text-slate-400">{formatDate(i.published_at)}</span>
-          <ExtLink href={i.url}>{i.title}</ExtLink>
-        </span>
-      ))}
+      <div className="relative flex-1 overflow-hidden">
+        <div className="animate-ticker flex w-max items-center whitespace-nowrap">
+          {/* Row is duplicated so the -50% marquee loops seamlessly. The copy
+              is aria-hidden to avoid announcing every item twice. */}
+          <div className="flex items-center">{row}</div>
+          <div className="flex items-center" aria-hidden="true">
+            {row}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -39,3 +39,27 @@ a {
 a:hover {
   text-decoration: underline;
 }
+
+/* Breaking-news ticker (horizontal marquee). The item row is duplicated once,
+   so translating the track by -50% scrolls exactly one copy for a seamless
+   loop. Scrolling pauses on hover and is disabled under reduced-motion. */
+@keyframes ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-ticker {
+  animation: ticker-scroll 45s linear infinite;
+  will-change: transform;
+}
+.ticker-pause:hover .animate-ticker {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-ticker {
+    animation: none;
+  }
+}

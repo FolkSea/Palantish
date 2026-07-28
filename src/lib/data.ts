@@ -84,6 +84,9 @@ export async function loadDashboard(): Promise<DashboardData> {
   const supabase = await createClient();
   const recentCutoff = daysAgo(RECENT_DAYS);
   const timelineCutoff = daysAgo(TIMELINE_DAYS);
+  // Breaking ticker shows only the freshest items (last ~24h). published_at is
+  // date-granular, so this is a 1-day date cutoff.
+  const breakingCutoff = daysAgo(1);
   const staleCutoff = new Date(
     Date.now() - TIMELINE_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
@@ -117,7 +120,7 @@ export async function loadDashboard(): Promise<DashboardData> {
       .from("intel_items")
       .select("*")
       .eq("item_type", "breaking")
-      .gte("published_at", recentCutoff)
+      .gte("published_at", breakingCutoff)
       .order("published_at", { ascending: false })
       .limit(10),
     supabase
