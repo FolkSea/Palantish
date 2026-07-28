@@ -6,6 +6,7 @@ import { selectNewCandidates } from "./dedup";
 import { selectEnricher } from "./enrich/llm";
 import { selectSearchProvider } from "./search";
 import { buildGroupsFromAdversaries } from "./adversaries";
+import { updateFeedHealth } from "./feed-health";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
 import type { EnrichedItem } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
@@ -106,9 +107,21 @@ export async function runIngest(): Promise<IngestResult> {
     ]);
 
     // Pull + augment ---------------------------------------------------------
-    const { candidates: feedCandidates, errors: feedErrors } =
-      await pullAllFeeds(feedSources);
+    const {
+      candidates: feedCandidates,
+      errors: feedErrors,
+      health,
+    } = await pullAllFeeds(feedSources);
     errors.push(...feedErrors);
+
+    // Record per-feed freshness for the stale-feed warning (non-fatal).
+    try {
+      await updateFeedHealth(db, health);
+    } catch (err) {
+      errors.push(
+        `feed_health: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     const search = selectSearchProvider();
     const searchCandidates =

@@ -23,14 +23,25 @@ function clean(html: string | undefined): string | null {
   return text ? text.slice(0, 500) : null;
 }
 
+/** Freshness result for one feed after a pull. */
+export type FeedHealth = {
+  name: string;
+  latestItemAt: Date | null; // newest item date seen, or null on error/empty
+  error: string | null;
+};
+
 /**
  * Pull and normalise entries from a single RSS/Atom feed. Errors are swallowed
  * (a single dead feed must not fail the whole run) and reported via the return.
  */
 export async function pullFeed(
   source: FeedSource,
-): Promise<{ candidates: RawCandidate[]; error?: string }> {
-  if (!source.feed_url) return { candidates: [] };
+): Promise<{
+  candidates: RawCandidate[];
+  error?: string;
+  latestItemAt: Date | null;
+}> {
+  if (!source.feed_url) return { candidates: [], latestItemAt: null };
   try {
     const feed = await parser.parseURL(source.feed_url);
     const candidates: RawCandidate[] = (feed.items ?? [])
@@ -43,23 +54,35 @@ export async function pullFeed(
         sourceName: source.name,
         sourceCategory: source.category,
       }));
-    return { candidates };
+    const latestItemAt = candidates.reduce<Date | null>((max, c) => {
+      if (!c.publishedAt) return max;
+      return !max || c.publishedAt > max ? c.publishedAt : max;
+    }, null);
+    return { candidates, latestItemAt };
   } catch (err) {
     return {
       candidates: [],
       error: err instanceof Error ? err.message : String(err),
+      latestItemAt: null,
     };
   }
 }
 
-/** Pull all feeds concurrently. */
-export async function pullAllFeeds(
-  sources: FeedSource[],
-): Promise<{ candidates: RawCandidate[]; errors: string[] }> {
+/** Pull all feeds concurrently, returning candidates, errors, and health. */
+export async function pullAllFeeds(sources: FeedSource[]): Promise<{
+  candidates: RawCandidate[];
+  errors: string[];
+  health: FeedHealth[];
+}> {
   const results = await Promise.all(sources.map((s) => pullFeed(s)));
   const candidates = results.flatMap((r) => r.candidates);
   const errors = results
     .map((r, i) => (r.error ? `${sources[i].name}: ${r.error}` : null))
     .filter((e): e is string => e !== null);
-  return { candidates, errors };
+  const health: FeedHealth[] = results.map((r, i) => ({
+    name: sources[i].name,
+    latestItemAt: r.latestItemAt,
+    error: r.error ?? null,
+  }));
+  return { candidates, errors, health };
 }

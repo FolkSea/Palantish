@@ -41,6 +41,13 @@ export type ExecutiveSummary = {
   generatedAt: string;
 };
 
+export type StaleFeed = {
+  name: string;
+  category: string;
+  lastItemAt: string | null;
+  lastError: string | null;
+};
+
 export type DashboardData = {
   compiledAt: string | null;
   executiveSummary: ExecutiveSummary | null;
@@ -53,6 +60,7 @@ export type DashboardData = {
   vulnerabilities: VulnerabilityRow[];
   breaches: BreachRow[];
   ecrime: BreachRow[];
+  staleFeeds: StaleFeed[];
 };
 
 // Number of eCrime items surfaced in the "most significant eCrime" actor card.
@@ -76,6 +84,9 @@ export async function loadDashboard(): Promise<DashboardData> {
   const supabase = await createClient();
   const recentCutoff = daysAgo(RECENT_DAYS);
   const timelineCutoff = daysAgo(TIMELINE_DAYS);
+  const staleCutoff = new Date(
+    Date.now() - TIMELINE_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
 
   const [
     actorsRes,
@@ -87,6 +98,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     breachesRes,
     ecrimeAdvRes,
     summaryRes,
+    staleFeedsRes,
     refreshRes,
   ] = await Promise.all([
     supabase.from("actors").select("*").order("sort_order"),
@@ -138,6 +150,14 @@ export async function loadDashboard(): Promise<DashboardData> {
       .select("summary, source, model, generated_at")
       .order("generated_at", { ascending: false })
       .limit(1),
+    // Active feeds whose newest item is older than 30 days (or never seen).
+    supabase
+      .from("sources")
+      .select("name, category, last_item_at, last_error")
+      .eq("active", true)
+      .not("feed_url", "is", null)
+      .or(`last_item_at.is.null,last_item_at.lt.${staleCutoff}`)
+      .order("last_item_at", { ascending: true, nullsFirst: true }),
     supabase
       .from("refresh_runs")
       .select("finished_at, started_at")
@@ -215,5 +235,11 @@ export async function loadDashboard(): Promise<DashboardData> {
     // The most significant recent eCrime activity (ransomware / extortion /
     // large-scale breaches) surfaced as its own actor card.
     ecrime: breaches.slice(0, ECRIME_CARD_LIMIT),
+    staleFeeds: (staleFeedsRes.data ?? []).map((s) => ({
+      name: s.name,
+      category: s.category,
+      lastItemAt: s.last_item_at,
+      lastError: s.last_error,
+    })),
   };
 }

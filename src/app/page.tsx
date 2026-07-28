@@ -3,6 +3,7 @@ import { loadDashboard } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
 import TimelineTabs from "@/components/TimelineTabs";
 import { ExecutiveSummaryPanel } from "@/components/ExecutiveSummary";
+import { StaleFeedsPanel } from "@/components/StaleFeedsPanel";
 import { Ticker, ActorGrid, Footnote } from "@/components/DashboardSections";
 import {
   VulnTable,
@@ -85,6 +86,9 @@ export default async function DashboardPage() {
 
         {/* Footnote */}
         <Footnote />
+
+        {/* Potentially stale feeds warning */}
+        <StaleFeedsPanel feeds={data.staleFeeds} />
       </div>
     </div>
   );

@@ -122,6 +122,9 @@ Located in `src/lib/ingest/`:
 5. **Keep-most-recent**: actors with no items in the 30-day window are marked
    `quiet`; existing rows are never deleted.
 6. **Write** to Supabase and record a `refresh_runs` row.
+7. **Feed health**: records each feed's newest-item date on `sources`. The
+   dashboard shows a "potentially stale feeds" warning for active feeds with no
+   items in 30 days (or that fail to fetch). `pnpm feeds:health` refreshes it.
 
 Trigger in production: `POST /api/ingest`, guarded by the `INGEST_CRON_SECRET`
 shared secret. Vercel Cron calls it every 3 hours at 17 past the hour

@@ -331,6 +331,9 @@ export type Database = {
           created_at: string
           feed_url: string | null
           id: string
+          last_error: string | null
+          last_fetched_at: string | null
+          last_item_at: string | null
           name: string
           updated_at: string
           url: string | null
@@ -341,6 +344,9 @@ export type Database = {
           created_at?: string
           feed_url?: string | null
           id?: string
+          last_error?: string | null
+          last_fetched_at?: string | null
+          last_item_at?: string | null
           name: string
           updated_at?: string
           url?: string | null
@@ -351,6 +357,9 @@ export type Database = {
           created_at?: string
           feed_url?: string | null
           id?: string
+          last_error?: string | null
+          last_fetched_at?: string | null
+          last_item_at?: string | null
           name?: string
           updated_at?: string
           url?: string | null
