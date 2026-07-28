@@ -16,6 +16,7 @@ import {
   fetchArticleView,
 } from "@/lib/ingest/scrape";
 import { isThreatIntel } from "@/lib/relevance";
+import { normalizeIndicator, type Indicators } from "@/lib/report-indicators";
 
 async function ensureAllowed(): Promise<string | null> {
   const supabase = await createClient();
@@ -272,6 +273,60 @@ export async function fetchReportViewAction(
   }
 }
 
+/* --- Persist report indicators --------------------------------------------- */
+
+/**
+ * Upsert a report's extracted IOCs (deduped by value) and link them to the
+ * report via the intel_item_iocs join table, so indicators become searchable.
+ * Values are stored in their original (non-defanged) form. Idempotent; existing
+ * IOC comments are preserved. Called opportunistically when a report is viewed.
+ */
+export async function persistReportIndicatorsAction(
+  rawHash: string,
+  indicators: Indicators,
+): Promise<{ ok: boolean; linked?: number; error?: string }> {
+  if (!rawHash) return { ok: false, error: "Missing item reference." };
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+
+  const rows: { value: string; ioc_type: string }[] = [
+    ...indicators.ips.map((value) => ({ value, ioc_type: "ip" })),
+    ...indicators.domains.map((value) => ({ value, ioc_type: "domain" })),
+    ...indicators.uris.map((value) => ({ value, ioc_type: "uri" })),
+    ...indicators.files.map((value) => ({ value, ioc_type: "file_hash" })),
+  ].filter((r) => r.value.trim().length > 0);
+  if (rows.length === 0) return { ok: true, linked: 0 };
+
+  const db = createAdminClient();
+
+  const item = await db
+    .from("intel_items")
+    .select("id")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (!item.data) return { ok: false, error: "Report not found." };
+  const intelItemId = item.data.id;
+
+  // Upsert IOCs by value; onConflict does not touch `comment`, so a value that
+  // already exists keeps any comment previously set on it.
+  const upserted = await db
+    .from("iocs")
+    .upsert(rows, { onConflict: "value" })
+    .select("id, value");
+  if (upserted.error) return { ok: false, error: upserted.error.message };
+
+  const links = (upserted.data ?? []).map((ioc) => ({
+    intel_item_id: intelItemId,
+    ioc_id: ioc.id,
+  }));
+  const { error: linkErr } = await db
+    .from("intel_item_iocs")
+    .upsert(links, { onConflict: "intel_item_id,ioc_id", ignoreDuplicates: true });
+  if (linkErr) return { ok: false, error: linkErr.message };
+
+  return { ok: true, linked: links.length };
+}
+
 /* --- Search ---------------------------------------------------------------- */
 
 export type SearchReport = {
@@ -309,10 +364,56 @@ export type SearchResults = {
 
 const SEARCH_LIMIT = 50;
 
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+
+type IntelSearchRow = {
+  id: string;
+  title: string;
+  url: string | null;
+  description: string | null;
+  source_name: string | null;
+  published_at: string | null;
+  raw_hash: string;
+};
+
+/**
+ * Find reports linked to an IOC whose value matches the query. The query is
+ * normalised to the stored (non-defanged) form first, so `evil[.]com`,
+ * `hxxps://evil.com` and `evil.com` all resolve to the same indicator.
+ */
+async function reportsByIndicator(
+  supabase: SupabaseServerClient,
+  query: string,
+): Promise<IntelSearchRow[]> {
+  const value = normalizeIndicator(query);
+  if (value.length < 3) return [];
+
+  // ilike without wildcards is a case-insensitive exact match on the value.
+  const iocRes = await supabase.from("iocs").select("id").ilike("value", value);
+  const iocIds = (iocRes.data ?? []).map((r) => r.id);
+  if (iocIds.length === 0) return [];
+
+  const linkRes = await supabase
+    .from("intel_item_iocs")
+    .select("intel_item_id")
+    .in("ioc_id", iocIds);
+  const itemIds = [...new Set((linkRes.data ?? []).map((r) => r.intel_item_id))];
+  if (itemIds.length === 0) return [];
+
+  const itemsRes = await supabase
+    .from("intel_items")
+    .select("id, title, url, description, source_name, published_at, raw_hash")
+    .in("id", itemIds)
+    .order("published_at", { ascending: false })
+    .limit(SEARCH_LIMIT);
+  return itemsRes.data ?? [];
+}
+
 /**
  * Search intel items, breaches, and vulnerabilities by keyword and return the
- * matches grouped by section. Honours the same relevance filter and per-user
- * hidden list as the dashboard; deleted items are already gone from the DB.
+ * matches grouped by section. Also matches reports by a linked indicator value
+ * (fanged or defanged). Honours the same relevance filter and per-user hidden
+ * list as the dashboard; deleted items are already gone from the DB.
  */
 export async function searchDashboard(query: string): Promise<SearchResults> {
   const q = (query ?? "").trim();
@@ -356,16 +457,42 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
 
   const hidden = new Set((hiddenRes.data ?? []).map((r) => r.raw_hash));
 
-  const reports: SearchReport[] = (intelRes.data ?? [])
-    .filter((r) => !hidden.has(r.raw_hash) && isThreatIntel(r.title, r.description))
-    .map((r) => ({
-      id: r.id,
-      title: r.title,
-      url: r.url,
-      description: r.description,
-      source_name: r.source_name,
-      published_at: r.published_at,
-    }));
+  // Indicator match: normalise the query (so it matches whether typed fanged or
+  // defanged) and pull any reports linked to an IOC with that exact value.
+  const indicatorItems = await reportsByIndicator(supabase, q);
+
+  const reportById = new Map<string, SearchReport>();
+  const addReports = (
+    rows: {
+      id: string;
+      title: string;
+      url: string | null;
+      description: string | null;
+      source_name: string | null;
+      published_at: string | null;
+      raw_hash: string;
+    }[],
+    requireRelevance: boolean,
+  ) => {
+    for (const r of rows) {
+      if (hidden.has(r.raw_hash)) continue;
+      if (requireRelevance && !isThreatIntel(r.title, r.description)) continue;
+      if (reportById.has(r.id)) continue;
+      reportById.set(r.id, {
+        id: r.id,
+        title: r.title,
+        url: r.url,
+        description: r.description,
+        source_name: r.source_name,
+        published_at: r.published_at,
+      });
+    }
+  };
+  // Indicator hits are shown even if the relevance heuristic would drop them -
+  // an explicit IOC search is a strong signal of intent.
+  addReports(indicatorItems, false);
+  addReports(intelRes.data ?? [], true);
+  const reports: SearchReport[] = [...reportById.values()];
   const breaches: SearchBreach[] = (breachRes.data ?? [])
     .filter((b) => !hidden.has(b.raw_hash) && isThreatIntel(b.org_name, b.summary))
     .map((b) => ({

@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { extractIndicators, type Indicators } from "@/lib/report-indicators";
-import { fetchReportViewAction } from "@/app/actions";
+import {
+  extractIndicators,
+  indicatorCount,
+  type Indicators,
+} from "@/lib/report-indicators";
+import {
+  fetchReportViewAction,
+  persistReportIndicatorsAction,
+} from "@/app/actions";
 import { formatDate } from "@/lib/format";
 
 export type ReportModalData = {
@@ -13,6 +20,7 @@ export type ReportModalData = {
   date: string | null;
   adversary?: string | null;
   confidence?: string | null;
+  rawHash?: string | null;
 };
 
 /**
@@ -88,6 +96,17 @@ function ReportModal({
       ),
     [report.title, report.description, detailsText],
   );
+
+  // Persist the extracted IOCs and link them to this report so they become
+  // searchable. Idempotent server-side; runs once the body text has loaded.
+  const rawHash = report.rawHash;
+  const count = indicatorCount(indicators);
+  useEffect(() => {
+    if (!rawHash || !detailsText || count === 0) return;
+    persistReportIndicatorsAction(rawHash, indicators).catch(() => {});
+    // Re-runs only when the linked report or its indicator set changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawHash, detailsText, count]);
 
   return (
     <div

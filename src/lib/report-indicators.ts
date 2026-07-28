@@ -31,6 +31,15 @@ function defang(text: string): string {
     .replace(/\bhxxp(s?)\b/gi, "http$1");
 }
 
+/**
+ * Normalise a single indicator to the same (non-defanged) form that
+ * extractIndicators stores, so a search query matches whether the user typed it
+ * fanged or defanged.
+ */
+export function normalizeIndicator(value: string): string {
+  return defang(value ?? "").trim();
+}
+
 function uniq(arr: string[]): string[] {
   return [...new Set(arr)];
 }

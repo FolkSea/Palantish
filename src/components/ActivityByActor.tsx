@@ -217,6 +217,7 @@ function ActorEntry({ item }: { item: ActorItem }) {
           date: item.published_at,
           adversary: item.adversary,
           confidence: item.confidence,
+          rawHash: item.raw_hash,
         }}
       />
       {item.description ? (
@@ -294,6 +295,7 @@ function GroupItem({
           sourceName: report.sourceName,
           date: report.date,
           adversary: actor,
+          rawHash: report.rawHash,
         }}
       />
       {report.description ? (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractIndicators } from "@/lib/report-indicators";
+import { extractIndicators, normalizeIndicator } from "@/lib/report-indicators";
 
 describe("extractIndicators", () => {
   it("extracts IPs, domains, URIs, hashes and MITRE ids", () => {
@@ -48,5 +48,15 @@ describe("extractIndicators", () => {
     expect(i.uris).toHaveLength(0);
     expect(i.files).toHaveLength(0);
     expect(i.mitre).toHaveLength(0);
+  });
+});
+
+describe("normalizeIndicator", () => {
+  it("maps fanged and defanged forms to the same stored value", () => {
+    expect(normalizeIndicator("evil[.]com")).toBe("evil.com");
+    expect(normalizeIndicator("evil.com")).toBe("evil.com");
+    expect(normalizeIndicator("8.8.8[.]8")).toBe("8.8.8.8");
+    expect(normalizeIndicator("hxxps://bad[.]tld/x")).toBe("https://bad.tld/x");
+    expect(normalizeIndicator("  1.2.3.4  ")).toBe("1.2.3.4");
   });
 });
