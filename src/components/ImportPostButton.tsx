@@ -21,8 +21,9 @@ export function ImportPostButton() {
   const [toast, setToast] = useState<Toast | null>(null);
   // Recovery flow state: the URL whose scrape failed, plus which panel is open.
   const [url, setUrl] = useState<string | null>(null);
-  const [panel, setPanel] = useState<"choice" | "paste" | null>(null);
+  const [panel, setPanel] = useState<"url" | "choice" | "paste" | null>(null);
   const [panelError, setPanelError] = useState<string | null>(null);
+  const [urlInput, setUrlInput] = useState("");
   const [pasteTitle, setPasteTitle] = useState("");
   const [pasteBody, setPasteBody] = useState("");
 
@@ -34,15 +35,25 @@ export function ImportPostButton() {
     });
     setPanel(null);
     setUrl(null);
+    setUrlInput("");
     setPasteTitle("");
     setPasteBody("");
     router.refresh();
   }
 
-  function startImport() {
-    const entered = window.prompt("Paste the blog post / article URL to import:");
-    if (!entered || !entered.trim()) return;
-    const target = entered.trim();
+  function openImport() {
+    setToast(null);
+    setPanelError(null);
+    setUrlInput("");
+    setPanel("url");
+  }
+
+  function submitUrl() {
+    const target = urlInput.trim();
+    if (!target) {
+      setPanelError("Enter a URL to import.");
+      return;
+    }
     setToast(null);
     setPanelError(null);
     startTransition(async () => {
@@ -55,7 +66,8 @@ export function ImportPostButton() {
         setPanelError(res.error);
         setPanel("choice");
       } else {
-        setToast({ kind: "err", text: res.error });
+        // Non-recoverable (bad URL, already imported): keep the panel open.
+        setPanelError(res.error);
       }
     });
   }
@@ -88,6 +100,7 @@ export function ImportPostButton() {
     setPanel(null);
     setUrl(null);
     setPanelError(null);
+    setUrlInput("");
     setPasteTitle("");
     setPasteBody("");
   }
@@ -96,13 +109,66 @@ export function ImportPostButton() {
     <>
       <button
         type="button"
-        onClick={startImport}
+        onClick={openImport}
         disabled={pending && panel === null}
         title="Import a blog post by URL"
         className="rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
       >
         {pending && panel === null ? "Importing..." : "Import post"}
       </button>
+
+      {/* URL entry modal */}
+      {panel === "url" ? (
+        <Modal onClose={closePanels}>
+          <h2 className="text-[14px] font-semibold text-slate-900">
+            Import a blog post
+          </h2>
+          <p className="mt-1 text-[12px] text-slate-600">
+            Paste the article or blog post URL to import.
+          </p>
+          {panelError ? (
+            <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-[11px] text-red-700">
+              {panelError}
+            </p>
+          ) : null}
+          <label className="mt-3 block">
+            <span className="mb-1 block text-[11px] font-medium text-slate-600">
+              URL
+            </span>
+            <input
+              autoFocus
+              type="url"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitUrl();
+                }
+              }}
+              placeholder="https://example.com/blog/post"
+              className="w-full rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-[12px] text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
+            />
+          </label>
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={closePanels}
+              className="text-[11px] text-slate-500 hover:text-slate-700"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={submitUrl}
+              disabled={pending}
+              className="rounded-md bg-slate-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+            >
+              {pending ? "Importing..." : "Import"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
 
       {/* Choice overlay: scrape failed, pick a fallback */}
       {panel === "choice" ? (
