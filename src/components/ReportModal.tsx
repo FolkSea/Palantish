@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { extractIndicators, indicatorCount } from "@/lib/report-indicators";
 import {
@@ -69,6 +69,29 @@ export function ReportModal({
   // that fails, fall back to scraped text under a notice bar.
   const [view, setView] = useState<ViewState>({ status: "loading" });
 
+  // Draggable divider: left column width as a percentage of the modal width.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [leftPct, setLeftPct] = useState(75);
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      setLeftPct(Math.min(85, Math.max(25, pct)));
+    };
+    const onUp = () => setDragging(false);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragging]);
+
   // The scraped article body drives IOC extraction regardless of how the
   // Details pane is rendered (live frame, snapshot, or text).
   const [detailsText, setDetailsText] = useState("");
@@ -121,11 +144,15 @@ export function ReportModal({
       onClick={onClose}
     >
       <div
-        className="flex w-full overflow-hidden rounded-lg border border-[#e5e7eb] bg-white shadow-xl"
+        ref={containerRef}
+        className="relative flex w-full overflow-hidden rounded-lg border border-[#e5e7eb] bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Left (3): title + the imported report */}
-        <div className="flex min-w-0 flex-[3] flex-col border-r border-[#e5e7eb]">
+        {/* Left: title + the imported report */}
+        <div
+          className="flex min-w-0 flex-col"
+          style={{ width: `${leftPct}%` }}
+        >
           <header className="shrink-0 border-b border-[#e5e7eb] px-5 py-3">
             {report.url ? (
               <a
