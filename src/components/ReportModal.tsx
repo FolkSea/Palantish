@@ -74,23 +74,24 @@ export function ReportModal({
   const [leftPct, setLeftPct] = useState(75);
   const [dragging, setDragging] = useState(false);
 
-  useEffect(() => {
-    if (!dragging) return;
-    const onMove = (e: MouseEvent) => {
+  function startDrag(e: React.MouseEvent) {
+    e.preventDefault();
+    setDragging(true);
+    const onMove = (ev: MouseEvent) => {
       const el = containerRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      const pct = ((e.clientX - rect.left) / rect.width) * 100;
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
       setLeftPct(Math.min(85, Math.max(25, pct)));
     };
-    const onUp = () => setDragging(false);
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
+    const onUp = () => {
+      setDragging(false);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [dragging]);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
 
   // The scraped article body drives IOC extraction regardless of how the
   // Details pane is rendered (live frame, snapshot, or text).
@@ -198,7 +199,17 @@ export function ReportModal({
           </div>
         </div>
 
-        {/* Right (1): collapsible information cards */}
+        {/* Draggable divider: drag to change the column widths */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          onMouseDown={startDrag}
+          className="group relative w-1 shrink-0 cursor-col-resize bg-[#e5e7eb] hover:bg-slate-400"
+        >
+          <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
+        </div>
+
+        {/* Right: collapsible information cards */}
         <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
           <div className="flex shrink-0 items-center justify-between border-b border-[#e5e7eb] px-3 py-2">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -262,6 +273,12 @@ export function ReportModal({
             </CollapsibleCard>
           </div>
         </div>
+
+        {/* While dragging, this overlay captures the mouse so moves over the
+            report iframe still reach the window listeners. */}
+        {dragging ? (
+          <div className="fixed inset-0 z-[60] cursor-col-resize select-none" />
+        ) : null}
       </div>
     </div>
   );
