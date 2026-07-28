@@ -50,11 +50,11 @@ function ReportModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-[5px]"
       onClick={onClose}
     >
       <div
-        className="flex h-[80vh] w-[80vw] max-w-6xl flex-col rounded-lg border border-[#e5e7eb] bg-white shadow-xl"
+        className="flex w-full flex-col rounded-lg border border-[#e5e7eb] bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-4 border-b border-[#e5e7eb] px-5 py-3">
@@ -73,15 +73,28 @@ function ReportModal({
                 {report.title}
               </span>
             )}
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              {[
-                report.sourceName,
-                report.date ? formatDate(report.date) : null,
-                report.adversary,
-              ]
-                .filter(Boolean)
-                .join("  -  ")}
-            </p>
+            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-500">
+              <Meta label="Source" value={report.sourceName} />
+              <Meta
+                label="Published"
+                value={report.date ? formatDate(report.date) : null}
+              />
+              <Meta label="Attribution" value={report.adversary ?? null} />
+              <Meta label="Confidence" value={report.confidence ?? null} />
+              {report.url ? (
+                <span>
+                  <span className="font-medium text-slate-400">Link:</span>{" "}
+                  <a
+                    href={report.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#1d4ed8] hover:underline"
+                  >
+                    open report
+                  </a>
+                </span>
+              ) : null}
+            </div>
           </div>
           <button
             type="button"
@@ -105,30 +118,26 @@ function ReportModal({
           </Section>
 
           <Section title="Details">
-            <dl className="grid grid-cols-[120px_1fr] gap-x-3 gap-y-1 text-[12px]">
-              <Detail label="Source" value={report.sourceName} />
-              <Detail
-                label="Published"
-                value={report.date ? formatDate(report.date) : null}
-              />
-              <Detail label="Attribution" value={report.adversary ?? null} />
-              <Detail label="Confidence" value={report.confidence ?? null} />
-              <dt className="text-slate-400">Link</dt>
-              <dd className="truncate text-slate-700">
-                {report.url ? (
-                  <a
-                    href={report.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#1d4ed8] hover:underline"
-                  >
-                    {report.url}
-                  </a>
-                ) : (
-                  "-"
-                )}
-              </dd>
-            </dl>
+            {report.url ? (
+              <>
+                <div className="h-[62vh] overflow-hidden rounded-md border border-[#e5e7eb]">
+                  <iframe
+                    src={report.url}
+                    title="Full report"
+                    className="h-full w-full"
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                  />
+                </div>
+                <p className="mt-1 text-[10px] text-slate-400">
+                  If the report does not load, the site may block embedding - use
+                  the link in the header.
+                </p>
+              </>
+            ) : (
+              <Empty>No report link available.</Empty>
+            )}
           </Section>
 
           <Section title="IOCs">
@@ -178,12 +187,12 @@ function Section({
   );
 }
 
-function Detail({ label, value }: { label: string; value: string | null }) {
+function Meta({ label, value }: { label: string; value: string | null }) {
+  if (!value) return null;
   return (
-    <>
-      <dt className="text-slate-400">{label}</dt>
-      <dd className="text-slate-700">{value || "-"}</dd>
-    </>
+    <span>
+      <span className="font-medium text-slate-400">{label}:</span> {value}
+    </span>
   );
 }
 
