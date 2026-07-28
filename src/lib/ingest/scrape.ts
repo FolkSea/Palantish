@@ -110,7 +110,23 @@ type FetchedPage = {
   finalUrl: string;
   domain: string;
   siteName: string;
+  frameable: boolean;
 };
+
+/**
+ * Decide, from a response's framing headers, whether a different origin (this
+ * app) is allowed to embed the page in an iframe. Conservative: anything other
+ * than "no restriction" or an explicit wildcard is treated as blocked, so the
+ * caller falls back to scraped text rather than showing a blank frame.
+ */
+function computeFrameable(res: Response): boolean {
+  const xfo = (res.headers.get("x-frame-options") ?? "").toLowerCase();
+  if (xfo.includes("deny") || xfo.includes("sameorigin")) return false;
+  const csp = (res.headers.get("content-security-policy") ?? "").toLowerCase();
+  const m = csp.match(/frame-ancestors([^;]*)/);
+  if (m && !/\*/.test(m[1])) return false;
+  return true;
+}
 
 /** Fetch a URL and return its HTML plus derived site identity. Throws on any
  * network / status / content-type problem so callers can offer a fallback. */
@@ -149,7 +165,7 @@ async function fetchPage(rawUrl: string): Promise<FetchedPage> {
   const siteName =
     toAscii(metaContent(html, ["og:site_name", "application-name"]) ?? "").trim() ||
     domain;
-  return { html, finalUrl, domain, siteName };
+  return { html, finalUrl, domain, siteName, frameable: computeFrameable(res) };
 }
 
 /** Derive a site identity from a bare URL (no fetch), for the paste fallback. */
@@ -284,12 +300,15 @@ function articleParagraphs(html: string): string {
     .join("\n");
 }
 
+export type ArticleView = { frameable: boolean; text: string };
+
 /**
- * Fetch a report URL and return its article body as plain text with paragraph
- * breaks (newline-separated). Throws on fetch / non-HTML failures so the caller
- * can fall back to the source link.
+ * Fetch a report URL once and return both whether the page allows this origin
+ * to embed it in an iframe and its article body as plain text (paragraph-broken)
+ * for the fallback render. Throws on fetch / non-HTML failures so the caller can
+ * fall back to the source link.
  */
-export async function fetchArticleText(rawUrl: string): Promise<string> {
-  const { html } = await fetchPage(rawUrl);
-  return articleParagraphs(html);
+export async function fetchArticleView(rawUrl: string): Promise<ArticleView> {
+  const { html, frameable } = await fetchPage(rawUrl);
+  return { frameable, text: articleParagraphs(html) };
 }

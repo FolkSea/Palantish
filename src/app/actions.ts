@@ -13,7 +13,7 @@ import {
 import {
   scrapeArticle,
   assertPublicHttpUrl,
-  fetchArticleText,
+  fetchArticleView,
 } from "@/lib/ingest/scrape";
 import { isThreatIntel } from "@/lib/relevance";
 
@@ -242,25 +242,28 @@ export async function importPostManualAction(
   return result;
 }
 
-/* --- Report full text ------------------------------------------------------ */
+/* --- Report view ----------------------------------------------------------- */
 
-export type ReportTextResult =
-  | { ok: true; text: string }
+export type ReportViewResult =
+  | { ok: true; frameable: boolean; text: string }
   | { ok: false; error: string };
 
-/** Fetch a report URL server-side and return its article body as text, so the
- * details modal can render the full report even when the site blocks framing. */
-export async function fetchReportTextAction(
+/**
+ * Inspect a report URL server-side and tell the details modal how to show it:
+ * `frameable` reports whether the page's framing headers permit embedding the
+ * live page in an iframe, and `text` is the scraped article body used as the
+ * fallback when it does not (or when the fetch fails on the client side).
+ */
+export async function fetchReportViewAction(
   url: string,
-): Promise<ReportTextResult> {
+): Promise<ReportViewResult> {
   if (!url || !url.trim()) return { ok: false, error: "No report URL." };
   const unauth = await ensureAllowed();
   if (unauth) return { ok: false, error: unauth };
   try {
     assertPublicHttpUrl(url.trim());
-    const text = await fetchArticleText(url.trim());
-    if (!text.trim()) return { ok: false, error: "No readable text found." };
-    return { ok: true, text };
+    const { frameable, text } = await fetchArticleView(url.trim());
+    return { ok: true, frameable, text };
   } catch (err) {
     return {
       ok: false,

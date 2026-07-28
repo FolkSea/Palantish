@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { extractIndicators, type Indicators } from "@/lib/report-indicators";
-import { fetchReportTextAction } from "@/app/actions";
+import { fetchReportViewAction } from "@/app/actions";
 import { formatDate } from "@/lib/format";
 
 export type ReportModalData = {
@@ -49,28 +49,27 @@ function ReportModal({
     [report],
   );
 
-  // Fetch the full report text server-side (works even when the site blocks
-  // framing). Falls back to the summary + source link on failure.
-  const [state, setState] = useState<
+  // Prefer embedding the live page in an iframe; when the site's framing headers
+  // block that, fall back to the server-scraped article text with a notice bar.
+  const [view, setView] = useState<
     | { status: "loading" }
-    | { status: "ok"; text: string }
-    | { status: "error"; error: string }
+    | { status: "frame"; url: string }
+    | { status: "fallback"; text: string | null; error?: string }
   >({ status: "loading" });
 
   useEffect(() => {
     if (!report.url) {
-      setState({ status: "error", error: "No report link available." });
+      setView({ status: "fallback", text: null, error: "No report link available." });
       return;
     }
+    const url = report.url;
     let active = true;
-    setState({ status: "loading" });
-    fetchReportTextAction(report.url).then((r) => {
+    setView({ status: "loading" });
+    fetchReportViewAction(url).then((r) => {
       if (!active) return;
-      setState(
-        r.ok
-          ? { status: "ok", text: r.text }
-          : { status: "error", error: r.error },
-      );
+      if (r.ok && r.frameable) setView({ status: "frame", url });
+      else if (r.ok) setView({ status: "fallback", text: r.text || null });
+      else setView({ status: "fallback", text: null, error: r.error });
     });
     return () => {
       active = false;
@@ -147,28 +146,51 @@ function ReportModal({
           </Section>
 
           <Section title="Details">
-            <div className="h-[62vh] overflow-y-auto rounded-md border border-[#e5e7eb] bg-slate-50 px-4 py-3">
-              {state.status === "loading" ? (
-                <Empty>Loading the full report...</Empty>
-              ) : state.status === "error" ? (
-                <div className="text-[12px] text-slate-500">
-                  <p>Could not load the report text ({state.error}).</p>
-                  {report.url ? (
-                    <a
-                      href={report.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#1d4ed8] hover:underline"
-                    >
-                      Open the report at the source
-                    </a>
-                  ) : null}
+            <div className="h-[62vh] overflow-hidden rounded-md border border-[#e5e7eb]">
+              {view.status === "loading" ? (
+                <div className="flex h-full items-center justify-center bg-slate-50">
+                  <Empty>Loading the full report...</Empty>
                 </div>
+              ) : view.status === "frame" ? (
+                <iframe
+                  src={view.url}
+                  title="Full report"
+                  className="h-full w-full"
+                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                />
               ) : (
-                <div className="space-y-2 leading-relaxed text-slate-700">
-                  {state.text.split("\n").map((para, i) => (
-                    <p key={i}>{para}</p>
-                  ))}
+                <div className="flex h-full flex-col">
+                  <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12px] font-medium text-amber-800">
+                    Unable to retrieve web page. Attempting to scrape text.
+                  </div>
+                  <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-3">
+                    {view.text ? (
+                      <div className="space-y-2 leading-relaxed text-slate-700">
+                        {view.text.split("\n").map((para, i) => (
+                          <p key={i}>{para}</p>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-[12px] text-slate-500">
+                        <p>
+                          Could not load the report text
+                          {view.error ? ` (${view.error})` : ""}.
+                        </p>
+                        {report.url ? (
+                          <a
+                            href={report.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#1d4ed8] hover:underline"
+                          >
+                            Open the report at the source
+                          </a>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
