@@ -260,3 +260,36 @@ export async function scrapeArticleWithAI(rawUrl: string): Promise<ScrapedArticl
 
   return { title, description, publishedAt, finalUrl, siteName, domain };
 }
+
+/** Extract the article body as newline-separated paragraphs (best-effort). */
+function articleParagraphs(html: string): string {
+  const scope =
+    html.match(/<article\b[\s\S]*?<\/article>/i)?.[0] ??
+    html.match(/<main\b[\s\S]*?<\/main>/i)?.[0] ??
+    html.match(/<body\b[\s\S]*?<\/body>/i)?.[0] ??
+    html;
+  const withBreaks = scope
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<(header|nav|footer|aside|form)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<br\s*\/?>(?=\s*\S)/gi, "\n")
+    .replace(/<\/(p|div|section|article|h[1-6]|li|ul|ol|blockquote|tr|figcaption)>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ");
+  return toAscii(withBreaks, true)
+    .replace(/[ \t]+/g, " ")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Fetch a report URL and return its article body as plain text with paragraph
+ * breaks (newline-separated). Throws on fetch / non-HTML failures so the caller
+ * can fall back to the source link.
+ */
+export async function fetchArticleText(rawUrl: string): Promise<string> {
+  const { html } = await fetchPage(rawUrl);
+  return articleParagraphs(html);
+}

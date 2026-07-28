@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { extractIndicators, type Indicators } from "@/lib/report-indicators";
+import { fetchReportTextAction } from "@/app/actions";
 import { formatDate } from "@/lib/format";
 
 export type ReportModalData = {
@@ -47,6 +48,34 @@ function ReportModal({
     () => extractIndicators(`${report.title} ${report.description ?? ""}`),
     [report],
   );
+
+  // Fetch the full report text server-side (works even when the site blocks
+  // framing). Falls back to the summary + source link on failure.
+  const [state, setState] = useState<
+    | { status: "loading" }
+    | { status: "ok"; text: string }
+    | { status: "error"; error: string }
+  >({ status: "loading" });
+
+  useEffect(() => {
+    if (!report.url) {
+      setState({ status: "error", error: "No report link available." });
+      return;
+    }
+    let active = true;
+    setState({ status: "loading" });
+    fetchReportTextAction(report.url).then((r) => {
+      if (!active) return;
+      setState(
+        r.ok
+          ? { status: "ok", text: r.text }
+          : { status: "error", error: r.error },
+      );
+    });
+    return () => {
+      active = false;
+    };
+  }, [report.url]);
 
   return (
     <div
@@ -118,26 +147,31 @@ function ReportModal({
           </Section>
 
           <Section title="Details">
-            {report.url ? (
-              <>
-                <div className="h-[62vh] overflow-hidden rounded-md border border-[#e5e7eb]">
-                  <iframe
-                    src={report.url}
-                    title="Full report"
-                    className="h-full w-full"
-                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                  />
+            <div className="h-[62vh] overflow-y-auto rounded-md border border-[#e5e7eb] bg-slate-50 px-4 py-3">
+              {state.status === "loading" ? (
+                <Empty>Loading the full report...</Empty>
+              ) : state.status === "error" ? (
+                <div className="text-[12px] text-slate-500">
+                  <p>Could not load the report text ({state.error}).</p>
+                  {report.url ? (
+                    <a
+                      href={report.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#1d4ed8] hover:underline"
+                    >
+                      Open the report at the source
+                    </a>
+                  ) : null}
                 </div>
-                <p className="mt-1 text-[10px] text-slate-400">
-                  If the report does not load, the site may block embedding - use
-                  the link in the header.
-                </p>
-              </>
-            ) : (
-              <Empty>No report link available.</Empty>
-            )}
+              ) : (
+                <div className="space-y-2 leading-relaxed text-slate-700">
+                  {state.text.split("\n").map((para, i) => (
+                    <p key={i}>{para}</p>
+                  ))}
+                </div>
+              )}
+            </div>
           </Section>
 
           <Section title="IOCs">

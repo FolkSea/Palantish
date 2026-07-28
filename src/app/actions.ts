@@ -10,7 +10,11 @@ import {
   importPastedPost,
   type ImportResult,
 } from "@/lib/ingest/import-post";
-import { scrapeArticle, assertPublicHttpUrl } from "@/lib/ingest/scrape";
+import {
+  scrapeArticle,
+  assertPublicHttpUrl,
+  fetchArticleText,
+} from "@/lib/ingest/scrape";
 import { isThreatIntel } from "@/lib/relevance";
 
 async function ensureAllowed(): Promise<string | null> {
@@ -236,6 +240,33 @@ export async function importPostManualAction(
   }
   if (result.ok) refreshDashboard();
   return result;
+}
+
+/* --- Report full text ------------------------------------------------------ */
+
+export type ReportTextResult =
+  | { ok: true; text: string }
+  | { ok: false; error: string };
+
+/** Fetch a report URL server-side and return its article body as text, so the
+ * details modal can render the full report even when the site blocks framing. */
+export async function fetchReportTextAction(
+  url: string,
+): Promise<ReportTextResult> {
+  if (!url || !url.trim()) return { ok: false, error: "No report URL." };
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+  try {
+    assertPublicHttpUrl(url.trim());
+    const text = await fetchArticleText(url.trim());
+    if (!text.trim()) return { ok: false, error: "No readable text found." };
+    return { ok: true, text };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Could not fetch the report.",
+    };
+  }
 }
 
 /* --- Search ---------------------------------------------------------------- */
