@@ -258,7 +258,7 @@ function ActorForm({
       </label>
       <label className="block">
         <span className="mb-1 block text-[11px] font-medium text-slate-600">
-          Animal
+          Family
         </span>
         <input
           className={inputCls}
