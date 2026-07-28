@@ -115,6 +115,22 @@ describe("prioritiseVulns", () => {
     expect(out.map((v) => v.cve_id)).toEqual(["CVE-MULTI", "CVE-SOLO"]);
   });
 
+  it("breaks a full tie by CVE number descending (numeric, not lexical)", () => {
+    const created = "2026-07-28T10:05:11Z";
+    const out = prioritiseVulns([
+      row("CVE-2026-9108", "confirmed", "2026-07-28", { created_at: created }),
+      row("CVE-2026-53264", "confirmed", "2026-07-28", { created_at: created }),
+      row("CVE-2026-20127", "confirmed", "2026-07-28", { created_at: created }),
+    ]);
+    // Same date + same ingest time, so purely CVE-number desc. Note 53264 > 20127
+    // > 9108 numerically (a lexical sort would wrongly put 9108 first).
+    expect(out.map((v) => v.cve_id)).toEqual([
+      "CVE-2026-53264",
+      "CVE-2026-20127",
+      "CVE-2026-9108",
+    ]);
+  });
+
   it("groups CVE ids case-insensitively", () => {
     const out = prioritiseVulns([
       row("cve-2026-9", "poc"),

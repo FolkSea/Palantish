@@ -28,6 +28,19 @@ function cmpDateDesc(a: string, b: string): number {
   return b.localeCompare(a);
 }
 
+// Compare CVE ids by their number, newest first (year desc, then sequence
+// desc). Parsed numerically because sequence numbers vary in length, so a
+// string compare would mis-order e.g. CVE-2026-9108 vs CVE-2026-53264.
+function cveKey(cve: string): [number, number] {
+  const m = cve.match(/CVE-(\d{4})-(\d+)/i);
+  return m ? [Number(m[1]), Number(m[2])] : [0, 0];
+}
+function cmpCveDesc(a: string, b: string): number {
+  const [ya, na] = cveKey(a);
+  const [yb, nb] = cveKey(b);
+  return yb - ya || nb - na || b.localeCompare(a);
+}
+
 function firstNonNull<T>(
   rows: VulnerabilityRow[],
   pick: (r: VulnerabilityRow) => T | null | undefined,
@@ -102,13 +115,14 @@ export function prioritiseVulns(rows: VulnerabilityRow[]): PrioritisedVuln[] {
   }
 
   // Sort by priority, then most-recent-first within each priority: publication
-  // date, then ingestion timestamp (breaks same-day ties), then CVE id (stable).
+  // date, then ingestion timestamp (breaks same-day ties), then CVE number
+  // descending (higher/newer CVE first) as the final stable tie-break.
   result.sort(
     (a, b) =>
       PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] ||
       cmpDateDesc(a.added_at, b.added_at) ||
       cmpDateDesc(a.created_at, b.created_at) ||
-      a.cve_id.localeCompare(b.cve_id),
+      cmpCveDesc(a.cve_id, b.cve_id),
   );
   return result;
 }
