@@ -4,7 +4,10 @@ import { useState } from "react";
 import { AccountPanel, type Focus } from "./AccountPanel";
 import { SourcesPanel } from "./SourcesPanel";
 import { HiddenPanel, type HiddenPost } from "./HiddenPanel";
+import { ActorsPanel } from "./ActorsPanel";
+import { ActorFamiliesPanel } from "./ActorFamiliesPanel";
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
+import type { ActorRecord, FamilyRecord } from "@/lib/actor-catalogue";
 
 export type SettingsSource = {
   id: string;
@@ -16,11 +19,13 @@ export type SettingsSource = {
   active: boolean;
 };
 
-type Tab = "account" | "sources" | "hidden";
+type Tab = "account" | "sources" | "actors" | "families" | "hidden";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "account", label: "Account", hint: "Display name and password" },
   { id: "sources", label: "Sources", hint: "Add, edit, or delete feeds" },
+  { id: "actors", label: "Actors", hint: "Threat actor catalogue" },
+  { id: "families", label: "Actor Families", hint: "Animal -> focus / country" },
   { id: "hidden", label: "Hidden posts", hint: "Unhide posts you hid" },
 ];
 
@@ -29,12 +34,16 @@ export function SettingsView({
   displayName,
   focus,
   sources,
+  actors,
+  families,
   hidden,
 }: {
   email: string;
   displayName: string;
   focus: Focus;
   sources: SettingsSource[];
+  actors: ActorRecord[];
+  families: FamilyRecord[];
   hidden: HiddenPost[];
 }) {
   const [tab, setTab] = useState<Tab>("account");
@@ -75,6 +84,10 @@ export function SettingsView({
           />
         ) : tab === "sources" ? (
           <SourcesPanel initialSources={sources} />
+        ) : tab === "actors" ? (
+          <ActorsPanel initialActors={actors} />
+        ) : tab === "families" ? (
+          <ActorFamiliesPanel initialFamilies={families} />
         ) : (
           <HiddenPanel initialHidden={hidden} />
         )}

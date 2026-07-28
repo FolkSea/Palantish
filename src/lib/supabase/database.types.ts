@@ -34,6 +34,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      actor_families: {
+        Row: {
+          animal: string
+          country: string | null
+          created_at: string
+          focus: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          animal: string
+          country?: string | null
+          created_at?: string
+          focus: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          animal?: string
+          country?: string | null
+          created_at?: string
+          focus?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       actors: {
         Row: {
           created_at: string
