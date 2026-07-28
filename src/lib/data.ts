@@ -3,6 +3,11 @@ import type { Database } from "@/lib/supabase/database.types";
 import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
 import { buildEcrimeActorGroups, deriveEcrimeActor } from "@/lib/ecrime";
 import { isThreatIntel } from "@/lib/relevance";
+import {
+  buildActorSectionCards,
+  buildHacktivismGroups,
+  type ActorGroupCard,
+} from "@/lib/actor-sections";
 
 type Tables = Database["public"]["Tables"];
 type Views = Database["public"]["Views"];
@@ -52,7 +57,11 @@ export type StaleFeed = {
 export type DashboardData = {
   compiledAt: string | null;
   executiveSummary: ExecutiveSummary | null;
-  actors: ActorWithItems[];
+  // Nation-state actor cards (China, Russia, North Korea, Iran, Rest of World).
+  nationStateActors: ActorWithItems[];
+  // Per-actor eCrime and hacktivism cards (each with an "Unattributed" card).
+  ecrimeCards: ActorGroupCard[];
+  hacktivismCards: ActorGroupCard[];
   timeline: TimelineRow[];
   ecrimeTimeline: EcrimeTimelinePoint[];
   vulnTimeline: VulnTimelinePoint[];
@@ -60,12 +69,8 @@ export type DashboardData = {
   reports: IntelItemRow[];
   vulnerabilities: VulnerabilityRow[];
   breaches: BreachRow[];
-  ecrime: BreachRow[];
   staleFeeds: StaleFeed[];
 };
-
-// Number of eCrime items surfaced in the "most significant eCrime" actor card.
-const ECRIME_CARD_LIMIT = 6;
 
 /**
  * Loads every section of the dashboard in parallel. All queries run under the
@@ -238,20 +243,32 @@ export async function loadDashboard(): Promise<DashboardData> {
       url: v.url,
     }));
 
+  const reports = (reportsRes.data ?? []).filter(keep);
+  const breaking = (breakingRes.data ?? []).filter(keep);
+
+  // Activity-by-actor sections: nation-state cards, and per-actor eCrime and
+  // hacktivism cards derived from breaches (and hacktivism-tagged reports).
+  const nationStateActors = actors.filter((a) => a.nexus !== "other");
+  const { ecrimeCards, hacktivismCards } = buildActorSectionCards(
+    breaches,
+    reports,
+    ecrimeGroups,
+    buildHacktivismGroups(),
+  );
+
   return {
     compiledAt,
     executiveSummary,
-    actors,
+    nationStateActors,
+    ecrimeCards,
+    hacktivismCards,
     timeline: timelineRes.data ?? [],
     ecrimeTimeline,
     vulnTimeline,
-    breaking: (breakingRes.data ?? []).filter(keep),
-    reports: (reportsRes.data ?? []).filter(keep),
+    breaking,
+    reports,
     vulnerabilities,
     breaches,
-    // The most significant recent eCrime activity (ransomware / extortion /
-    // large-scale breaches) surfaced as its own actor card.
-    ecrime: breaches.slice(0, ECRIME_CARD_LIMIT),
     staleFeeds: (staleFeedsRes.data ?? []).map((s) => ({
       name: s.name,
       category: s.category,

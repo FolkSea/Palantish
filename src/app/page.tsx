@@ -7,7 +7,9 @@ import { SearchPanel } from "@/components/SearchPanel";
 import TimelineTabs from "@/components/TimelineTabs";
 import { ExecutiveSummaryPanel } from "@/components/ExecutiveSummary";
 import { StaleFeedsPanel } from "@/components/StaleFeedsPanel";
-import { Ticker, ActorGrid, Footnote } from "@/components/DashboardSections";
+import { Ticker, Footnote } from "@/components/DashboardSections";
+import { ActivityByActor } from "@/components/ActivityByActor";
+import type { Focus } from "@/components/settings/AccountPanel";
 import {
   VulnTable,
   BreachTable,
@@ -29,6 +31,8 @@ export default async function DashboardPage() {
     user?.user_metadata?.display_name as string | undefined
   )?.trim();
   const identityLabel = displayName || user?.email;
+  const focus = ((user?.user_metadata?.focus as string | undefined) ??
+    "all") as Focus;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -108,7 +112,12 @@ export default async function DashboardPage() {
         />
 
         {/* Actor cards */}
-        <ActorGrid actors={data.actors} ecrime={data.ecrime} />
+        <ActivityByActor
+          nationStateActors={data.nationStateActors}
+          ecrimeCards={data.ecrimeCards}
+          hacktivismCards={data.hacktivismCards}
+          focus={focus}
+        />
 
         {/* Paginated sections, each full width */}
         <VulnTable rows={data.vulnerabilities} />
