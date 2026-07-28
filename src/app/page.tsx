@@ -110,13 +110,9 @@ export default async function DashboardPage() {
         {/* Actor cards */}
         <ActorGrid actors={data.actors} ecrime={data.ecrime} />
 
-        {/* Vulns + breaches side by side on wide screens */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <VulnTable rows={data.vulnerabilities} />
-          <BreachTable rows={data.breaches} />
-        </div>
-
-        {/* Newly released reporting */}
+        {/* Paginated sections, each full width */}
+        <VulnTable rows={data.vulnerabilities} />
+        <BreachTable rows={data.breaches} />
         <ReportsList items={data.reports} />
 
         {/* Footnote */}
