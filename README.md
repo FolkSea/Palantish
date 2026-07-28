@@ -124,7 +124,10 @@ Located in `src/lib/ingest/`:
 6. **Write** to Supabase and record a `refresh_runs` row.
 
 Trigger in production: `POST /api/ingest`, guarded by the `INGEST_CRON_SECRET`
-shared secret. Vercel Cron calls it daily (`vercel.json`).
+shared secret. Vercel Cron calls it every 3 hours at 17 past the hour
+(`17 */3 * * *` in `vercel.json`). The executive summary is cached in the
+`executive_summaries` table and only regenerated when a run actually adds new
+items, so the dashboard reads it without regenerating on page load.
 
 ## Tests and checks
 
@@ -146,7 +149,8 @@ pnpm build
    optionally `ANTHROPIC_API_KEY` / `SEARCH_API_KEY`.
 4. Also set `CRON_SECRET` equal to `INGEST_CRON_SECRET` - Vercel Cron sends it as
    `Authorization: Bearer <CRON_SECRET>`, which `/api/ingest` accepts.
-5. `vercel.json` schedules the daily cron (`0 6 * * *`). Deploy.
+5. `vercel.json` schedules the ingest cron every 3 hours at :17
+   (`17 */3 * * *`). Deploy.
 
 ## Environment variables
 
