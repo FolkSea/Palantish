@@ -79,6 +79,21 @@ export const UNID_ANIMAL_BY_NEXUS: Record<Nexus, string> = {
   other: "Spider",
 };
 
+// Within Rest of the World, CrowdStrike animal by country. Falls back to Bat.
+const ROW_ANIMAL_BY_COUNTRY: [RegExp, string][] = [
+  [/\b(india|indian)\b/i, "Tiger"],
+  [/\b(turkey|turkish)\b/i, "Wolf"],
+  [/\b(vietnam|vietnamese)\b/i, "Buffalo"],
+  [/\b(pakistan|pakistani)\b/i, "Leopard"],
+  [/\bsouth korea(n)?\b/i, "Crane"],
+];
+
+/** CrowdStrike animal for a Rest-of-the-World item, by country named in text. */
+export function restOfWorldAnimal(text: string): string {
+  for (const [re, animal] of ROW_ANIMAL_BY_COUNTRY) if (re.test(text)) return animal;
+  return "Bat";
+}
+
 // Values that name only an animal or a placeholder, i.e. not a specific group.
 const GENERIC_ADVERSARY = new Set([
   "",
@@ -109,10 +124,11 @@ export function isSpecificAdversary(name: string | null | undefined): boolean {
 export function adversaryLabel(
   name: string | null | undefined,
   nexus: Nexus,
+  text = "",
 ): string {
-  return isSpecificAdversary(name)
-    ? (name as string)
-    : `UNID ${UNID_ANIMAL_BY_NEXUS[nexus]}`;
+  if (isSpecificAdversary(name)) return name as string;
+  if (nexus === "rest_of_world") return `UNID ${restOfWorldAnimal(text)}`;
+  return `UNID ${UNID_ANIMAL_BY_NEXUS[nexus]}`;
 }
 
 // Nation-state colours for the timeline scatter + actor accents. Chosen for

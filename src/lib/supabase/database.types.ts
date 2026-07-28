@@ -273,6 +273,7 @@ export type Database = {
       intel_items: {
         Row: {
           actor_id: string | null
+          adversary_label: string | null
           confidence: Database["public"]["Enums"]["confidence_level"] | null
           created_at: string
           crowdstrike_adversary: string | null
@@ -289,6 +290,7 @@ export type Database = {
         }
         Insert: {
           actor_id?: string | null
+          adversary_label?: string | null
           confidence?: Database["public"]["Enums"]["confidence_level"] | null
           created_at?: string
           crowdstrike_adversary?: string | null
@@ -305,6 +307,7 @@ export type Database = {
         }
         Update: {
           actor_id?: string | null
+          adversary_label?: string | null
           confidence?: Database["public"]["Enums"]["confidence_level"] | null
           created_at?: string
           crowdstrike_adversary?: string | null

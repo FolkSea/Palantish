@@ -195,24 +195,26 @@ export async function loadDashboard(): Promise<DashboardData> {
   // and drop anything this user has hidden.
   const keep = (i: { title: string | null; description?: string | null; raw_hash: string }) =>
     isThreatIntel(i.title, i.description) && !hidden.has(i.raw_hash);
-  // Resolve a specific adversary name per item: the CS cryptonym if the
-  // classifier set one, otherwise a specific name mentioned in the item.
+  // Every country-attributed item gets a label: the stored adversary_label if
+  // present (so operator edits stick), otherwise a computed fallback - the
+  // specific name, or "UNID <animal>" keyed by the actor's nexus (country-
+  // specific for Rest of the World).
   const nsGroups = sortGroups(GROUP_TABLE);
-  const activityBase = (activityRes.data ?? []).filter(keep).map((i) => ({
-    ...i,
-    adversary:
-      i.crowdstrike_adversary ??
-      deriveAdversaryFromText(i.title, i.description, nsGroups),
-  }));
-  // Every country-attributed item gets a label: the specific name, or a
-  // "UNID <animal>" fallback keyed by the actor's nexus.
+  const activityBase = (activityRes.data ?? []).filter(keep);
   const actors: ActorWithItems[] = (actorsRes.data ?? []).map((actor) => ({
     ...actor,
     items: activityBase
       .filter((i) => i.actor_id === actor.id)
       .map((i) => ({
         ...i,
-        adversary: adversaryLabel(i.adversary, actor.nexus as Nexus),
+        adversary:
+          i.adversary_label ??
+          adversaryLabel(
+            i.crowdstrike_adversary ??
+              deriveAdversaryFromText(i.title, i.description, nsGroups),
+            actor.nexus as Nexus,
+            `${i.title} ${i.description ?? ""}`,
+          ),
       })),
   }));
 

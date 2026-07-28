@@ -11,7 +11,14 @@ import type { GroupEntry } from "./rules";
 // so this defaults to a small fast model. Override with ANTHROPIC_MODEL.
 const DEFAULT_MODEL = "claude-haiku-4-5";
 
-const NEXUS_VALUES: Nexus[] = ["china", "russia", "north_korea", "iran", "other"];
+const NEXUS_VALUES: Nexus[] = [
+  "china",
+  "russia",
+  "north_korea",
+  "iran",
+  "rest_of_world",
+  "other",
+];
 const ITEM_TYPES: ItemType[] = [
   "actor_activity",
   "breach",
@@ -37,12 +44,12 @@ Only include eCrime/ransomware when large-scale (many victims, major sector impa
 Return ONLY strict JSON matching this shape:
 {
   "relevant": boolean,
-  "nexus": "china" | "russia" | "north_korea" | "iran" | "other" | null,
+  "nexus": "china" | "russia" | "north_korea" | "iran" | "rest_of_world" | "other" | null,
   "itemType": "actor_activity" | "breach" | "vuln" | "report" | "breaking",
   "confidence": "confirmed" | "suspected" | "poc",
   "crowdstrikeAdversary": string | null
 }
-nexus is the attributed nation-state, or "other" for eCrime, or null if none.
+nexus is the attributed nation-state (china/russia/north_korea/iran), "rest_of_world" for any OTHER nation-state actor (e.g. India, Turkey, Vietnam, Pakistan, South Korea), "other" for eCrime, or null if none.
 crowdstrikeAdversary is the public CrowdStrike cryptonym (Panda/Bear/Chollima/Kitten/Spider naming) if one clearly applies, else null.`;
 
 type LlmResult = {

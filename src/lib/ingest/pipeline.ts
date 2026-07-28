@@ -6,6 +6,11 @@ import { selectNewCandidates } from "./dedup";
 import { selectEnricher } from "./enrich/select";
 import { selectSearchProvider } from "./search";
 import { buildGroupsFromAdversaries } from "./adversaries";
+import {
+  computeAdversaryLabel,
+  sortGroups,
+  GROUP_TABLE,
+} from "./enrich/rules";
 import { updateFeedHealth } from "./feed-health";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
 import type { EnrichedItem } from "./types";
@@ -82,6 +87,8 @@ export async function runIngest(): Promise<IngestResult> {
       ]);
 
     const adversaryGroups = buildGroupsFromAdversaries(adversaries ?? []);
+    // Group list used to derive an adversary label when there is no CS name.
+    const labelGroups = sortGroups([...adversaryGroups, ...GROUP_TABLE]);
 
     const sourceIdByName = new Map(
       (sources ?? []).map((s) => [s.name, s.id]),
@@ -189,6 +196,14 @@ export async function runIngest(): Promise<IngestResult> {
           published_at: publishedDate,
           confidence: item.confidence,
           crowdstrike_adversary: item.crowdstrikeAdversary,
+          // Store the derived adversary label so it can be edited later.
+          adversary_label: computeAdversaryLabel(
+            item.crowdstrikeAdversary,
+            item.nexus,
+            item.title,
+            item.description,
+            labelGroups,
+          ),
           source_name: item.sourceName,
           source_id: sourceId,
           item_type: item.itemType,

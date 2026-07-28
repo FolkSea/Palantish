@@ -4,6 +4,7 @@ import {
   GROUP_TABLE,
   sortGroups,
   deriveAdversaryFromText,
+  computeAdversaryLabel,
 } from "@/lib/ingest/enrich/rules";
 import type { RawCandidate } from "@/lib/ingest/types";
 
@@ -112,6 +113,32 @@ describe("RulesEnricher classification", () => {
       }),
     );
     expect(out).not.toBeNull();
+  });
+});
+
+describe("Rest of the World attribution", () => {
+  it("attributes a SideWinder item to rest_of_world with the India CS name", async () => {
+    const out = await enricher.enrich(
+      candidate({
+        title: "SideWinder targets South Asian government networks",
+        description: "The India-nexus actor deployed a new backdoor.",
+      }),
+    );
+    expect(out).not.toBeNull();
+    expect(out!.nexus).toBe("rest_of_world");
+    expect(out!.itemType).toBe("actor_activity");
+    expect(out!.crowdstrikeAdversary).toBe("Razor Tiger");
+  });
+
+  it("labels an unnamed India post as UNID TIGER", () => {
+    const label = computeAdversaryLabel(
+      null,
+      "rest_of_world",
+      "Indian APT campaign against neighbours",
+      null,
+      sortGroups(GROUP_TABLE),
+    );
+    expect(label).toBe("UNID Tiger");
   });
 });
 

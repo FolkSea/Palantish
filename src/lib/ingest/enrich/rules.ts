@@ -1,4 +1,5 @@
 import type { Nexus, Confidence } from "@/lib/badges";
+import { adversaryLabel } from "@/lib/badges";
 import { computeHash } from "@/lib/ingest/dedup";
 import type { Enricher, EnrichedItem, ItemType, RawCandidate } from "@/lib/ingest/types";
 
@@ -55,6 +56,25 @@ export const GROUP_TABLE: GroupEntry[] = [
   { alias: "blackcat", nexus: "other" },
   { alias: "cl0p", nexus: "other" },
   { alias: "clop", nexus: "other" },
+  // Rest of the World - other nation-states, by named group (country animal
+  // via badges). Generic "India-linked" attribution is left to the LLM.
+  // India (Tiger)
+  { alias: "sidewinder", nexus: "rest_of_world", cs: "Razor Tiger" },
+  { alias: "razor tiger", nexus: "rest_of_world", cs: "Razor Tiger" },
+  { alias: "patchwork", nexus: "rest_of_world", cs: "Quilted Tiger" },
+  { alias: "donot team", nexus: "rest_of_world", cs: "Viceroy Tiger" },
+  { alias: "confucius", nexus: "rest_of_world" },
+  // Pakistan (Leopard)
+  { alias: "transparent tribe", nexus: "rest_of_world", cs: "Mythic Leopard" },
+  { alias: "apt36", nexus: "rest_of_world", cs: "Mythic Leopard" },
+  { alias: "sidecopy", nexus: "rest_of_world" },
+  // Vietnam (Buffalo)
+  { alias: "oceanlotus", nexus: "rest_of_world", cs: "Ocean Buffalo" },
+  { alias: "ocean lotus", nexus: "rest_of_world", cs: "Ocean Buffalo" },
+  { alias: "apt32", nexus: "rest_of_world", cs: "Ocean Buffalo" },
+  // Turkey (Wolf)
+  { alias: "sea turtle", nexus: "rest_of_world", cs: "Cosmic Wolf" },
+  { alias: "cosmic wolf", nexus: "rest_of_world", cs: "Cosmic Wolf" },
 ];
 
 const MARKETING_RE =
@@ -124,6 +144,25 @@ export function deriveAdversaryFromText(
   if (!group.alias.includes(" ")) return null;
   const idx = text.toLowerCase().indexOf(group.alias);
   return idx >= 0 ? text.slice(idx, idx + group.alias.length) : null;
+}
+
+/**
+ * The stored/display adversary label for an item attributed to `nexus`: the
+ * specific CrowdStrike cryptonym or a name from the item, otherwise a
+ * "UNID <animal>" fallback (country-specific for Rest of the World). Returns
+ * null for unattributed items (no nexus), which carry no label.
+ */
+export function computeAdversaryLabel(
+  crowdstrikeAdversary: string | null | undefined,
+  nexus: Nexus | null,
+  title: string,
+  description: string | null | undefined,
+  groups: GroupEntry[],
+): string | null {
+  if (!nexus) return null;
+  const specific =
+    crowdstrikeAdversary ?? deriveAdversaryFromText(title, description, groups);
+  return adversaryLabel(specific, nexus, `${title} ${description ?? ""}`);
 }
 
 export function isMarketing(c: RawCandidate): boolean {

@@ -11,6 +11,7 @@ import { selectEnricher } from "./enrich/select";
 import { toAscii } from "@/lib/text";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import { computeHash } from "./dedup";
+import { computeAdversaryLabel, sortGroups, GROUP_TABLE } from "./enrich/rules";
 import type { EnrichedItem, RawCandidate } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -193,6 +194,13 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
       published_at: publishedDate,
       confidence: enriched.confidence,
       crowdstrike_adversary: enriched.crowdstrikeAdversary,
+      adversary_label: computeAdversaryLabel(
+        enriched.crowdstrikeAdversary,
+        enriched.nexus,
+        enriched.title,
+        enriched.description,
+        sortGroups(GROUP_TABLE),
+      ),
       source_name: source.name,
       source_id: source.id,
       item_type: enriched.itemType,

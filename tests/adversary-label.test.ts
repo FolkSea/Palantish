@@ -33,4 +33,17 @@ describe("adversaryLabel", () => {
     expect(adversaryLabel("Kitten", "iran")).toBe("UNID Kitten");
     expect(adversaryLabel("UNKNOWN", "china")).toBe("UNID Panda");
   });
+
+  it("uses the country's animal within Rest of the World", () => {
+    expect(adversaryLabel(null, "rest_of_world", "India-linked APT hits banks")).toBe(
+      "UNID Tiger",
+    );
+    expect(adversaryLabel(null, "rest_of_world", "A Turkish espionage group")).toBe(
+      "UNID Wolf",
+    );
+    expect(
+      adversaryLabel(null, "rest_of_world", "Vietnamese actor targets dissidents"),
+    ).toBe("UNID Buffalo");
+    expect(adversaryLabel(null, "rest_of_world", "unknown origin")).toBe("UNID Bat");
+  });
 });
