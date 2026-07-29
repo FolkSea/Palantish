@@ -1,6 +1,7 @@
 import Parser from "rss-parser";
 import type { RawCandidate } from "./types";
 import { toAscii } from "@/lib/text";
+import { ilog } from "./log";
 
 export type FeedSource = {
   name: string;
@@ -48,6 +49,7 @@ export async function pullFeed(
   latestItemAt: Date | null;
 }> {
   if (!source.feed_url) return { candidates: [], latestItemAt: null };
+  const startedAt = Date.now();
   try {
     const feed = await parser.parseURL(source.feed_url);
     const all: RawCandidate[] = (feed.items ?? [])
@@ -71,13 +73,17 @@ export async function pullFeed(
       if (!c.publishedAt) return max;
       return !max || c.publishedAt > max ? c.publishedAt : max;
     }, null);
+    const ms = Date.now() - startedAt;
+    ilog(
+      `feed "${source.name}": ${candidates.length} items` +
+        (latestItemAt ? `, latest ${latestItemAt.toISOString().slice(0, 10)}` : "") +
+        ` (${ms}ms)`,
+    );
     return { candidates, latestItemAt };
   } catch (err) {
-    return {
-      candidates: [],
-      error: err instanceof Error ? err.message : String(err),
-      latestItemAt: null,
-    };
+    const message = err instanceof Error ? err.message : String(err);
+    ilog(`feed "${source.name}": ERROR ${message} (${Date.now() - startedAt}ms)`);
+    return { candidates: [], error: message, latestItemAt: null };
   }
 }
 

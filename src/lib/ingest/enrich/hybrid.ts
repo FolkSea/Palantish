@@ -12,6 +12,15 @@ export interface LlmClassifier {
   classify(c: RawCandidate): Promise<EnrichedItem | "drop" | "unavailable">;
 }
 
+/** Per-item classification decision, for logging. `via` is where the verdict
+ * came from: the deterministic rules or the escalated LLM call. */
+export type EnrichReport = (r: {
+  via: "rules" | "llm";
+  outcome: "keep" | "drop";
+  title: string;
+  itemType: string | null;
+}) => void;
+
 /**
  * Rules-first enricher. The deterministic rules classify every candidate; only
  * genuinely ambiguous ones (generic news posts with no threat signal) are
@@ -29,22 +38,41 @@ export class HybridEnricher implements Enricher {
   constructor(
     private llm: LlmClassifier | null,
     extraGroups: GroupEntry[] = [],
+    private report?: EnrichReport,
   ) {
     this.groups = sortGroups([...extraGroups, ...GROUP_TABLE]);
   }
 
   async enrich(c: RawCandidate): Promise<EnrichedItem | null> {
     const verdict = rulesClassify(c, this.groups);
-    if (verdict.kind === "keep") return verdict.item;
-    if (verdict.kind === "drop") return null;
+    if (verdict.kind === "keep") {
+      this.report?.({ via: "rules", outcome: "keep", title: c.title, itemType: verdict.item.itemType });
+      return verdict.item;
+    }
+    if (verdict.kind === "drop") {
+      this.report?.({ via: "rules", outcome: "drop", title: c.title, itemType: null });
+      return null;
+    }
 
     // Ambiguous: escalate to the LLM when configured.
     if (this.llm) {
       const r = await this.llm.classify(c);
-      if (r === "drop") return null;
-      if (r !== "unavailable") return r;
+      if (r === "drop") {
+        this.report?.({ via: "llm", outcome: "drop", title: c.title, itemType: null });
+        return null;
+      }
+      if (r !== "unavailable") {
+        this.report?.({ via: "llm", outcome: "keep", title: c.title, itemType: r.itemType });
+        return r;
+      }
+      // LLM was consulted but unavailable: keep-by-default as a report.
+      const item = buildReport(c);
+      this.report?.({ via: "llm", outcome: "keep", title: c.title, itemType: item.itemType });
+      return item;
     }
-    // Last resort: keep it as a report so nothing is silently lost.
-    return buildReport(c);
+    // No LLM configured: keep the ambiguous item locally as a report.
+    const item = buildReport(c);
+    this.report?.({ via: "rules", outcome: "keep", title: c.title, itemType: item.itemType });
+    return item;
   }
 }

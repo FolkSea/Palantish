@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { Enricher } from "@/lib/ingest/types";
-import { HybridEnricher } from "./hybrid";
+import { HybridEnricher, type EnrichReport } from "./hybrid";
 import { LlmEnricher } from "./llm";
 import { RulesEnricher, type GroupEntry } from "./rules";
 import { serverEnv } from "@/lib/env";
@@ -11,11 +11,15 @@ import { serverEnv } from "@/lib/env";
  * for edge cases and configured from the environment. When no API key is set,
  * ambiguous items are kept as reports (no LLM to consult).
  */
-export function selectEnricher(extraGroups: GroupEntry[] = []): Enricher {
+export function selectEnricher(
+  extraGroups: GroupEntry[] = [],
+  report?: EnrichReport,
+): Enricher {
   const key = serverEnv.anthropicApiKey;
   return new HybridEnricher(
     key ? new LlmEnricher(key, extraGroups) : null,
     extraGroups,
+    report,
   );
 }
 

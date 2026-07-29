@@ -12,7 +12,9 @@ import {
   GROUP_TABLE,
 } from "./enrich/rules";
 import { updateFeedHealth } from "./feed-health";
+import { ilog } from "./log";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
+import type { EnrichReport } from "./enrich/hybrid";
 import type { EnrichedItem } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -72,6 +74,7 @@ export async function runIngest(): Promise<IngestResult> {
     throw new Error(`Failed to open refresh run: ${runErr?.message}`);
   }
   const runId = run.id;
+  ilog(`ingest run ${runId} started`);
 
   try {
     // Reference data ---------------------------------------------------------
@@ -100,6 +103,7 @@ export async function runIngest(): Promise<IngestResult> {
     const feedSources: FeedSource[] = (sources ?? [])
       .filter((s) => s.feed_url)
       .map((s) => ({ name: s.name, feed_url: s.feed_url, category: s.category }));
+    ilog(`pulling ${feedSources.length} active feeds...`);
 
     // Existing dedup hashes across all target tables ------------------------
     const [intelHashes, vulnHashes, breachHashes, deletedHashes] =
@@ -139,15 +143,36 @@ export async function runIngest(): Promise<IngestResult> {
       search.name === "noop" ? [] : await search.search("nation-state cyber");
 
     const allCandidates = [...feedCandidates, ...searchCandidates];
+    ilog(
+      `pulled ${feedCandidates.length} feed items (${feedErrors.length} feed errors)`,
+    );
     const fresh = selectNewCandidates(allCandidates, existing);
+    ilog(
+      `${allCandidates.length} candidates, ${fresh.length} new after dedup; enriching (concurrency 6)...`,
+    );
 
     // Enrich (drop nulls) ----------------------------------------------------
-    const enricher = selectEnricher(adversaryGroups);
+    // Per-item logging: which items the rules classify locally vs escalate to
+    // the LLM, and whether each is kept or dropped.
+    const tally = { rulesKeep: 0, rulesDrop: 0, llmKeep: 0, llmDrop: 0 };
+    const report: EnrichReport = (r) => {
+      if (r.via === "rules") r.outcome === "keep" ? tally.rulesKeep++ : tally.rulesDrop++;
+      else r.outcome === "keep" ? tally.llmKeep++ : tally.llmDrop++;
+      ilog(
+        `  ${r.via === "llm" ? "LLM " : "rules"} ${r.outcome === "keep" ? "keep" : "drop"}` +
+          `${r.itemType ? ` [${r.itemType}]` : ""}: ${r.title.slice(0, 90)}`,
+      );
+    };
+    const enricher = selectEnricher(adversaryGroups, report);
     const enrichedNullable = await mapWithConcurrency(fresh, 6, (c) =>
       enricher.enrich(c),
     );
     const enriched = enrichedNullable.filter(
       (e): e is EnrichedItem => e !== null,
+    );
+    ilog(
+      `enrichment done: rules kept ${tally.rulesKeep}, rules dropped ${tally.rulesDrop}, ` +
+        `LLM kept ${tally.llmKeep}, LLM dropped ${tally.llmDrop}`,
     );
 
     // Partition + insert -----------------------------------------------------
@@ -212,6 +237,9 @@ export async function runIngest(): Promise<IngestResult> {
       }
     }
 
+    ilog(
+      `inserting: ${intelRows.length} intel, ${vulnRows.length} vuln, ${breachRows.length} breach`,
+    );
     let added = 0;
     if (intelRows.length > 0) {
       const { data, error } = await db
@@ -238,12 +266,15 @@ export async function runIngest(): Promise<IngestResult> {
       else added += data?.length ?? 0;
     }
 
+    ilog(`inserted ${added} new items`);
+
     // Keep-most-recent behaviour: mark actors quiet when they have no items in
     // the 30-day window, active otherwise. Existing rows are never deleted.
     await refreshActorStatuses(db);
 
     // Recalculate the executive summary on every completed run so it always
     // reflects the latest data and the current 24h / 7d windows. Non-fatal.
+    ilog("recalculating executive summary...");
     try {
       await generateAndStoreSummary(db);
     } catch (err) {
@@ -251,6 +282,7 @@ export async function runIngest(): Promise<IngestResult> {
         `summary: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+    ilog(`ingest run ${runId} finished: ${added} added, ${errors.length} errors`);
 
     await db
       .from("refresh_runs")
@@ -278,6 +310,7 @@ export async function runIngest(): Promise<IngestResult> {
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    ilog(`ingest run ${runId} FAILED: ${message}`);
     await db
       .from("refresh_runs")
       .update({
