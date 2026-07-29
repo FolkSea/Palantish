@@ -13,7 +13,10 @@ import {
   persistReportIndicatorsAction,
   discoverTechniquesAction,
   getReportIndicatorsAction,
+  deleteReportIocAction,
+  updateReportIocAction,
 } from "@/app/actions";
+import { EditableIocList } from "./EditableIocList";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 import { techniqueInfo } from "@/lib/mitre/techniques";
 import { formatDate } from "@/lib/format";
@@ -167,7 +170,38 @@ export function ReportModal({
       stored.cves.length >
       0;
   // IOC cards use stored indicators when the report has them, else extracted.
-  const indicators: Indicators = hasStoredIocs ? stored! : extracted;
+  const baseIndicators: Indicators = hasStoredIocs ? stored! : extracted;
+  // Local edits (delete/replace) overlay the base set until the modal reopens.
+  const [iocEdits, setIocEdits] = useState<Indicators | null>(null);
+  const indicators = iocEdits ?? baseIndicators;
+  // Editing persists to the DB, so it needs the report's raw_hash.
+  const iocsEditable = !!rawHash;
+
+  function removeIoc(key: keyof Indicators, value: string) {
+    setIocEdits((cur) => {
+      const base = cur ?? baseIndicators;
+      return { ...base, [key]: (base[key] as string[]).filter((v) => v !== value) };
+    });
+    if (rawHash) deleteReportIocAction(rawHash, value).catch(() => {});
+  }
+
+  async function editIoc(
+    key: keyof Indicators,
+    type: string,
+    oldValue: string,
+    newValue: string,
+  ): Promise<string | null> {
+    if (!rawHash) return "This report cannot be edited.";
+    const res = await updateReportIocAction(rawHash, oldValue, newValue, type);
+    if (!res.ok) return res.error;
+    setIocEdits((cur) => {
+      const base = cur ?? baseIndicators;
+      const next = (base[key] as string[]).map((v) => (v === oldValue ? res.value : v));
+      return { ...base, [key]: [...new Set(next)] };
+    });
+    return null;
+  }
+
   // MITRE default list: stored technique codes when present, else regex-extracted.
   const mitreCodes = stored && stored.mitre.length ? stored.mitre : extracted.mitre;
 
@@ -321,23 +355,53 @@ export function ReportModal({
             </CollapsibleCard>
 
             <CollapsibleCard title="IP Addresses" count={indicators.ips.length}>
-              <IocItems items={indicators.ips} />
+              <EditableIocList
+                items={indicators.ips}
+                type="ip"
+                editable={iocsEditable}
+                onRemove={(v) => removeIoc("ips", v)}
+                onEdit={(o, n) => editIoc("ips", "ip", o, n)}
+              />
             </CollapsibleCard>
 
             <CollapsibleCard title="Domains" count={indicators.domains.length}>
-              <IocItems items={indicators.domains} />
+              <EditableIocList
+                items={indicators.domains}
+                type="domain"
+                editable={iocsEditable}
+                onRemove={(v) => removeIoc("domains", v)}
+                onEdit={(o, n) => editIoc("domains", "domain", o, n)}
+              />
             </CollapsibleCard>
 
             <CollapsibleCard title="URIs" count={indicators.uris.length}>
-              <IocItems items={indicators.uris} />
+              <EditableIocList
+                items={indicators.uris}
+                type="uri"
+                editable={iocsEditable}
+                onRemove={(v) => removeIoc("uris", v)}
+                onEdit={(o, n) => editIoc("uris", "uri", o, n)}
+              />
             </CollapsibleCard>
 
             <CollapsibleCard title="Hashes" count={indicators.files.length}>
-              <IocItems items={indicators.files} />
+              <EditableIocList
+                items={indicators.files}
+                type="file_hash"
+                editable={iocsEditable}
+                onRemove={(v) => removeIoc("files", v)}
+                onEdit={(o, n) => editIoc("files", "file_hash", o, n)}
+              />
             </CollapsibleCard>
 
             <CollapsibleCard title="CVEs" count={indicators.cves.length}>
-              <IocItems items={indicators.cves} />
+              <EditableIocList
+                items={indicators.cves}
+                type="cve"
+                editable={iocsEditable}
+                onRemove={(v) => removeIoc("cves", v)}
+                onEdit={(o, n) => editIoc("cves", "cve", o, n)}
+              />
             </CollapsibleCard>
 
             <CollapsibleCard
@@ -531,19 +595,6 @@ function CollapsibleCard({
         <div className="border-t border-[#e5e7eb] px-3 py-2">{children}</div>
       ) : null}
     </div>
-  );
-}
-
-function IocItems({ items }: { items: string[] }) {
-  if (!items.length) return <Empty>None.</Empty>;
-  return (
-    <ul className="space-y-0.5">
-      {items.map((v) => (
-        <li key={v} className="break-all font-mono text-[12px] text-slate-700">
-          {v}
-        </li>
-      ))}
-    </ul>
   );
 }
 

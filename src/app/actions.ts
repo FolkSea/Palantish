@@ -16,7 +16,12 @@ import {
   fetchArticleView,
 } from "@/lib/ingest/scrape";
 import { isThreatIntel } from "@/lib/relevance";
-import { normalizeIndicator, type Indicators } from "@/lib/report-indicators";
+import {
+  normalizeIndicator,
+  validIndicator,
+  normalizeIndicatorValue,
+  type Indicators,
+} from "@/lib/report-indicators";
 import { indicatorRows, linkIocsToItem, type IocRow } from "@/lib/ingest/iocs";
 import { discoverTechniques } from "@/lib/mitre/discover";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
@@ -386,6 +391,97 @@ export async function getReportIndicatorsAction(
     else if (ioc.ioc_type === "mitre") grouped.mitre.push(ioc.value);
   }
   return { ok: true, indicators: grouped };
+}
+
+/** Delete an ioc's link to a report (and the ioc row if it becomes orphaned),
+ * so an operator can remove an indicator scraped by mistake. */
+export async function deleteReportIocAction(
+  rawHash: string,
+  value: string,
+): Promise<{ ok: boolean; error?: string }> {
+  if (!rawHash || !value) return { ok: false, error: "Missing input." };
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+
+  const db = createAdminClient();
+  const item = await db
+    .from("intel_items")
+    .select("id")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (!item.data) return { ok: false, error: "Report not found." };
+
+  const ioc = await db.from("iocs").select("id").eq("value", value).maybeSingle();
+  if (!ioc.data) return { ok: true }; // already gone
+
+  const unlink = await db
+    .from("intel_item_iocs")
+    .delete()
+    .eq("intel_item_id", item.data.id)
+    .eq("ioc_id", ioc.data.id);
+  if (unlink.error) return { ok: false, error: unlink.error.message };
+
+  const { count } = await db
+    .from("intel_item_iocs")
+    .select("ioc_id", { count: "exact", head: true })
+    .eq("ioc_id", ioc.data.id);
+  if ((count ?? 0) === 0) await db.from("iocs").delete().eq("id", ioc.data.id);
+
+  return { ok: true };
+}
+
+/** Replace an ioc value on a report: validate the new value, unlink the old one
+ * (dropping it if orphaned) and link the corrected value. The deduped iocs table
+ * is preserved, so edits never affect other reports sharing the old value. */
+export async function updateReportIocAction(
+  rawHash: string,
+  oldValue: string,
+  newValue: string,
+  iocType: string,
+): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+  if (!rawHash) return { ok: false, error: "Missing report." };
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+  if (!validIndicator(newValue, iocType)) {
+    return { ok: false, error: `Not a valid ${iocType.replace("_", " ")}.` };
+  }
+  const normalized = normalizeIndicatorValue(newValue, iocType);
+
+  const db = createAdminClient();
+  const item = await db
+    .from("intel_items")
+    .select("id")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (!item.data) return { ok: false, error: "Report not found." };
+  const intelItemId = item.data.id;
+
+  if (normalized !== oldValue) {
+    const oldIoc = await db
+      .from("iocs")
+      .select("id")
+      .eq("value", oldValue)
+      .maybeSingle();
+    if (oldIoc.data) {
+      await db
+        .from("intel_item_iocs")
+        .delete()
+        .eq("intel_item_id", intelItemId)
+        .eq("ioc_id", oldIoc.data.id);
+      const { count } = await db
+        .from("intel_item_iocs")
+        .select("ioc_id", { count: "exact", head: true })
+        .eq("ioc_id", oldIoc.data.id);
+      if ((count ?? 0) === 0) await db.from("iocs").delete().eq("id", oldIoc.data.id);
+    }
+  }
+
+  try {
+    await linkIocsToItem(db, intelItemId, [{ value: normalized, ioc_type: iocType }]);
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Update failed." };
+  }
+  return { ok: true, value: normalized };
 }
 
 /* --- MITRE ATT&CK discovery ------------------------------------------------ */

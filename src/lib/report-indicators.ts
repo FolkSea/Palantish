@@ -201,3 +201,41 @@ export function indicatorCount(i: Indicators): number {
     i.cves.length
   );
 }
+
+// Full-string validators for editing an indicator by type.
+const DOMAIN_FULL_RE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/i;
+const URI_FULL_RE = /^https?:\/\/[^\s]+$/i;
+const HASH_FULL_RE = /^(?:[a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i;
+const CVE_FULL_RE = /^CVE-\d{4}-\d{4,7}$/i;
+const MITRE_FULL_RE = /^T\d{4}(?:\.\d{3})?$/i;
+
+/** Whether `value` is a valid indicator of the given ioc_type. */
+export function validIndicator(value: string, type: string): boolean {
+  const v = value.trim();
+  if (!v) return false;
+  switch (type) {
+    case "ip":
+      return validIpv4(v);
+    case "domain":
+      return DOMAIN_FULL_RE.test(v);
+    case "uri":
+      return URI_FULL_RE.test(v);
+    case "file_hash":
+      return HASH_FULL_RE.test(v);
+    case "cve":
+      return CVE_FULL_RE.test(v);
+    case "mitre":
+      return MITRE_FULL_RE.test(v);
+    default:
+      return true;
+  }
+}
+
+/** Normalise an indicator value to how it is stored (lowercase domains/hashes,
+ * uppercase CVE/MITRE ids; IPs and URIs are kept as typed). */
+export function normalizeIndicatorValue(value: string, type: string): string {
+  const v = value.trim();
+  if (type === "domain" || type === "file_hash") return v.toLowerCase();
+  if (type === "cve" || type === "mitre") return v.toUpperCase();
+  return v;
+}

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { extractIndicators, normalizeIndicator } from "@/lib/report-indicators";
+import {
+  extractIndicators,
+  normalizeIndicator,
+  validIndicator,
+  normalizeIndicatorValue,
+} from "@/lib/report-indicators";
 
 describe("extractIndicators", () => {
   it("extracts IPs, domains, URIs, hashes and MITRE ids", () => {
@@ -77,6 +82,29 @@ describe("extractIndicators", () => {
     expect(i.files).toHaveLength(0);
     expect(i.cves).toHaveLength(0);
     expect(i.mitre).toHaveLength(0);
+  });
+});
+
+describe("validIndicator", () => {
+  it("validates each type and rejects malformed values", () => {
+    expect(validIndicator("8.8.8.8", "ip")).toBe(true);
+    expect(validIndicator("8.8.8.256", "ip")).toBe(false);
+    expect(validIndicator("evil.com", "domain")).toBe(true);
+    expect(validIndicator("not a domain", "domain")).toBe(false);
+    expect(validIndicator("https://evil.com/a", "uri")).toBe(true);
+    expect(validIndicator("evil.com", "uri")).toBe(false);
+    expect(validIndicator("d41d8cd98f00b204e9800998ecf8427e", "file_hash")).toBe(true);
+    expect(validIndicator("zzz", "file_hash")).toBe(false);
+    expect(validIndicator("CVE-2026-1234", "cve")).toBe(true);
+    expect(validIndicator("CVE-26-1", "cve")).toBe(false);
+  });
+});
+
+describe("normalizeIndicatorValue", () => {
+  it("lowercases domains/hashes and uppercases CVE/MITRE", () => {
+    expect(normalizeIndicatorValue("Evil.COM", "domain")).toBe("evil.com");
+    expect(normalizeIndicatorValue("cve-2026-1234", "cve")).toBe("CVE-2026-1234");
+    expect(normalizeIndicatorValue("1.2.3.4", "ip")).toBe("1.2.3.4");
   });
 });
 
