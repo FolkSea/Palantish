@@ -170,7 +170,11 @@ export function ReportModal({
       stored.cves.length >
       0;
   // IOC cards use stored indicators when the report has them, else extracted.
-  const baseIndicators: Indicators = hasStoredIocs ? stored! : extracted;
+  // MITRE is preferred from the DB independently (Discover writes it there).
+  const baseIndicators: Indicators = {
+    ...(hasStoredIocs ? stored! : extracted),
+    mitre: stored && stored.mitre.length ? stored.mitre : extracted.mitre,
+  };
   // Local edits (delete/replace) overlay the base set until the modal reopens.
   const [iocEdits, setIocEdits] = useState<Indicators | null>(null);
   const indicators = iocEdits ?? baseIndicators;
@@ -202,9 +206,6 @@ export function ReportModal({
     return null;
   }
 
-  // MITRE default list: stored technique codes when present, else regex-extracted.
-  const mitreCodes = stored && stored.mitre.length ? stored.mitre : extracted.mitre;
-
   // Persist extracted IOCs only when the DB has none yet, so opening a report
   // reuses stored data instead of re-extracting and re-writing it every time.
   const extractedCount = indicatorCount(extracted);
@@ -229,33 +230,32 @@ export function ReportModal({
     const text = `${report.title} ${report.description ?? ""} ${detailsText}`;
     discoverTechniquesAction(rawHash ?? null, text).then((r) => {
       setDiscovering(false);
-      if (r.ok) setTechniques(r.techniques);
-      else setDiscoverError(r.error);
+      if (!r.ok) {
+        setDiscoverError(r.error);
+        return;
+      }
+      setTechniques(r.techniques);
+      // Discover wrote the codes to the DB; reflect them in the editable set.
+      setIocEdits((cur) => ({
+        ...(cur ?? baseIndicators),
+        mitre: [...new Set(r.techniques.map((t) => t.code))],
+      }));
     });
   }
 
-  // Techniques to display (code + name); names come from the model when a
-  // technique was discovered, otherwise from the local ATT&CK reference.
-  const mitreList: DiscoveredTechnique[] = techniques
-    ? techniques.map((t) => ({
-        code: t.code,
-        name:
-          t.name && t.name !== t.code
-            ? t.name
-            : techniqueInfo(t.code)?.name ?? "",
-      }))
-    : mitreCodes.map((code) => ({
-        code,
-        name: techniqueInfo(code)?.name ?? "",
-      }));
-
-  // Custom hover tooltip (native title fires unreliably inside scroll panels).
-  const [tip, setTip] = useState<{ text: string; top: number; right: number } | null>(
-    null,
-  );
-  function showTip(e: React.MouseEvent, text: string) {
-    const r = e.currentTarget.getBoundingClientRect();
-    setTip({ text, top: r.bottom + 6, right: window.innerWidth - r.right });
+  // Display / tooltip for a MITRE code. The name comes from the model when a
+  // technique was discovered, otherwise from the local ATT&CK reference; the
+  // tooltip shows the code (hidden from the label) plus a description. Both are
+  // computed from the current value, so an edit updates them automatically.
+  const llmNames = new Map((techniques ?? []).map((t) => [t.code, t.name]));
+  function techniqueName(code: string): string {
+    const llm = llmNames.get(code);
+    if (llm && llm !== code) return llm;
+    return techniqueInfo(code)?.name ?? code;
+  }
+  function techniqueTip(code: string): string {
+    const info = techniqueInfo(code);
+    return info ? `${code} - ${info.description}` : `${code} - MITRE ATT&CK technique`;
   }
 
   return (
@@ -406,7 +406,7 @@ export function ReportModal({
 
             <CollapsibleCard
               title="MITRE ATT&CK"
-              count={mitreList.length}
+              count={indicators.mitre.length}
               action={
                 <button
                   type="button"
@@ -423,29 +423,17 @@ export function ReportModal({
                 <Empty>Analysing the report...</Empty>
               ) : discoverError ? (
                 <p className="text-[12px] text-red-600">{discoverError}</p>
-              ) : mitreList.length ? (
-                <ul className="space-y-1">
-                  {mitreList.map((t) => {
-                    const desc = techniqueInfo(t.code)?.description ?? "";
-                    return (
-                      <li
-                        key={t.code}
-                        onMouseEnter={desc ? (e) => showTip(e, desc) : undefined}
-                        onMouseLeave={desc ? () => setTip(null) : undefined}
-                        className={`text-[12px] leading-snug ${desc ? "cursor-help" : ""}`}
-                      >
-                        <span className="font-mono font-medium text-slate-800">
-                          {t.code}
-                        </span>
-                        {t.name ? (
-                          <span className="text-slate-600"> - {t.name}</span>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
               ) : (
-                <Empty>Use Discover to infer techniques from the report.</Empty>
+                <EditableIocList
+                  items={indicators.mitre}
+                  type="mitre"
+                  editable={iocsEditable}
+                  display={techniqueName}
+                  tooltip={techniqueTip}
+                  onRemove={(v) => removeIoc("mitre", v)}
+                  onEdit={(o, n) => editIoc("mitre", "mitre", o, n)}
+                  emptyLabel="Use Discover to infer techniques from the report."
+                />
               )}
             </CollapsibleCard>
 
@@ -459,16 +447,6 @@ export function ReportModal({
             report iframe still reach the window listeners. */}
         {dragging ? (
           <div className="fixed inset-0 z-[60] cursor-col-resize select-none" />
-        ) : null}
-
-        {/* Technique description tooltip (fixed, so it escapes card/panel overflow). */}
-        {tip ? (
-          <div
-            className="pointer-events-none fixed z-[70] max-w-xs rounded-md bg-slate-800 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg"
-            style={{ top: tip.top, right: tip.right }}
-          >
-            {tip.text}
-          </div>
         ) : null}
       </div>
     </div>

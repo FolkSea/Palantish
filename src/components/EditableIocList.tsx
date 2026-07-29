@@ -22,15 +22,23 @@ export function EditableIocList({
   editable,
   onRemove,
   onEdit,
+  display,
+  tooltip,
+  emptyLabel = "None.",
 }: {
   items: string[];
   type: string;
   editable: boolean;
   onRemove: (value: string) => void;
   onEdit: (oldValue: string, newValue: string) => Promise<string | null>;
+  /** Optional transform for the label text (e.g. MITRE code -> technique name). */
+  display?: (value: string) => string;
+  /** Optional hover tooltip text for the label (recomputed per value). */
+  tooltip?: (value: string) => string;
+  emptyLabel?: string;
 }) {
   if (!items.length) {
-    return <p className="text-[12px] italic text-slate-400">None.</p>;
+    return <p className="text-[12px] italic text-slate-400">{emptyLabel}</p>;
   }
   return (
     <ul className="space-y-1">
@@ -42,6 +50,8 @@ export function EditableIocList({
           editable={editable}
           onRemove={onRemove}
           onEdit={onEdit}
+          display={display}
+          tooltip={tooltip}
         />
       ))}
     </ul>
@@ -54,17 +64,22 @@ function IocLabel({
   editable,
   onRemove,
   onEdit,
+  display,
+  tooltip,
 }: {
   value: string;
   type: string;
   editable: boolean;
   onRemove: (value: string) => void;
   onEdit: (oldValue: string, newValue: string) => Promise<string | null>;
+  display?: (value: string) => string;
+  tooltip?: (value: string) => string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tip, setTip] = useState<{ top: number; right: number } | null>(null);
 
   async function save() {
     const nv = draft.trim();
@@ -137,9 +152,30 @@ function IocLabel({
 
   return (
     <li className="group flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">
-      <span className="min-w-0 flex-1 break-all font-mono text-[12px] text-slate-700">
-        {value}
+      <span
+        onMouseEnter={
+          tooltip
+            ? (e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setTip({ top: r.bottom + 6, right: window.innerWidth - r.right });
+              }
+            : undefined
+        }
+        onMouseLeave={tooltip ? () => setTip(null) : undefined}
+        className={`min-w-0 flex-1 text-[12px] text-slate-700 ${
+          display ? `break-words ${tooltip ? "cursor-help" : ""}` : "break-all font-mono"
+        }`}
+      >
+        {display ? display(value) : value}
       </span>
+      {tooltip && tip ? (
+        <div
+          className="pointer-events-none fixed z-[70] max-w-xs rounded-md bg-slate-800 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg"
+          style={{ top: tip.top, right: tip.right }}
+        >
+          {tooltip(value)}
+        </div>
+      ) : null}
       {editable ? (
         <>
           <button
