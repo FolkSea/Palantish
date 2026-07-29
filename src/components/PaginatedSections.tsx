@@ -155,37 +155,56 @@ export function ReportsList({ items }: { items: IntelItemRow[] }) {
         <EmptyState>No reports loaded yet.</EmptyState>
       ) : (
         <>
-          <ul className="space-y-2">
-            {p.pageItems.map((r) => (
-              <li key={r.id} className="flex items-start gap-2 text-[12px]">
-                <span className="mt-0.5">
-                  <SourceBadge name={r.source_name} />
-                </span>
-                <span className="flex-1">
-                  <ReportTitle
-                    report={{
-                      title: r.title,
-                      url: r.url,
-                      description: r.description,
-                      sourceName: r.source_name,
-                      date: r.published_at,
-                      confidence: r.confidence,
-                      rawHash: r.raw_hash,
-                    }}
-                  />
-                  {r.description ? (
-                    <span className="block text-slate-500">{r.description}</span>
-                  ) : null}
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-[10px] text-slate-400">
-                    {formatDate(r.published_at)}
-                  </span>
-                  <ItemActions rawHash={r.raw_hash} />
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                  <th className="py-1.5 pr-3 font-medium">Title</th>
+                  <th className="py-1.5 pr-3 font-medium">Date</th>
+                  <th className="py-1.5 font-medium">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {p.pageItems.map((r) => (
+                  <tr key={r.id} className="border-t border-slate-100 align-top">
+                    <td className="py-2 pr-3">
+                      <ReportTitle
+                        report={{
+                          title: r.title,
+                          url: r.url,
+                          description: r.description,
+                          sourceName: r.source_name,
+                          date: r.published_at,
+                          confidence: r.confidence,
+                          rawHash: r.raw_hash,
+                        }}
+                      />
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap text-slate-500">
+                      {formatDate(r.published_at)}
+                    </td>
+                    <td className="py-2 text-slate-600">
+                      {r.description}{" "}
+                      <span className="ml-1 inline-flex items-center gap-2 align-middle">
+                        {r.url ? (
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <SourceBadge name={r.source_name} />
+                          </a>
+                        ) : (
+                          <SourceBadge name={r.source_name} />
+                        )}
+                        <ItemActions rawHash={r.raw_hash} />
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <PaginationFooter {...p} />
         </>
       )}
