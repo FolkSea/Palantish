@@ -80,3 +80,7 @@ on conflict (name) do nothing;
 
 -- Sources without an RSS feed URL are manual (blog URL only).
 update sources set feed_type = 'manual' where feed_url is null;
+
+-- Sophos retired news.sophos.com; its feeds now redirect to a host that hangs
+-- until timeout, so it is disabled until a working feed URL is found.
+update sources set active = false where name = 'Sophos X-Ops';
