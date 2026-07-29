@@ -15,6 +15,13 @@ describe("extractIndicators", () => {
     expect(i.files).toContain("da39a3ee5e6b4b0d3255bfef95601890afd80709");
   });
 
+  it("extracts CVE identifiers (uppercased, deduped)", () => {
+    const i = extractIndicators(
+      "Exploits cve-2026-1234 and CVE-2026-1234; also CVE-2025-98765. Not TCVE-2026-1.",
+    );
+    expect(i.cves.sort()).toEqual(["CVE-2025-98765", "CVE-2026-1234"]);
+  });
+
   it("captures MD5, SHA1 and SHA256 hashes (and only the hash)", () => {
     const md5 = "d41d8cd98f00b204e9800998ecf8427e";
     const sha1 = "da39a3ee5e6b4b0d3255bfef95601890afd80709";
@@ -47,6 +54,7 @@ describe("extractIndicators", () => {
     expect(i.domains).toHaveLength(0);
     expect(i.uris).toHaveLength(0);
     expect(i.files).toHaveLength(0);
+    expect(i.cves).toHaveLength(0);
     expect(i.mitre).toHaveLength(0);
   });
 });

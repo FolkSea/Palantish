@@ -162,7 +162,8 @@ export function ReportModal({
     stored.ips.length +
       stored.domains.length +
       stored.uris.length +
-      stored.files.length >
+      stored.files.length +
+      stored.cves.length >
       0;
   // IOC cards use stored indicators when the report has them, else extracted.
   const indicators: Indicators = hasStoredIocs ? stored! : extracted;
@@ -332,6 +333,10 @@ export function ReportModal({
 
             <CollapsibleCard title="Hashes" count={indicators.files.length}>
               <IocItems items={indicators.files} />
+            </CollapsibleCard>
+
+            <CollapsibleCard title="CVEs" count={indicators.cves.length}>
+              <IocItems items={indicators.cves} />
             </CollapsibleCard>
 
             <CollapsibleCard

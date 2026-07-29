@@ -7,6 +7,7 @@ export type Indicators = {
   domains: string[];
   uris: string[];
   files: string[]; // file hashes (MD5 / SHA1 / SHA256)
+  cves: string[]; // CVE identifiers (CVE-YYYY-NNNN)
   mitre: string[];
 };
 
@@ -21,6 +22,7 @@ const DOMAIN_RE = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi
 const HASH_RE = /\b(?:[a-f0-9]{64}|[a-f0-9]{40}|[a-f0-9]{32})\b/gi;
 const EXT_ONLY_RE = new RegExp(`^(?:${FILE_EXT})$`, "i");
 const MITRE_RE = /\bT\d{4}(?:\.\d{3})?\b/g;
+const CVE_RE = /\bCVE-\d{4}-\d{4,7}\b/gi;
 
 /** Normalise common defanged forms (1.2.3[.]4, hxxp://, example[dot]com). */
 function defang(text: string): string {
@@ -83,12 +85,20 @@ export function extractIndicators(text: string): Indicators {
 
   const files = uniq(matchAll(t, HASH_RE).map((h) => h.toLowerCase()));
 
+  const cves = uniq(matchAll(t, CVE_RE).map((c) => c.toUpperCase()));
+
   const mitre = uniq(matchAll(t, MITRE_RE).map((m) => m.toUpperCase()));
 
-  return { ips, domains, uris, files, mitre };
+  return { ips, domains, uris, files, cves, mitre };
 }
 
 /** Total number of indicators found (for badges / empty-state checks). */
 export function indicatorCount(i: Indicators): number {
-  return i.ips.length + i.domains.length + i.uris.length + i.files.length;
+  return (
+    i.ips.length +
+    i.domains.length +
+    i.uris.length +
+    i.files.length +
+    i.cves.length
+  );
 }

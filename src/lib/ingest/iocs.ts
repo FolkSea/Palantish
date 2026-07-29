@@ -15,6 +15,7 @@ export function indicatorRows(indicators: Indicators): IocRow[] {
     ...indicators.domains.map((value) => ({ value, ioc_type: "domain" })),
     ...indicators.uris.map((value) => ({ value, ioc_type: "uri" })),
     ...indicators.files.map((value) => ({ value, ioc_type: "file_hash" })),
+    ...indicators.cves.map((value) => ({ value, ioc_type: "cve" })),
   ].filter((r) => r.value.trim().length > 0);
 }
 

@@ -331,7 +331,14 @@ async function linkReportIocs(
 export async function getReportIndicatorsAction(
   rawHash: string,
 ): Promise<{ ok: true; indicators: Indicators } | { ok: false; error: string }> {
-  const empty: Indicators = { ips: [], domains: [], uris: [], files: [], mitre: [] };
+  const empty: Indicators = {
+    ips: [],
+    domains: [],
+    uris: [],
+    files: [],
+    cves: [],
+    mitre: [],
+  };
   if (!rawHash) return { ok: true, indicators: empty };
 
   const supabase = await createClient();
@@ -362,12 +369,20 @@ export async function getReportIndicatorsAction(
     .in("id", iocIds);
   if (iocsRes.error) return { ok: false, error: iocsRes.error.message };
 
-  const grouped: Indicators = { ips: [], domains: [], uris: [], files: [], mitre: [] };
+  const grouped: Indicators = {
+    ips: [],
+    domains: [],
+    uris: [],
+    files: [],
+    cves: [],
+    mitre: [],
+  };
   for (const ioc of iocsRes.data ?? []) {
     if (ioc.ioc_type === "ip") grouped.ips.push(ioc.value);
     else if (ioc.ioc_type === "domain") grouped.domains.push(ioc.value);
     else if (ioc.ioc_type === "uri") grouped.uris.push(ioc.value);
     else if (ioc.ioc_type === "file_hash") grouped.files.push(ioc.value);
+    else if (ioc.ioc_type === "cve") grouped.cves.push(ioc.value);
     else if (ioc.ioc_type === "mitre") grouped.mitre.push(ioc.value);
   }
   return { ok: true, indicators: grouped };
