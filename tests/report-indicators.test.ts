@@ -48,6 +48,27 @@ describe("extractIndicators", () => {
     expect(i.ips).not.toContain("999.1.1.1");
   });
 
+  it("excludes benign web/social domains and the given source domains", () => {
+    const text =
+      "Follow us on twitter.com. Reported by securelist.com. " +
+      "C2 at updates.malwarehost.net and cdn.securelist.com/x.";
+    const i = extractIndicators(text, ["securelist.com"]);
+    expect(i.domains).toContain("updates.malwarehost.net");
+    expect(i.domains).not.toContain("twitter.com");
+    expect(i.domains).not.toContain("securelist.com");
+    // subdomains of an excluded domain are excluded too
+    expect(i.domains).not.toContain("cdn.securelist.com");
+  });
+
+  it("drops URIs hosted on an excluded/benign domain", () => {
+    const i = extractIndicators(
+      "share https://twitter.com/intent/tweet and payload https://evil.example.com/a",
+      ["blog.example.org"],
+    );
+    expect(i.uris).toContain("https://evil.example.com/a");
+    expect(i.uris.some((u) => u.includes("twitter.com"))).toBe(false);
+  });
+
   it("returns empty sets when nothing is present", () => {
     const i = extractIndicators("A generic advisory with no indicators.");
     expect(i.ips).toHaveLength(0);

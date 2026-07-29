@@ -15,7 +15,7 @@ import { updateFeedHealth } from "./feed-health";
 import { ilog } from "./log";
 import { fetchArticleText } from "./scrape";
 import { indicatorRows, linkIocsToItem } from "./iocs";
-import { extractIndicators } from "@/lib/report-indicators";
+import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
 import type { EnrichReport } from "./enrich/hybrid";
 import type { EnrichedItem } from "./types";
@@ -83,7 +83,10 @@ export async function runIngest(): Promise<IngestResult> {
     // Reference data ---------------------------------------------------------
     const [{ data: sources }, { data: actors }, { data: adversaries }] =
       await Promise.all([
-        db.from("sources").select("id, name, feed_url, category").eq("active", true),
+        db
+          .from("sources")
+          .select("id, name, url, feed_url, category")
+          .eq("active", true),
         db.from("actors").select("id, nexus"),
         db
           .from("adversaries")
@@ -287,14 +290,26 @@ export async function runIngest(): Promise<IngestResult> {
     // concurrency; per-item failures are non-fatal (the report just has no IOCs).
     const withUrl = insertedIntel.filter((i) => i.url);
     if (withUrl.length > 0) {
+      // Known blog/source domains, so a source's own domain is never an IOC.
+      const sourceDomains = new Set<string>();
+      for (const s of sources ?? []) {
+        for (const d of [sourceDomain(s.url), sourceDomain(s.feed_url)]) {
+          if (d) sourceDomains.add(d);
+        }
+      }
       ilog(`extracting IOCs for ${withUrl.length} new reports...`);
       let iocLinks = 0;
       let iocFailed = 0;
       await mapWithConcurrency(withUrl, 4, async (item) => {
         try {
           const body = await fetchArticleText(item.url as string);
+          // Exclude the whole source catalogue plus this report's own domain.
+          const exclude = new Set(sourceDomains);
+          const own = sourceDomain(item.url);
+          if (own) exclude.add(own);
           const indicators = extractIndicators(
             `${item.title} ${item.description ?? ""} ${body}`,
+            exclude,
           );
           const rows = indicatorRows(indicators);
           if (rows.length > 0) iocLinks += await linkIocsToItem(db, item.id, rows);

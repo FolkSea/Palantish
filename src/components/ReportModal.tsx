@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   extractIndicators,
   indicatorCount,
+  sourceDomain,
   type Indicators,
 } from "@/lib/report-indicators";
 import {
@@ -149,13 +150,13 @@ export function ReportModal({
     };
   }, [rawHash]);
 
-  const extracted = useMemo(
-    () =>
-      extractIndicators(
-        `${report.title} ${report.description ?? ""} ${detailsText}`,
-      ),
-    [report.title, report.description, detailsText],
-  );
+  const extracted = useMemo(() => {
+    const own = sourceDomain(report.url);
+    return extractIndicators(
+      `${report.title} ${report.description ?? ""} ${detailsText}`,
+      own ? [own] : undefined,
+    );
+  }, [report.title, report.description, report.url, detailsText]);
 
   const hasStoredIocs =
     !!stored &&

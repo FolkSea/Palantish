@@ -69,10 +69,61 @@ function hostOf(uri: string): string {
   }
 }
 
-export function extractIndicators(text: string): Indicators {
+// Web/social/blog-chrome domains that appear on report pages but are never the
+// reported infrastructure. The report's own source domain is excluded too (see
+// the excludeDomains argument), so a blog's own domain is not treated as an IOC.
+const BENIGN_DOMAINS = new Set<string>([
+  "twitter.com", "x.com", "linkedin.com", "facebook.com", "fb.com",
+  "instagram.com", "youtube.com", "youtu.be", "reddit.com", "pinterest.com",
+  "tiktok.com", "flipboard.com", "whatsapp.com",
+  "w3.org", "schema.org", "creativecommons.org", "gravatar.com", "gmpg.org",
+  "google-analytics.com", "googletagmanager.com", "doubleclick.net", "feedburner.com",
+]);
+
+/** The www-stripped hostname of a URL, for building the exclusion set. */
+export function sourceDomain(url: string | null | undefined): string {
+  if (!url) return "";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/** True if `domain` equals, or is a subdomain of, any domain in `excluded`. */
+function isExcludedDomain(domain: string, excluded: Set<string>): boolean {
+  let d = domain;
+  for (;;) {
+    if (excluded.has(d)) return true;
+    const dot = d.indexOf(".");
+    if (dot < 0) return false;
+    d = d.slice(dot + 1);
+  }
+}
+
+/**
+ * Extract indicators from text. `excludeDomains` (plus a built-in benign list)
+ * are dropped from the domain and URI results - pass the report's own source
+ * domain and the known blog/source domains so site chrome is not mistaken for
+ * an IOC.
+ */
+export function extractIndicators(
+  text: string,
+  excludeDomains?: Iterable<string>,
+): Indicators {
   const t = defang(text ?? "");
 
-  const uris = uniq(matchAll(t, URI_RE));
+  const excluded = new Set<string>(BENIGN_DOMAINS);
+  if (excludeDomains) {
+    for (const d of excludeDomains) {
+      const v = d.toLowerCase().trim();
+      if (v) excluded.add(v);
+    }
+  }
+
+  const uris = uniq(matchAll(t, URI_RE)).filter(
+    (u) => !isExcludedDomain(hostOf(u), excluded),
+  );
   const ips = uniq(matchAll(t, IPV4_RE).filter(validIpv4));
   const ipSet = new Set(ips);
   const uriHosts = new Set(uris.map(hostOf));
@@ -80,7 +131,13 @@ export function extractIndicators(text: string): Indicators {
   const domains = uniq(
     matchAll(t, DOMAIN_RE)
       .map((d) => d.toLowerCase())
-      .filter((d) => !ipSet.has(d) && !isFileExt(d) && !uriHosts.has(d)),
+      .filter(
+        (d) =>
+          !ipSet.has(d) &&
+          !isFileExt(d) &&
+          !uriHosts.has(d) &&
+          !isExcludedDomain(d, excluded),
+      ),
   );
 
   const files = uniq(matchAll(t, HASH_RE).map((h) => h.toLowerCase()));
