@@ -69,7 +69,7 @@ insert into sources (name, url, category, feed_url) values
   ('Mandiant',                'https://cloud.google.com/blog/topics/threat-intelligence', 'research', 'https://cloudblog.withgoogle.com/topics/threat-intelligence/rss/'),
   ('Schneier on Security',    'https://www.schneier.com/',                       'news',       'https://www.schneier.com/feed/atom/'),
   ('SecurityWeek',            'https://www.securityweek.com/',                   'news',       'https://www.securityweek.com/feed/'),
-  ('Sophos X-Ops',            'https://news.sophos.com/en-us/category/threat-research/', 'research', 'https://news.sophos.com/en-us/category/threat-research/feed/'),
+  ('Zscaler ThreatLabz',      'https://www.zscaler.com/blogs?type=security-research', 'research', 'https://www.zscaler.com/blogs/feeds/security-research'),
   ('Trend Micro Research',    'https://www.trendmicro.com/en_us/research.html',  'research',   'https://feeds.feedburner.com/TrendMicroSimplySecurity'),
   ('Elastic Security Labs',   'https://www.elastic.co/security-labs',            'research',   'https://www.elastic.co/security-labs/rss/feed.xml'),
   ('Qualys Security Blog',    'https://blog.qualys.com/',                        'research',   'https://blog.qualys.com/feed'),
@@ -80,7 +80,3 @@ on conflict (name) do nothing;
 
 -- Sources without an RSS feed URL are manual (blog URL only).
 update sources set feed_type = 'manual' where feed_url is null;
-
--- Sophos retired news.sophos.com; its feeds now redirect to a host that hangs
--- until timeout, so it is disabled until a working feed URL is found.
-update sources set active = false where name = 'Sophos X-Ops';
