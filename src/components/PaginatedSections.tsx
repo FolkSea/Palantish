@@ -96,7 +96,7 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
             <table className="w-full border-collapse text-[12px]">
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
-                  <th className="py-1.5 pr-3 font-medium">Organisation</th>
+                  <th className="py-1.5 pr-3 font-medium">Title</th>
                   <th className="py-1.5 pr-3 font-medium">Date</th>
                   <th className="py-1.5 font-medium">What happened</th>
                 </tr>
@@ -104,8 +104,16 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
               <tbody>
                 {p.pageItems.map((b) => (
                   <tr key={b.id} className="border-t border-slate-100 align-top">
-                    <td className="py-2 pr-3 font-medium text-slate-900">
-                      {b.org_name}
+                    <td className="py-2 pr-3">
+                      <ReportTitle
+                        report={{
+                          title: b.org_name,
+                          url: b.url,
+                          description: b.summary,
+                          sourceName: b.source_name,
+                          date: b.event_date,
+                        }}
+                      />
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap text-slate-500">
                       {b.event_date_label ?? formatDate(b.event_date)}
