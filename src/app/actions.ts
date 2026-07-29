@@ -17,6 +17,7 @@ import {
 } from "@/lib/ingest/scrape";
 import { isThreatIntel } from "@/lib/relevance";
 import { normalizeIndicator, type Indicators } from "@/lib/report-indicators";
+import { indicatorRows, linkIocsToItem, type IocRow } from "@/lib/ingest/iocs";
 import { discoverTechniques } from "@/lib/mitre/discover";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 
@@ -291,23 +292,15 @@ export async function persistReportIndicatorsAction(
   const unauth = await ensureAllowed();
   if (unauth) return { ok: false, error: unauth };
 
-  const rows: IocRow[] = [
-    ...indicators.ips.map((value) => ({ value, ioc_type: "ip" })),
-    ...indicators.domains.map((value) => ({ value, ioc_type: "domain" })),
-    ...indicators.uris.map((value) => ({ value, ioc_type: "uri" })),
-    ...indicators.files.map((value) => ({ value, ioc_type: "file_hash" })),
-  ].filter((r) => r.value.trim().length > 0);
+  const rows = indicatorRows(indicators);
   if (rows.length === 0) return { ok: true, linked: 0 };
 
   return linkReportIocs(rawHash, rows);
 }
 
-type IocRow = { value: string; ioc_type: string };
-
 /**
- * Upsert IOC rows (deduped by value) and link them to a report. onConflict does
- * not touch `comment`, so a value that already exists keeps any comment set on
- * it. Shared by indicator persistence and MITRE discovery.
+ * Look up an intel item by raw_hash and link the given IOC rows to it. Shared by
+ * indicator persistence and MITRE discovery.
  */
 async function linkReportIocs(
   rawHash: string,
@@ -321,24 +314,13 @@ async function linkReportIocs(
     .eq("raw_hash", rawHash)
     .maybeSingle();
   if (!item.data) return { ok: false, error: "Report not found." };
-  const intelItemId = item.data.id;
 
-  const upserted = await db
-    .from("iocs")
-    .upsert(rows, { onConflict: "value" })
-    .select("id, value");
-  if (upserted.error) return { ok: false, error: upserted.error.message };
-
-  const links = (upserted.data ?? []).map((ioc) => ({
-    intel_item_id: intelItemId,
-    ioc_id: ioc.id,
-  }));
-  const { error: linkErr } = await db
-    .from("intel_item_iocs")
-    .upsert(links, { onConflict: "intel_item_id,ioc_id", ignoreDuplicates: true });
-  if (linkErr) return { ok: false, error: linkErr.message };
-
-  return { ok: true, linked: links.length };
+  try {
+    const linked = await linkIocsToItem(db, item.data.id, rows);
+    return { ok: true, linked };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Link failed." };
+  }
 }
 
 /**

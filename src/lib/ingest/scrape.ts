@@ -347,3 +347,13 @@ export async function fetchArticleView(rawUrl: string): Promise<ArticleView> {
     text: articleParagraphs(html),
   };
 }
+
+/**
+ * Fetch a report URL and return just its article body as paragraph-broken text,
+ * for server-side IOC extraction during ingest. Throws on fetch / non-HTML
+ * failures so the caller can treat it as a report with no IOCs.
+ */
+export async function fetchArticleText(rawUrl: string): Promise<string> {
+  const { html } = await fetchPage(rawUrl);
+  return articleParagraphs(html);
+}

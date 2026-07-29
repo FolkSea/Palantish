@@ -13,6 +13,9 @@ import {
 } from "./enrich/rules";
 import { updateFeedHealth } from "./feed-health";
 import { ilog } from "./log";
+import { fetchArticleText } from "./scrape";
+import { indicatorRows, linkIocsToItem } from "./iocs";
+import { extractIndicators } from "@/lib/report-indicators";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
 import type { EnrichReport } from "./enrich/hybrid";
 import type { EnrichedItem } from "./types";
@@ -241,13 +244,23 @@ export async function runIngest(): Promise<IngestResult> {
       `inserting: ${intelRows.length} intel, ${vulnRows.length} vuln, ${breachRows.length} breach`,
     );
     let added = 0;
+    // Newly-inserted reports, for IOC extraction below.
+    let insertedIntel: {
+      id: string;
+      url: string | null;
+      title: string;
+      description: string | null;
+    }[] = [];
     if (intelRows.length > 0) {
       const { data, error } = await db
         .from("intel_items")
         .upsert(intelRows, { onConflict: "raw_hash", ignoreDuplicates: true })
-        .select("id");
+        .select("id, url, title, description");
       if (error) errors.push(`intel_items insert: ${error.message}`);
-      else added += data?.length ?? 0;
+      else {
+        insertedIntel = data ?? [];
+        added += insertedIntel.length;
+      }
     }
     if (vulnRows.length > 0) {
       const { data, error } = await db
@@ -267,6 +280,32 @@ export async function runIngest(): Promise<IngestResult> {
     }
 
     ilog(`inserted ${added} new items`);
+
+    // Populate IOCs for the new reports: fetch each article body, extract
+    // indicators (IP / domain / URI / file hash), and link them so they are
+    // stored and searchable without anyone opening the report. Bounded
+    // concurrency; per-item failures are non-fatal (the report just has no IOCs).
+    const withUrl = insertedIntel.filter((i) => i.url);
+    if (withUrl.length > 0) {
+      ilog(`extracting IOCs for ${withUrl.length} new reports...`);
+      let iocLinks = 0;
+      let iocFailed = 0;
+      await mapWithConcurrency(withUrl, 4, async (item) => {
+        try {
+          const body = await fetchArticleText(item.url as string);
+          const indicators = extractIndicators(
+            `${item.title} ${item.description ?? ""} ${body}`,
+          );
+          const rows = indicatorRows(indicators);
+          if (rows.length > 0) iocLinks += await linkIocsToItem(db, item.id, rows);
+        } catch {
+          iocFailed++;
+        }
+      });
+      ilog(
+        `IOC extraction done: ${iocLinks} links across ${withUrl.length} reports (${iocFailed} fetch failures)`,
+      );
+    }
 
     // Keep-most-recent behaviour: mark actors quiet when they have no items in
     // the 30-day window, active otherwise. Existing rows are never deleted.
