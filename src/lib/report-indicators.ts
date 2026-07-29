@@ -72,13 +72,34 @@ function hostOf(uri: string): string {
 // Web/social/blog-chrome domains that appear on report pages but are never the
 // reported infrastructure. The report's own source domain is excluded too (see
 // the excludeDomains argument), so a blog's own domain is not treated as an IOC.
-const BENIGN_DOMAINS = new Set<string>([
+const BENIGN_DOMAINS = [
   "twitter.com", "x.com", "linkedin.com", "facebook.com", "fb.com",
   "instagram.com", "youtube.com", "youtu.be", "reddit.com", "pinterest.com",
   "tiktok.com", "flipboard.com", "whatsapp.com",
   "w3.org", "schema.org", "creativecommons.org", "gravatar.com", "gmpg.org",
   "google-analytics.com", "googletagmanager.com", "doubleclick.net", "feedburner.com",
-]);
+];
+
+// Registrar / managed-DNS nameserver / domain-parking hosts that turn up in IOC
+// appendices (registrar of record, nameservers, WHOIS/abuse contacts) but are
+// infrastructure, not the reported IOC. Nameserver zones (e.g. ns.cloudflare.com)
+// are listed rather than the parent so real domains on the same provider survive.
+const INFRA_DOMAINS = [
+  // registrars
+  "publicdomainregistry.com", "godaddy.com", "namecheap.com", "namesilo.com",
+  "name.com", "enom.com", "tucows.com", "gandi.net", "ovh.com", "ovh.net",
+  "dynadot.com", "porkbun.com", "networksolutions.com", "register.com",
+  "namebright.com", "internetbs.net", "nicenic.net", "regery.com",
+  "hostinger.com", "ionos.com", "west.cn", "22.cn", "eranet.com",
+  // managed-DNS nameserver zones
+  "ns.cloudflare.com", "domaincontrol.com", "registrar-servers.com",
+  "azure-dns.com", "azure-dns.net", "azure-dns.org", "azure-dns.info",
+  "googledomains.com", "dnsmadeeasy.com", "nsone.net", "dnspod.net",
+  // domain parking
+  "sedoparking.com", "bodis.com", "afternic.com", "parkingcrew.net", "above.com",
+];
+
+const STATIC_EXCLUDED = new Set<string>([...BENIGN_DOMAINS, ...INFRA_DOMAINS]);
 
 /** The www-stripped hostname of a URL, for building the exclusion set. */
 export function sourceDomain(url: string | null | undefined): string {
@@ -102,6 +123,27 @@ function isExcludedDomain(domain: string, excluded: Set<string>): boolean {
 }
 
 /**
+ * Whether a domain should be dropped as non-IOC: the built-in benign / registrar
+ * / DNS-infrastructure list, plus any `extra` domains (e.g. the report's source
+ * domain and the known blog catalogue). Exported for the IOC-domain backfill.
+ */
+export function shouldExcludeDomain(
+  domain: string,
+  extra?: Iterable<string>,
+): boolean {
+  if (!domain) return false;
+  let excluded = STATIC_EXCLUDED;
+  if (extra) {
+    excluded = new Set(STATIC_EXCLUDED);
+    for (const d of extra) {
+      const v = d.toLowerCase().trim();
+      if (v) excluded.add(v);
+    }
+  }
+  return isExcludedDomain(domain.toLowerCase(), excluded);
+}
+
+/**
  * Extract indicators from text. `excludeDomains` (plus a built-in benign list)
  * are dropped from the domain and URI results - pass the report's own source
  * domain and the known blog/source domains so site chrome is not mistaken for
@@ -113,7 +155,7 @@ export function extractIndicators(
 ): Indicators {
   const t = defang(text ?? "");
 
-  const excluded = new Set<string>(BENIGN_DOMAINS);
+  const excluded = new Set<string>(STATIC_EXCLUDED);
   if (excludeDomains) {
     for (const d of excludeDomains) {
       const v = d.toLowerCase().trim();
