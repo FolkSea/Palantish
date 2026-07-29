@@ -1,4 +1,5 @@
 import CompiledTime from "./CompiledTime";
+import { SummaryText } from "./SummaryText";
 import type { ExecutiveSummary as Summary } from "@/lib/data";
 
 export function ExecutiveSummaryPanel({
@@ -24,11 +25,7 @@ export function ExecutiveSummaryPanel({
       </div>
 
       {summary ? (
-        <div className="mt-2 space-y-2 text-[13px] leading-relaxed text-slate-700">
-          {summary.summary.split(/\n{2,}/).map((para, i) => (
-            <p key={i}>{para}</p>
-          ))}
-        </div>
+        <SummaryText text={summary.summary} citations={summary.citations} />
       ) : (
         <p className="mt-2 text-[12px] text-slate-400">
           No summary yet. It is generated on each ingest run (set

@@ -49,11 +49,22 @@ export type VulnTimelinePoint = {
   url: string | null;
 };
 
+export type SummaryCitation = {
+  id: number;
+  title: string;
+  url: string | null;
+  description: string | null;
+  sourceName: string | null;
+  date: string | null;
+  rawHash: string | null;
+};
+
 export type ExecutiveSummary = {
   summary: string;
   source: string;
   model: string | null;
   generatedAt: string;
+  citations: SummaryCitation[];
 };
 
 export type StaleFeed = {
@@ -165,7 +176,7 @@ export async function loadDashboard(): Promise<DashboardData> {
       .eq("nexus", "other"),
     supabase
       .from("executive_summaries")
-      .select("summary, source, model, generated_at")
+      .select("summary, source, model, generated_at, citations")
       .order("generated_at", { ascending: false })
       .limit(1),
     // Active feeds whose newest item is older than 30 days (or never seen).
@@ -229,6 +240,9 @@ export async function loadDashboard(): Promise<DashboardData> {
         source: summaryRow.source,
         model: summaryRow.model,
         generatedAt: summaryRow.generated_at,
+        citations: Array.isArray(summaryRow.citations)
+          ? (summaryRow.citations as unknown as SummaryCitation[])
+          : [],
       }
     : null;
 

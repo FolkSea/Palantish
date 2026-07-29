@@ -18,11 +18,25 @@ export type NotableItem = {
   cs: string | null;
 };
 
+/** A report / vuln / breach the summary may reference, with the fields the
+ * report modal needs. `id` is the citation number used in the prose. */
+export type LinkableItem = {
+  id: number;
+  kind: "report" | "vuln" | "breach";
+  title: string;
+  url: string | null;
+  description: string | null;
+  sourceName: string | null;
+  date: string | null;
+  rawHash: string | null;
+};
+
 export type Aggregates = {
   last24h: WindowCounts;
   last7d: WindowCounts;
   vuln7d: { confirmed: number; poc: number; suspected: number };
   notable: NotableItem[];
+  linkables: LinkableItem[];
 };
 
 function isoDaysAgo(days: number): string {
@@ -48,11 +62,21 @@ export async function computeAggregates(db: Db): Promise<Aggregates> {
       db.from("actors").select("id, nexus, display_name"),
       db
         .from("intel_items")
-        .select("title, item_type, actor_id, crowdstrike_adversary, published_at")
+        .select(
+          "title, item_type, actor_id, crowdstrike_adversary, published_at, url, description, source_name, raw_hash",
+        )
         .gte("published_at", cut7)
         .order("published_at", { ascending: false }),
-      db.from("vulnerabilities").select("status, added_at").gte("added_at", cut7),
-      db.from("breaches").select("event_date").gte("event_date", cut7),
+      db
+        .from("vulnerabilities")
+        .select("status, added_at, cve_id, target, detail, url, source_name, raw_hash")
+        .gte("added_at", cut7)
+        .order("added_at", { ascending: false }),
+      db
+        .from("breaches")
+        .select("event_date, org_name, summary, url, source_name, raw_hash")
+        .gte("event_date", cut7)
+        .order("event_date", { ascending: false }),
     ]);
 
   const nexusById = new Map(
@@ -113,5 +137,50 @@ export async function computeAggregates(db: Db): Promise<Aggregates> {
     };
   });
 
-  return { last24h: w24, last7d: w7, vuln7d, notable };
+  // Linkable items the summary can cite: recent reports, plus vulns (deduped by
+  // CVE) and breaches. Sequential ids become the "[n]" markers in the prose.
+  const linkables: LinkableItem[] = [];
+  let id = 1;
+  for (const i of (intel ?? []).slice(0, 14)) {
+    linkables.push({
+      id: id++,
+      kind: "report",
+      title: i.title,
+      url: i.url,
+      description: i.description,
+      sourceName: i.source_name,
+      date: i.published_at,
+      rawHash: i.raw_hash,
+    });
+  }
+  const seenCve = new Set<string>();
+  for (const v of vulns ?? []) {
+    if (seenCve.has(v.cve_id)) continue;
+    seenCve.add(v.cve_id);
+    if (linkables.filter((l) => l.kind === "vuln").length >= 10) break;
+    linkables.push({
+      id: id++,
+      kind: "vuln",
+      title: v.target ? `${v.cve_id} - ${v.target}` : v.cve_id,
+      url: v.url,
+      description: v.detail,
+      sourceName: v.source_name,
+      date: v.added_at,
+      rawHash: v.raw_hash,
+    });
+  }
+  for (const b of (breaches ?? []).slice(0, 8)) {
+    linkables.push({
+      id: id++,
+      kind: "breach",
+      title: b.org_name,
+      url: b.url,
+      description: b.summary,
+      sourceName: b.source_name,
+      date: b.event_date,
+      rawHash: b.raw_hash,
+    });
+  }
+
+  return { last24h: w24, last7d: w7, vuln7d, notable, linkables };
 }

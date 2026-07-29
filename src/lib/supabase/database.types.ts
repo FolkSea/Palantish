@@ -251,6 +251,7 @@ export type Database = {
       }
       executive_summaries: {
         Row: {
+          citations: Json | null
           created_at: string
           generated_at: string
           id: string
@@ -260,6 +261,7 @@ export type Database = {
           window_note: string | null
         }
         Insert: {
+          citations?: Json | null
           created_at?: string
           generated_at?: string
           id?: string
@@ -269,6 +271,7 @@ export type Database = {
           window_note?: string | null
         }
         Update: {
+          citations?: Json | null
           created_at?: string
           generated_at?: string
           id?: string
