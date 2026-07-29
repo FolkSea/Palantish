@@ -11,6 +11,11 @@ import type { GroupEntry } from "./rules";
 // so this defaults to a small fast model. Override with ANTHROPIC_MODEL.
 const DEFAULT_MODEL = "claude-haiku-4-5";
 
+// Per-classification timeout. Without it the SDK waits up to 10 minutes and
+// retries, so one slow call stalls a whole worker; on timeout we fall back to
+// the fast rules classifier instead. Override with INGEST_LLM_TIMEOUT_MS.
+const REQUEST_TIMEOUT_MS = Number(process.env.INGEST_LLM_TIMEOUT_MS) || 20000;
+
 const NEXUS_VALUES: Nexus[] = [
   "china",
   "russia",
@@ -72,7 +77,11 @@ export class LlmEnricher implements Enricher {
   private fallback: RulesEnricher;
 
   constructor(apiKey: string, extraGroups: GroupEntry[] = []) {
-    this.client = new Anthropic({ apiKey });
+    this.client = new Anthropic({
+      apiKey,
+      timeout: REQUEST_TIMEOUT_MS,
+      maxRetries: 1,
+    });
     this.model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
     this.fallback = new RulesEnricher(extraGroups);
   }
