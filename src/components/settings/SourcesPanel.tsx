@@ -24,10 +24,8 @@ const SELECTABLE_TYPES: FeedType[] = ["rss", "manual"];
 const inputCls =
   "w-full rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-[12px] text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
 
-function byCategoryThenName(a: SettingsSource, b: SettingsSource) {
-  return (
-    a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
-  );
+function byName(a: SettingsSource, b: SettingsSource) {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
 export function SourcesPanel({
@@ -45,7 +43,7 @@ export function SourcesPanel({
       const next = prev.some((x) => x.id === s.id)
         ? prev.map((x) => (x.id === s.id ? s : x))
         : [...prev, s];
-      return next.sort(byCategoryThenName);
+      return next.sort(byName);
     });
   }
 
