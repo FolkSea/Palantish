@@ -8,7 +8,6 @@ import {
   SourceBadge,
   VulnStatusBadge,
 } from "@/components/Badges";
-import { ExtLink } from "@/components/ExtLink";
 import { ReportTitle } from "@/components/ReportModal";
 import { usePaginated, PaginationFooter } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
@@ -50,7 +49,15 @@ export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
                       <PriorityBadge value={v.priority} />
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap">
-                      <ExtLink href={v.url}>{v.cve_id}</ExtLink>
+                      <ReportTitle
+                        report={{
+                          title: v.cve_id,
+                          url: v.url,
+                          description: v.detail,
+                          sourceName: v.source_name,
+                          date: v.added_at,
+                        }}
+                      />
                     </td>
                     <td className="py-2 pr-3 text-slate-700">{v.target}</td>
                     <td className="py-2 pr-3">
