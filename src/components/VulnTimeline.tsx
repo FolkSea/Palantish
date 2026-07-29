@@ -10,10 +10,11 @@ const STATUS_LABEL: Record<VulnTimelinePoint["status"], string> = {
   suspected: "Suspected",
 };
 
-const CATEGORIES = ["Confirmed", "PoC", "Suspected"];
+// PoC first so it sits at the top of the chart (most critical), in red.
+const CATEGORIES = ["PoC", "Confirmed", "Suspected"];
 const COLORS: Record<string, string> = {
+  PoC: "#dc2626",
   Confirmed: "#059669",
-  PoC: "#0284c7",
   Suspected: "#d97706",
 };
 
