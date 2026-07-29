@@ -39,10 +39,20 @@ function LoginForm() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-[#f5f6f8] px-4">
       <div className="w-full max-w-sm rounded-[10px] border border-[#e5e7eb] bg-white p-6 shadow-sm">
-        <h1 className="text-[15px] font-semibold text-slate-900">
-          Nation-State Cyber Intelligence Dashboard
-        </h1>
-        <p className="mt-1 text-[12px] text-slate-500">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#1877F2] text-[20px] font-bold leading-none text-white">
+            i
+          </span>
+          <div>
+            <h1 className="text-[18px] font-bold leading-none tracking-tight text-[#1877F2]">
+              IntelBook
+            </h1>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              Consolidated Cybersecurity Intelligence Feeds
+            </p>
+          </div>
+        </div>
+        <p className="mt-3 text-[12px] text-slate-500">
           Restricted access. Sign in with an allow-listed email.
         </p>
 

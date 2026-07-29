@@ -8,7 +8,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Nation-State Cyber Intelligence Dashboard",
+  title: "IntelBook",
   description:
     "Authenticated intelligence dashboard tracking nation-state cyber activity, exploited vulnerabilities, breaches, and vendor reporting.",
 };
