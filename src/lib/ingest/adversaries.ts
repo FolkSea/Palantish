@@ -1,4 +1,5 @@
 import type { Nexus } from "@/lib/badges";
+import type { Motivation } from "@/lib/actor-catalogue";
 import type { GroupEntry } from "./enrich/rules";
 
 /**
@@ -27,6 +28,49 @@ const ANIMAL_NEXUS: Record<string, Nexus> = {
 // Every other animal (TIGER, WOLF, BUFFALO, SPHINX, ...) is a state-sponsored
 // adversary from a country outside the big four -> "rest_of_world".
 const NON_STATE_ANIMALS = new Set(["SPIDER", "JACKAL"]);
+
+// Animal cryptonym -> motivation + country. Replaces the old actor_families
+// table; used when loading adversaries so each carries its own classification.
+const ANIMAL_FAMILY: Record<string, { motivation: Motivation; country: string | null }> = {
+  PANDA: { motivation: "nation_state", country: "China" },
+  BEAR: { motivation: "nation_state", country: "Russia" },
+  CHOLLIMA: { motivation: "nation_state", country: "North Korea" },
+  KITTEN: { motivation: "nation_state", country: "Iran" },
+  TIGER: { motivation: "nation_state", country: "India" },
+  WOLF: { motivation: "nation_state", country: "Turkey" },
+  BUFFALO: { motivation: "nation_state", country: "Vietnam" },
+  LEOPARD: { motivation: "nation_state", country: "Pakistan" },
+  BAT: { motivation: "nation_state", country: null },
+  SPIDER: { motivation: "ecrime", country: null },
+  JACKAL: { motivation: "hacktivism", country: null },
+};
+
+// Country name for the four tracked nexuses (fallback when the animal is not in
+// the family table above).
+const NEXUS_COUNTRY: Partial<Record<Nexus, string>> = {
+  china: "China",
+  russia: "Russia",
+  north_korea: "North Korea",
+  iran: "Iran",
+};
+
+/** Derive an actor's motivation from its animal, nexus, or legacy motivation. */
+export function deriveMotivation(a: AdversaryRecord): Motivation {
+  const animal = a.animal_classifier?.toUpperCase();
+  if (animal && ANIMAL_FAMILY[animal]) return ANIMAL_FAMILY[animal].motivation;
+  const nexus = deriveNexus(a);
+  if (nexus !== "other") return "nation_state";
+  const legacy = (a.motivation ?? []).map((m) => m.toLowerCase());
+  if (legacy.includes("hacktivism")) return "hacktivism";
+  return "ecrime";
+}
+
+/** Derive an actor's country (nation-state only), else null. */
+export function deriveCountry(a: AdversaryRecord): string | null {
+  const animal = a.animal_classifier?.toUpperCase();
+  if (animal && ANIMAL_FAMILY[animal]) return ANIMAL_FAMILY[animal].country;
+  return NEXUS_COUNTRY[deriveNexus(a)] ?? null;
+}
 
 const DESC_NEXUS: Array<[RegExp, Nexus]> = [
   [/\b(north korea|dprk)[ -]?nexus/i, "north_korea"],

@@ -6,13 +6,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailAllowed } from "@/lib/env";
 import { toAscii } from "@/lib/text";
 import {
-  FAMILY_FOCI,
+  MOTIVATIONS,
   type ActorInput,
   type ActorRecord,
   type ActorResult,
-  type FamilyInput,
-  type FamilyRecord,
-  type FamilyResult,
+  type Motivation,
 } from "@/lib/actor-catalogue";
 
 async function requireAllowed(): Promise<string | null> {
@@ -34,13 +32,21 @@ function toList(csv: string): string[] {
 /* --- Actors (adversaries catalogue) --------------------------------------- */
 
 const ACTOR_SELECT =
-  "id, name, animal_classifier, motivation, community_identifiers, description";
+  "id, name, animal_classifier, motivation, country, community_identifiers, description";
 
 function actorRow(input: ActorInput) {
+  const motivation = MOTIVATIONS.includes(input.motivation as Motivation)
+    ? (input.motivation as Motivation)
+    : "nation_state";
   return {
     name: toAscii(input.name).trim(),
     animal_classifier: toAscii(input.animalClassifier).trim() || null,
-    motivation: toList(input.motivation),
+    motivation: [motivation],
+    // Country only applies to nation-state actors.
+    country:
+      motivation === "nation_state"
+        ? toAscii(input.country).trim() || null
+        : null,
     community_identifiers: toList(input.aliases),
     description: toAscii(input.description).trim() || null,
   };
@@ -91,79 +97,6 @@ export async function deleteActor(
   if (unauth) return { ok: false, error: unauth };
   const db = createAdminClient();
   const { error } = await db.from("adversaries").delete().eq("id", id);
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/settings");
-  return { ok: true };
-}
-
-/* --- Actor families (animal -> focus / country) --------------------------- */
-
-function familyRow(input: FamilyInput) {
-  return {
-    animal: toAscii(input.animal).trim(),
-    focus: input.focus,
-    country: toAscii(input.country).trim() || null,
-  };
-}
-
-function cleanFamily(input: FamilyInput): string | null {
-  if (!toAscii(input.animal).trim()) return "Animal is required.";
-  if (!FAMILY_FOCI.includes(input.focus)) return "Invalid focus.";
-  return null;
-}
-
-export async function addFamily(input: FamilyInput): Promise<FamilyResult> {
-  const unauth = await requireAllowed();
-  if (unauth) return { ok: false, error: unauth };
-  const invalid = cleanFamily(input);
-  if (invalid) return { ok: false, error: invalid };
-
-  const db = createAdminClient();
-  const { data, error } = await db
-    .from("actor_families")
-    .insert(familyRow(input))
-    .select("id, animal, focus, country")
-    .single();
-  if (error) {
-    return {
-      ok: false,
-      error: error.message.includes("duplicate")
-        ? "That animal already has a family."
-        : error.message,
-    };
-  }
-  revalidatePath("/settings");
-  return { ok: true, family: data as FamilyRecord };
-}
-
-export async function updateFamily(
-  id: string,
-  input: FamilyInput,
-): Promise<FamilyResult> {
-  const unauth = await requireAllowed();
-  if (unauth) return { ok: false, error: unauth };
-  const invalid = cleanFamily(input);
-  if (invalid) return { ok: false, error: invalid };
-
-  const db = createAdminClient();
-  const { data, error } = await db
-    .from("actor_families")
-    .update(familyRow(input))
-    .eq("id", id)
-    .select("id, animal, focus, country")
-    .single();
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/settings");
-  return { ok: true, family: data as FamilyRecord };
-}
-
-export async function deleteFamily(
-  id: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const unauth = await requireAllowed();
-  if (unauth) return { ok: false, error: unauth };
-  const db = createAdminClient();
-  const { error } = await db.from("actor_families").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/settings");
   return { ok: true };

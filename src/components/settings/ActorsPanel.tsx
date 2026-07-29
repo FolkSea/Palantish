@@ -6,13 +6,27 @@ import {
   updateActor,
   deleteActor,
 } from "@/app/settings/catalogue-actions";
-import { MOTIVATIONS, type ActorRecord, type ActorInput } from "@/lib/actor-catalogue";
+import {
+  MOTIVATIONS,
+  MOTIVATION_LABEL,
+  type ActorRecord,
+  type ActorInput,
+  type Motivation,
+} from "@/lib/actor-catalogue";
 import { RowMenu } from "./RowMenu";
 
 const inputCls =
   "w-full rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-[12px] text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
 
 const list = (v: string[] | null) => (v ?? []).join(", ");
+
+/** Human label for the stored motivation value (e.g. "nation_state" -> "Nation State"). */
+function motivationLabel(v: string[] | null): string {
+  const m = v?.[0];
+  return m && m in MOTIVATION_LABEL
+    ? MOTIVATION_LABEL[m as Motivation]
+    : (m ?? "-");
+}
 
 export function ActorsPanel({
   initialActors,
@@ -30,11 +44,10 @@ export function ActorsPanel({
 
   const filtered = useMemo(() => {
     const n = nameF.trim().toLowerCase();
-    const m = motivationF.trim().toLowerCase();
     const al = aliasesF.trim().toLowerCase();
     return actors.filter((a) => {
       if (n && !a.name.toLowerCase().includes(n)) return false;
-      if (m && !list(a.motivation).toLowerCase().includes(m)) return false;
+      if (motivationF && (a.motivation?.[0] ?? "") !== motivationF) return false;
       if (al && !list(a.community_identifiers).toLowerCase().includes(al))
         return false;
       return true;
@@ -114,7 +127,7 @@ export function ActorsPanel({
           <option value="">All motivations</option>
           {MOTIVATIONS.map((m) => (
             <option key={m} value={m}>
-              {m}
+              {MOTIVATION_LABEL[m]}
             </option>
           ))}
         </select>
@@ -134,6 +147,7 @@ export function ActorsPanel({
               <th className="py-1.5 pr-3 font-medium">Name</th>
               <th className="py-1.5 pr-3 font-medium">Family</th>
               <th className="py-1.5 pr-3 font-medium">Motivation</th>
+              <th className="py-1.5 pr-3 font-medium">Country</th>
               <th className="py-1.5 pr-3 font-medium">Aliases</th>
               <th className="py-1.5 pr-3 font-medium">Description</th>
               <th className="py-1.5 text-right font-medium">Actions</th>
@@ -143,7 +157,7 @@ export function ActorsPanel({
             {filtered.map((a) =>
               editing === a.id ? (
                 <tr key={a.id}>
-                  <td colSpan={6} className="py-2">
+                  <td colSpan={7} className="py-2">
                     <ActorForm
                       actor={a}
                       onCancel={() => setEditing(null)}
@@ -162,8 +176,11 @@ export function ActorsPanel({
                   <td className="py-2 pr-3 whitespace-nowrap text-slate-600">
                     {a.animal_classifier ?? "-"}
                   </td>
-                  <td className="py-2 pr-3 text-slate-600">
-                    {list(a.motivation) || "-"}
+                  <td className="py-2 pr-3 whitespace-nowrap text-slate-600">
+                    {motivationLabel(a.motivation)}
+                  </td>
+                  <td className="py-2 pr-3 whitespace-nowrap text-slate-600">
+                    {a.country ?? "-"}
                   </td>
                   <td className="max-w-[200px] truncate py-2 pr-3 text-slate-500">
                     {list(a.community_identifiers) || "-"}
@@ -212,7 +229,10 @@ function ActorForm({
 }) {
   const [name, setName] = useState(actor?.name ?? "");
   const [animal, setAnimal] = useState(actor?.animal_classifier ?? "");
-  const [motivation, setMotivation] = useState(actor?.motivation?.[0] ?? "");
+  const [motivation, setMotivation] = useState<string>(
+    actor?.motivation?.[0] ?? "nation_state",
+  );
+  const [country, setCountry] = useState(actor?.country ?? "");
   const [aliases, setAliases] = useState(list(actor?.community_identifiers ?? null));
   const [description, setDescription] = useState(actor?.description ?? "");
   const [saving, setSaving] = useState(false);
@@ -226,6 +246,7 @@ function ActorForm({
       name,
       animalClassifier: animal,
       motivation,
+      country,
       aliases,
       description,
     };
@@ -277,14 +298,26 @@ function ActorForm({
           value={motivation}
           onChange={(e) => setMotivation(e.target.value)}
         >
-          <option value="">- None -</option>
           {MOTIVATIONS.map((m) => (
             <option key={m} value={m}>
-              {m}
+              {MOTIVATION_LABEL[m]}
             </option>
           ))}
         </select>
       </label>
+      {motivation === "nation_state" ? (
+        <label className="block">
+          <span className="mb-1 block text-[11px] font-medium text-slate-600">
+            Country
+          </span>
+          <input
+            className={inputCls}
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+            placeholder="China"
+          />
+        </label>
+      ) : null}
       <label className="block">
         <span className="mb-1 block text-[11px] font-medium text-slate-600">
           Aliases (comma-separated)

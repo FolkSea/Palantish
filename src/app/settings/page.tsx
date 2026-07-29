@@ -6,7 +6,7 @@ import {
 } from "@/components/settings/SettingsView";
 import type { HiddenPost } from "@/components/settings/HiddenPanel";
 import type { Focus } from "@/components/settings/AccountPanel";
-import type { ActorRecord, FamilyRecord } from "@/lib/actor-catalogue";
+import type { ActorRecord } from "@/lib/actor-catalogue";
 
 export const dynamic = "force-dynamic";
 // The on-demand ingest actions (Update / Update all feeds) run the pipeline
@@ -27,14 +27,9 @@ export default async function SettingsPage() {
   const { data: actors } = await supabase
     .from("adversaries")
     .select(
-      "id, name, animal_classifier, motivation, community_identifiers, description",
+      "id, name, animal_classifier, motivation, country, community_identifiers, description",
     )
     .order("name");
-
-  const { data: families } = await supabase
-    .from("actor_families")
-    .select("id, animal, focus, country")
-    .order("animal");
 
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ?? "";
@@ -132,7 +127,6 @@ export default async function SettingsPage() {
         focus={focus}
         sources={(sources ?? []) as SettingsSource[]}
         actors={(actors ?? []) as ActorRecord[]}
-        families={(families ?? []) as FamilyRecord[]}
         hidden={hidden}
       />
     </div>

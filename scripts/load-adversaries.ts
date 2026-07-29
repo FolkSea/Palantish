@@ -25,7 +25,9 @@ type RawAdversary = {
 
 async function main() {
   const { createAdminClient } = await import("@/lib/supabase/admin");
-  const { deriveNexus } = await import("@/lib/ingest/adversaries");
+  const { deriveNexus, deriveMotivation, deriveCountry } = await import(
+    "@/lib/ingest/adversaries"
+  );
 
   const raw = JSON.parse(
     readFileSync("adversaries.json", "utf8"),
@@ -38,13 +40,15 @@ async function main() {
       name: a.name!,
       animal_classifier: a.animal_classifier ?? null,
       nexus: deriveNexus(a),
+      // Classification stored directly on the actor (was actor_families).
+      motivation: [deriveMotivation(a)],
+      country: deriveCountry(a),
       status: a.status ?? null,
       description: a.description ?? null,
       short_description: a.short_description ?? null,
       first_seen: a.first_seen ?? null,
       last_seen: a.last_seen ?? null,
       objectives: a.objectives ?? null,
-      motivation: a.motivation ?? null,
       targeting_profile: a.targeting_profile ?? null,
       community_identifiers: a.community_identifiers ?? null,
       internal_alternative_names: a.internal_alternative_names ?? null,
