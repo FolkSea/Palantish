@@ -60,6 +60,8 @@ async function main() {
     process.exit(1);
   }
   console.log(`Loaded ${count ?? rows.length} adversaries.`);
+  // Exit explicitly so keep-alive sockets do not keep the process running.
+  process.exit(0);
 }
 
 main().catch((err) => {

@@ -32,6 +32,8 @@ async function main() {
   console.log(
     `Refreshed ${feedSources.length} feeds (${errored} failed to fetch this run).`,
   );
+  // Exit explicitly so keep-alive sockets do not keep the process running.
+  process.exit(0);
 }
 
 main().catch((err) => {
