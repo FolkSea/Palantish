@@ -242,16 +242,14 @@ export async function runIngest(): Promise<IngestResult> {
     // the 30-day window, active otherwise. Existing rows are never deleted.
     await refreshActorStatuses(db);
 
-    // Executive summary is cached in the DB and only regenerated when this run
-    // actually refreshed the underlying data (new items added). Non-fatal.
-    if (added > 0) {
-      try {
-        await generateAndStoreSummary(db);
-      } catch (err) {
-        errors.push(
-          `summary: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
+    // Recalculate the executive summary on every completed run so it always
+    // reflects the latest data and the current 24h / 7d windows. Non-fatal.
+    try {
+      await generateAndStoreSummary(db);
+    } catch (err) {
+      errors.push(
+        `summary: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     await db
