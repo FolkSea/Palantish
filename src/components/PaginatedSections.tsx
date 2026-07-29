@@ -146,11 +146,11 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
   );
 }
 
-/* --- Newly released reporting --------------------------------------------- */
+/* --- Other reporting ------------------------------------------------------- */
 export function ReportsList({ items }: { items: IntelItemRow[] }) {
   const p = usePaginated(items);
   return (
-    <Card title="Newly released reporting">
+    <Card title="Other reporting">
       {items.length === 0 ? (
         <EmptyState>No reports loaded yet.</EmptyState>
       ) : (
