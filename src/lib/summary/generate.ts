@@ -43,9 +43,11 @@ export function rulesSummary(a: Aggregates): string {
 }
 
 const SYSTEM = `You are a cyber threat-intelligence analyst writing the executive summary panel for a nation-state cyber intelligence dashboard.
-Write a concise, factual executive summary in plain ASCII text (no markdown headings, no emoji, no bullet characters).
-First cover activity over the last 24 hours, then comment on notable trends observed over the last 7 days.
-Use ONLY the data provided - do not invent actors, victims, or numbers. Keep it under 180 words, two short paragraphs.`;
+Write a flowing, narrative briefing in plain ASCII prose (no markdown, no headings, no bullet characters, no emoji).
+Paragraph 1: narrate the highlights of the last 24 hours - the most significant campaigns, intrusions, exploited vulnerabilities, and breaches, naming the threat actors, targets, and malware where the data provides them, and explaining why they matter.
+Paragraph 2: describe the trends across the past 7 days - how activity is shifting, which actors or themes recur, and where attention is concentrating.
+Write for a reader who wants the story, not a scoreboard: favour description over statistics, and cite specific numbers only sparingly, when a figure genuinely adds meaning. Do not open with, or string together, lists of counts.
+Use ONLY the data provided - do not invent actors, victims, malware, or numbers. Keep it under 180 words in two short paragraphs.`;
 
 async function aiSummary(
   a: Aggregates,
