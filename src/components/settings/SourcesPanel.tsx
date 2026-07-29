@@ -6,6 +6,8 @@ import {
   addSource,
   updateSource,
   deleteSource,
+  ingestSource,
+  ingestAllSources,
   type SourceCategory,
   type FeedType,
   type SourceInput,
@@ -23,6 +25,10 @@ const SELECTABLE_TYPES: FeedType[] = ["rss", "manual"];
 
 const inputCls =
   "w-full rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-[12px] text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
+const filterCls =
+  "rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
+
+type ActiveFilter = "all" | "active" | "off";
 
 function byName(a: SettingsSource, b: SettingsSource) {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
@@ -36,7 +42,28 @@ export function SourcesPanel({
   const [sources, setSources] = useState(initialSources);
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [ingesting, setIngesting] = useState<string | "all" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+
+  // Filters
+  const [nameFilter, setNameFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | SourceCategory>(
+    "all",
+  );
+  const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all");
+
+  const filtered = sources.filter((s) => {
+    if (
+      nameFilter &&
+      !s.name.toLowerCase().includes(nameFilter.trim().toLowerCase())
+    )
+      return false;
+    if (categoryFilter !== "all" && s.category !== categoryFilter) return false;
+    if (activeFilter === "active" && !s.active) return false;
+    if (activeFilter === "off" && s.active) return false;
+    return true;
+  });
 
   function upsertLocal(s: SettingsSource) {
     setSources((prev) => {
@@ -51,35 +78,79 @@ export function SourcesPanel({
     if (!confirm(`Delete source "${s.name}"? This cannot be undone.`)) return;
     setBusy(s.id);
     setError(null);
+    setStatus(null);
     const res = await deleteSource(s.id);
     setBusy(null);
     if (!res.ok) setError(res.error ?? "Delete failed.");
     else setSources((prev) => prev.filter((x) => x.id !== s.id));
   }
 
+  async function onUpdateOne(s: SettingsSource) {
+    setIngesting(s.id);
+    setError(null);
+    setStatus(null);
+    const res = await ingestSource(s.id);
+    setIngesting(null);
+    if (!res.ok) setError(res.error ?? "Update failed.");
+    else
+      setStatus(
+        `Updated "${s.name}": ${res.itemsAdded ?? 0} new item(s) ingested.`,
+      );
+  }
+
+  async function onUpdateAll() {
+    setIngesting("all");
+    setError(null);
+    setStatus(null);
+    const res = await ingestAllSources();
+    setIngesting(null);
+    if (!res.ok) setError(res.error ?? "Ingest failed.");
+    else
+      setStatus(
+        `Ingest complete: ${res.itemsAdded ?? 0} new item(s) across all feeds.`,
+      );
+  }
+
   return (
     <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-[13px] font-semibold text-slate-900">
-          Sources ({sources.length})
+          Sources ({filtered.length}
+          {filtered.length !== sources.length ? ` of ${sources.length}` : ""})
         </h2>
         {editing === null ? (
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setEditing("new");
-            }}
-            className="rounded-md bg-slate-900 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-slate-700"
-          >
-            Add source
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={ingesting !== null}
+              onClick={onUpdateAll}
+              className="rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {ingesting === "all" ? "Ingesting..." : "Update all feeds"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setStatus(null);
+                setEditing("new");
+              }}
+              className="rounded-md bg-slate-900 px-2.5 py-1 text-[12px] font-medium text-white hover:bg-slate-700"
+            >
+              Add source
+            </button>
+          </div>
         ) : null}
       </div>
 
       {error ? (
         <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
           {error}
+        </p>
+      ) : null}
+      {status ? (
+        <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">
+          {status}
         </p>
       ) : null}
 
@@ -93,6 +164,52 @@ export function SourcesPanel({
         />
       ) : null}
 
+      {/* Filters */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <input
+          className={`${filterCls} w-44`}
+          placeholder="Filter by name..."
+          value={nameFilter}
+          onChange={(e) => setNameFilter(e.target.value)}
+        />
+        <select
+          className={filterCls}
+          value={categoryFilter}
+          onChange={(e) =>
+            setCategoryFilter(e.target.value as "all" | SourceCategory)
+          }
+        >
+          <option value="all">All categories</option>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <select
+          className={filterCls}
+          value={activeFilter}
+          onChange={(e) => setActiveFilter(e.target.value as ActiveFilter)}
+        >
+          <option value="all">All statuses</option>
+          <option value="active">Active</option>
+          <option value="off">Off</option>
+        </select>
+        {nameFilter || categoryFilter !== "all" || activeFilter !== "all" ? (
+          <button
+            type="button"
+            onClick={() => {
+              setNameFilter("");
+              setCategoryFilter("all");
+              setActiveFilter("all");
+            }}
+            className="text-[11px] text-slate-500 underline hover:text-slate-700"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+
       <div className="mt-3 overflow-x-auto">
         <table className="w-full border-collapse text-[12px]">
           <thead>
@@ -102,11 +219,18 @@ export function SourcesPanel({
               <th className="py-1.5 pr-3 font-medium">Type</th>
               <th className="py-1.5 pr-3 font-medium">URL</th>
               <th className="py-1.5 pr-3 font-medium">Active</th>
-              <th className="py-1.5 font-medium">Actions</th>
+              <th className="py-1.5 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {sources.map((s) =>
+            {filtered.length === 0 ? (
+              <tr className="border-t border-slate-100">
+                <td colSpan={6} className="py-4 text-center text-slate-400">
+                  No sources match the filters.
+                </td>
+              </tr>
+            ) : null}
+            {filtered.map((s) =>
               editing === s.id ? (
                 <tr key={s.id}>
                   <td colSpan={6} className="py-2">
@@ -143,25 +267,18 @@ export function SourcesPanel({
                       {s.active ? "Active" : "Off"}
                     </span>
                   </td>
-                  <td className="py-2 whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => {
+                  <td className="py-2 text-right">
+                    <RowMenu
+                      busy={busy === s.id || ingesting === s.id}
+                      busyLabel={ingesting === s.id ? "Updating" : "Deleting"}
+                      onEdit={() => {
                         setError(null);
+                        setStatus(null);
                         setEditing(s.id);
                       }}
-                      className="mr-1 rounded border border-[#e5e7eb] bg-white px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy === s.id}
-                      onClick={() => onDelete(s)}
-                      className="rounded border border-red-200 bg-white px-2 py-0.5 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50"
-                    >
-                      {busy === s.id ? "..." : "Delete"}
-                    </button>
+                      onUpdate={() => onUpdateOne(s)}
+                      onDelete={() => onDelete(s)}
+                    />
                   </td>
                 </tr>
               ),
@@ -170,6 +287,120 @@ export function SourcesPanel({
         </table>
       </div>
     </section>
+  );
+}
+
+/**
+ * Per-row actions rendered as a hamburger menu (Edit / Update / Delete). The
+ * dropdown is fixed-positioned so it is never clipped by the table's
+ * horizontal-scroll container.
+ */
+function RowMenu({
+  busy,
+  busyLabel,
+  onEdit,
+  onUpdate,
+  onDelete,
+}: {
+  busy: boolean;
+  busyLabel: string;
+  onEdit: () => void;
+  onUpdate: () => void;
+  onDelete: () => void;
+}) {
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const open = pos !== null;
+
+  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (open) {
+      setPos(null);
+      return;
+    }
+    const r = e.currentTarget.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+  }
+
+  if (busy) {
+    return <span className="text-[11px] text-slate-400">{busyLabel}...</span>;
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Actions"
+        title="Actions"
+        onClick={toggle}
+        className="rounded border border-[#e5e7eb] bg-white px-1.5 py-1 text-slate-600 hover:bg-slate-50"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          aria-hidden="true"
+        >
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
+      {open ? (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setPos(null)} />
+          <div
+            className="fixed z-50 w-32 overflow-hidden rounded-md border border-[#e5e7eb] bg-white py-1 shadow-lg"
+            style={{ top: pos.top, right: pos.right }}
+          >
+            <MenuItem
+              label="Edit"
+              onClick={() => {
+                setPos(null);
+                onEdit();
+              }}
+            />
+            <MenuItem
+              label="Update"
+              onClick={() => {
+                setPos(null);
+                onUpdate();
+              }}
+            />
+            <MenuItem
+              label="Delete"
+              danger
+              onClick={() => {
+                setPos(null);
+                onDelete();
+              }}
+            />
+          </div>
+        </>
+      ) : null}
+    </>
+  );
+}
+
+function MenuItem({
+  label,
+  onClick,
+  danger,
+}: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`block w-full px-3 py-1.5 text-left text-[12px] hover:bg-slate-50 ${
+        danger ? "text-red-600" : "text-slate-700"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

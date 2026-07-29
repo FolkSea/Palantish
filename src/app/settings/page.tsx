@@ -9,6 +9,9 @@ import type { Focus } from "@/components/settings/AccountPanel";
 import type { ActorRecord, FamilyRecord } from "@/lib/actor-catalogue";
 
 export const dynamic = "force-dynamic";
+// The on-demand ingest actions (Update / Update all feeds) run the pipeline
+// inline, so allow them the same 5-minute budget as the cron route.
+export const maxDuration = 300;
 
 export default async function SettingsPage() {
   const supabase = await createClient();

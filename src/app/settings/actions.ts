@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailAllowed } from "@/lib/env";
 import { toAscii } from "@/lib/text";
+import { runIngest } from "@/lib/ingest/pipeline";
 
 export type SourceCategory = "vendor" | "research" | "news" | "government";
 const CATEGORIES: SourceCategory[] = ["vendor", "research", "news", "government"];
@@ -126,4 +127,45 @@ export async function deleteSource(id: string): Promise<SourceResult> {
   if (error) return { ok: false, error: error.message };
   revalidatePath("/settings");
   return { ok: true };
+}
+
+export type IngestActionResult = {
+  ok: boolean;
+  error?: string;
+  itemsAdded?: number;
+  errors?: string[];
+};
+
+async function triggerIngest(
+  options?: { sourceIds?: string[] },
+): Promise<IngestActionResult> {
+  const unauth = await requireAllowed();
+  if (unauth) return { ok: false, error: unauth };
+  try {
+    const result = await runIngest(options);
+    // New items may land anywhere on the dashboard; refresh both views.
+    revalidatePath("/");
+    revalidatePath("/settings");
+    return {
+      ok: result.status === "success",
+      error:
+        result.status === "success"
+          ? undefined
+          : result.errors[0] ?? "Ingest finished with errors.",
+      itemsAdded: result.itemsAdded,
+      errors: result.errors,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Force a full ingest of all active feeds. */
+export async function ingestAllSources(): Promise<IngestActionResult> {
+  return triggerIngest();
+}
+
+/** Ingest a single feed on demand (the row "Update" action). */
+export async function ingestSource(id: string): Promise<IngestActionResult> {
+  return triggerIngest({ sourceIds: [id] });
 }

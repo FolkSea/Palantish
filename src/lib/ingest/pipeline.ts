@@ -64,7 +64,9 @@ export type IngestResult = {
  * service role, and record a refresh_runs row. Never throws for feed/LLM
  * problems; only a hard failure (e.g. DB unreachable) marks the run "error".
  */
-export async function runIngest(): Promise<IngestResult> {
+export async function runIngest(
+  options?: { sourceIds?: string[] },
+): Promise<IngestResult> {
   const db = createAdminClient();
   const errors: string[] = [];
 
@@ -77,16 +79,26 @@ export async function runIngest(): Promise<IngestResult> {
     throw new Error(`Failed to open refresh run: ${runErr?.message}`);
   }
   const runId = run.id;
-  ilog(`ingest run ${runId} started`);
+  ilog(
+    `ingest run ${runId} started${
+      options?.sourceIds
+        ? ` (scoped to ${options.sourceIds.length} source(s))`
+        : ""
+    }`,
+  );
 
   try {
     // Reference data ---------------------------------------------------------
+    // A scoped run (the single-feed "Update" action) targets the given source
+    // ids regardless of their active flag; a full run pulls all active sources.
+    const sourcesSelect = db
+      .from("sources")
+      .select("id, name, url, feed_url, category");
     const [{ data: sources }, { data: actors }, { data: adversaries }] =
       await Promise.all([
-        db
-          .from("sources")
-          .select("id, name, url, feed_url, category")
-          .eq("active", true),
+        options?.sourceIds
+          ? sourcesSelect.in("id", options.sourceIds)
+          : sourcesSelect.eq("active", true),
         db.from("actors").select("id, nexus"),
         db
           .from("adversaries")
@@ -144,9 +156,13 @@ export async function runIngest(): Promise<IngestResult> {
       );
     }
 
+    // Global search augmentation only applies to a full run, not a scoped
+    // single-feed update.
     const search = selectSearchProvider();
     const searchCandidates =
-      search.name === "noop" ? [] : await search.search("nation-state cyber");
+      options?.sourceIds || search.name === "noop"
+        ? []
+        : await search.search("nation-state cyber");
 
     const allCandidates = [...feedCandidates, ...searchCandidates];
     ilog(
