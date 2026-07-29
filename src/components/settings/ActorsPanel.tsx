@@ -7,6 +7,7 @@ import {
   deleteActor,
 } from "@/app/settings/catalogue-actions";
 import { MOTIVATIONS, type ActorRecord, type ActorInput } from "@/lib/actor-catalogue";
+import { RowMenu } from "./RowMenu";
 
 const inputCls =
   "w-full rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1.5 text-[12px] text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
@@ -23,22 +24,22 @@ export function ActorsPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [familyF, setFamilyF] = useState("");
+  const [nameF, setNameF] = useState("");
   const [motivationF, setMotivationF] = useState("");
   const [aliasesF, setAliasesF] = useState("");
 
   const filtered = useMemo(() => {
-    const f = familyF.trim().toLowerCase();
+    const n = nameF.trim().toLowerCase();
     const m = motivationF.trim().toLowerCase();
     const al = aliasesF.trim().toLowerCase();
     return actors.filter((a) => {
-      if (f && !(a.animal_classifier ?? "").toLowerCase().includes(f)) return false;
+      if (n && !a.name.toLowerCase().includes(n)) return false;
       if (m && !list(a.motivation).toLowerCase().includes(m)) return false;
       if (al && !list(a.community_identifiers).toLowerCase().includes(al))
         return false;
       return true;
     });
-  }, [actors, familyF, motivationF, aliasesF]);
+  }, [actors, nameF, motivationF, aliasesF]);
 
   function upsertLocal(a: ActorRecord) {
     setActors((prev) => {
@@ -99,10 +100,10 @@ export function ActorsPanel({
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
         <input
           className={inputCls}
-          value={familyF}
-          onChange={(e) => setFamilyF(e.target.value)}
-          placeholder="Filter family..."
-          aria-label="Filter by family"
+          value={nameF}
+          onChange={(e) => setNameF(e.target.value)}
+          placeholder="Filter by name..."
+          aria-label="Filter by name"
         />
         <select
           className={inputCls}
@@ -135,7 +136,7 @@ export function ActorsPanel({
               <th className="py-1.5 pr-3 font-medium">Motivation</th>
               <th className="py-1.5 pr-3 font-medium">Aliases</th>
               <th className="py-1.5 pr-3 font-medium">Description</th>
-              <th className="py-1.5 font-medium">Actions</th>
+              <th className="py-1.5 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -170,25 +171,25 @@ export function ActorsPanel({
                   <td className="max-w-[280px] truncate py-2 pr-3 text-slate-500">
                     {a.description ?? "-"}
                   </td>
-                  <td className="py-2 whitespace-nowrap">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setError(null);
-                        setEditing(a.id);
-                      }}
-                      className="mr-1 rounded border border-[#e5e7eb] bg-white px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy === a.id}
-                      onClick={() => onDelete(a)}
-                      className="rounded border border-red-200 bg-white px-2 py-0.5 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50"
-                    >
-                      {busy === a.id ? "..." : "Delete"}
-                    </button>
+                  <td className="py-2 text-right">
+                    <RowMenu
+                      busy={busy === a.id}
+                      busyLabel="Deleting"
+                      items={[
+                        {
+                          label: "Edit",
+                          onClick: () => {
+                            setError(null);
+                            setEditing(a.id);
+                          },
+                        },
+                        {
+                          label: "Delete",
+                          danger: true,
+                          onClick: () => onDelete(a),
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               ),
