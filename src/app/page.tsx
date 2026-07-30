@@ -64,7 +64,7 @@ export default async function DashboardPage() {
                 palantish
               </h1>
               <p className="mt-1 text-[12px] text-[#90A9FF]">
-                See what we think we know.
+                Open Source Intelligence Portal
               </p>
             </div>
           </div>

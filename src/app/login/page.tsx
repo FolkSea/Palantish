@@ -51,7 +51,7 @@ function LoginForm() {
               palantish
             </h1>
             <p className="mt-0.5 text-[11px] uppercase tracking-wide text-slate-400">
-              Intelligence Portal
+              Open Source Intelligence Portal
             </p>
           </div>
         </div>
