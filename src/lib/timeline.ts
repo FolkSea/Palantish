@@ -207,6 +207,8 @@ export function buildTimeline(
 
   for (const v of vulns) {
     if (!v.added_at) continue;
+    // Timeline shows only exploits with a public proof-of-concept.
+    if (v.status !== "poc") continue;
     events.push({
       id: v.id,
       date: v.added_at,

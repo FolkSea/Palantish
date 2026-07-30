@@ -124,6 +124,16 @@ describe("buildTimeline", () => {
     expect(streams.filter((s) => s.category === "exploit")).toHaveLength(1);
   });
 
+  it("shows only exploits with a PoC (drops confirmed/suspected)", () => {
+    const { events, streams } = run(
+      [],
+      [],
+      [vuln({ status: "poc" }), vuln({ status: "confirmed" }), vuln({ status: "suspected" })],
+    );
+    expect(events.filter((e) => e.category === "exploit")).toHaveLength(1);
+    expect(streams.filter((s) => s.category === "exploit")).toHaveLength(1);
+  });
+
   it("orders lanes nation-state, eCrime, hacktivism, exploits", () => {
     const { streams } = run(
       [intel({ motivation: "nation_state", crowdstrike_adversary: "COZY BEAR" })],
