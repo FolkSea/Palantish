@@ -16,8 +16,10 @@ import { createClient } from "@/lib/supabase/client";
 import {
   eventVisible,
   KIND_LABEL,
+  CATEGORY_LABEL,
   type TimelineEvent,
   type TimelineStream,
+  type TimelineCategory,
   type TimelineKind,
   type TimelineFilters,
 } from "@/lib/timeline";
@@ -74,7 +76,7 @@ export default function ActivityTimeline({
     void createClient().auth.updateUser({ data: { timelineFilters: next } });
   }
 
-  const { datasets, rowLabels, rowColors, xMin, xMax, rows } = useMemo(() => {
+  const { datasets, rowLabels, rowColors, xMin, xMax, rows, lanes } = useMemo(() => {
     const now = Date.now();
     const xMax = now + DAY / 2;
     const xMin = now - 30 * DAY;
@@ -122,6 +124,7 @@ export default function ActivityTimeline({
       xMin,
       xMax,
       rows: lanes.length,
+      lanes,
     };
   }, [events, streams, filters]);
 
@@ -178,27 +181,27 @@ export default function ActivityTimeline({
 
   return (
     <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-[13px] font-semibold text-slate-900">
-          Activity timeline (last 30 days)
-        </h2>
-        <ShapeKey />
-      </div>
+      <h2 className="text-[13px] font-semibold text-slate-900">
+        Activity timeline (last 30 days)
+      </h2>
       <p className="mt-0.5 text-[11px] text-slate-500">
         One lane per adversary; colour denotes the actor, shape the record type.
         Click a point to open the source.
       </p>
 
-      <div className="mt-3">
-        {rows > 0 ? (
-          <div style={{ height }} className="w-full">
-            <Scatter data={{ datasets }} options={options} />
-          </div>
-        ) : (
-          <p className="py-10 text-center text-[12px] text-slate-400">
-            Nothing matches the current filters.
-          </p>
-        )}
+      <div className="mt-3 flex flex-col gap-4 sm:flex-row">
+        <KeyPanel lanes={lanes} />
+        <div className="min-w-0 flex-1">
+          {rows > 0 ? (
+            <div style={{ height }} className="w-full">
+              <Scatter data={{ datasets }} options={options} />
+            </div>
+          ) : (
+            <p className="py-10 text-center text-[12px] text-slate-400">
+              Nothing matches the current filters.
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3">
@@ -228,23 +231,63 @@ export default function ActivityTimeline({
   );
 }
 
-/** Legend explaining the three marker shapes (report / breach / exploit). */
-function ShapeKey() {
+/**
+ * Left-hand key: the colour of each visible actor lane (grouped by category)
+ * and the shape used for each record type. Lanes arrive pre-sorted by category,
+ * so a header is emitted whenever the category changes.
+ */
+function KeyPanel({ lanes }: { lanes: TimelineStream[] }) {
+  const groups: { category: TimelineCategory; lanes: TimelineStream[] }[] = [];
+  for (const lane of lanes) {
+    const last = groups[groups.length - 1];
+    if (last && last.category === lane.category) last.lanes.push(lane);
+    else groups.push({ category: lane.category, lanes: [lane] });
+  }
+
   return (
-    <div className="flex items-center gap-3 text-[11px] text-slate-500">
-      <span className="flex items-center gap-1">
-        <ShapeIcon kind="report" />
-        {KIND_LABEL.report}
-      </span>
-      <span className="flex items-center gap-1">
-        <ShapeIcon kind="breach" />
-        {KIND_LABEL.breach}
-      </span>
-      <span className="flex items-center gap-1">
-        <ShapeIcon kind="exploit" />
-        {KIND_LABEL.exploit}
-      </span>
-    </div>
+    <aside className="shrink-0 rounded-[8px] border border-[#e5e7eb] bg-slate-50 p-3 text-[11px] sm:w-[168px]">
+      <div className="mb-1 font-semibold uppercase tracking-wide text-slate-400">
+        Actors
+      </div>
+      {groups.length ? (
+        <div className="space-y-2">
+          {groups.map((g) => (
+            <div key={g.category}>
+              <div className="text-[10px] font-medium text-slate-500">
+                {CATEGORY_LABEL[g.category]}
+              </div>
+              <ul className="mt-0.5 space-y-0.5">
+                {g.lanes.map((lane) => (
+                  <li key={lane.actor} className="flex items-center gap-1.5">
+                    <span
+                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: lane.color }}
+                    />
+                    <span className="truncate text-slate-700" title={lane.actor}>
+                      {lane.actor}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-slate-400">No lanes shown.</p>
+      )}
+
+      <div className="mt-3 mb-1 font-semibold uppercase tracking-wide text-slate-400">
+        Record type
+      </div>
+      <ul className="space-y-0.5">
+        {(["report", "breach", "exploit"] as TimelineKind[]).map((kind) => (
+          <li key={kind} className="flex items-center gap-1.5 text-slate-700">
+            <ShapeIcon kind={kind} />
+            {KIND_LABEL[kind]}
+          </li>
+        ))}
+      </ul>
+    </aside>
   );
 }
 
