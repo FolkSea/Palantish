@@ -10,18 +10,18 @@ import { NEXUS_ACCENT } from "@/lib/badges";
 // Re-exported so existing importers (lib/data) keep a single import site.
 export { buildHacktivismGroups };
 
-type BreachRow = Database["public"]["Tables"]["breaches"]["Row"];
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
 
 const ECRIME_ACCENT = NEXUS_ACCENT.other; // slate
 const HACKTIVISM_ACCENT = "#7e22ce"; // purple
 const NON_ATTRIBUTED = "Non Attributed";
 const ECRIME_UNID = "UNID SPIDER"; // fallback label for unattributed eCrime
+const HACKTIVISM_UNID = "UNID JACKAL"; // fallback label for unattributed hacktivism
 
 /**
  * One report inside an actor card. The same shape is used for nation-state,
  * eCrime and hacktivism items so all three sections render through a single
- * card component. Breaches map onto it with a null confidence/country.
+ * card component.
  */
 export type ActorItem = {
   id: string;
@@ -45,21 +45,6 @@ export type ActorCard = {
   items: ActorItem[];
 };
 
-function breachToItem(b: BreachRow): ActorItem {
-  return {
-    id: b.id,
-    raw_hash: b.raw_hash,
-    title: b.org_name,
-    url: b.url,
-    description: b.summary,
-    source_name: b.source_name,
-    published_at: b.event_date_label ?? b.event_date,
-    confidence: null,
-    country: null,
-    adversary: null,
-  };
-}
-
 function intelToItem(i: IntelItemRow): ActorItem {
   return {
     id: i.id,
@@ -73,6 +58,15 @@ function intelToItem(i: IntelItemRow): ActorItem {
     country: null,
     adversary: null,
   };
+}
+
+/** A real actor name (CS cryptonym or a stored non-UNID label), else null. */
+function namedActor(cs: string | null, label: string | null): string | null {
+  const fromCs = cs?.trim();
+  if (fromCs) return fromCs;
+  const l = label?.trim();
+  if (l && !/^unid\b/i.test(l)) return l;
+  return null;
 }
 
 function push(map: Map<string, ActorItem[]>, key: string, item: ActorItem) {
@@ -112,14 +106,13 @@ function toCards(
 
 /**
  * Split eCrime and hacktivism activity into per-actor cards (plus a
- * "Non Attributed" card each), mirroring the nation-state layout. Breaches are
- * eCrime by nature and are attributed to a crew (or "Non Attributed"); a breach
- * or report that names a hacktivist collective is routed to hacktivism instead.
- * Reports that read as hacktivism without a named group go to hacktivism
- * "Non Attributed". A manually-stored attribution overrides the derived crew.
+ * "Non Attributed" card each), mirroring the nation-state layout. These sections
+ * carry intelligence *reports* only - breach/leak posts live in the dedicated
+ * Breaches list, not here. A report is routed by its stored motivation first,
+ * then by matching a named eCrime crew or hacktivist collective in its text;
+ * anything with no eCrime/hacktivism signal is not shown in these sections.
  */
 export function buildActorSectionCards(
-  breaches: BreachRow[],
   reports: IntelItemRow[],
   ecrimeGroups: GroupEntry[],
   hacktivismGroups: GroupEntry[],
@@ -127,27 +120,29 @@ export function buildActorSectionCards(
   const ecrime = new Map<string, ActorItem[]>();
   const hack = new Map<string, ActorItem[]>();
 
-  for (const b of breaches) {
-    const stored = b.adversary_label?.trim() || null;
-    const text = `${b.org_name} ${b.summary ?? ""}`.toLowerCase();
-    const h = matchGroup(text, hacktivismGroups)?.cs;
-    if (h) {
-      push(hack, stored ?? h, breachToItem(b));
-    } else {
-      const crew = stored ?? matchGroup(text, ecrimeGroups)?.cs ?? NON_ATTRIBUTED;
-      push(ecrime, crew, breachToItem(b));
-    }
-  }
-
   for (const r of reports) {
-    const text = `${r.title} ${r.description ?? ""}`;
-    const h = matchGroup(text.toLowerCase(), hacktivismGroups)?.cs;
-    if (h) push(hack, h, intelToItem(r));
-    else if (hasHacktivismKeyword(text)) push(hack, NON_ATTRIBUTED, intelToItem(r));
+    const named = namedActor(r.crowdstrike_adversary, r.adversary_label);
+    const text = `${r.title} ${r.description ?? ""}`.toLowerCase();
+
+    if (r.motivation === "ecrime") {
+      push(ecrime, named ?? matchGroup(text, ecrimeGroups)?.cs ?? NON_ATTRIBUTED, intelToItem(r));
+    } else if (r.motivation === "hacktivism") {
+      push(hack, named ?? matchGroup(text, hacktivismGroups)?.cs ?? NON_ATTRIBUTED, intelToItem(r));
+    } else {
+      // Unattributed: fall back to text matching, hacktivism first.
+      const h = matchGroup(text, hacktivismGroups)?.cs;
+      if (h) push(hack, h, intelToItem(r));
+      else if (hasHacktivismKeyword(text)) push(hack, NON_ATTRIBUTED, intelToItem(r));
+      else {
+        const e = matchGroup(text, ecrimeGroups)?.cs;
+        if (e) push(ecrime, e, intelToItem(r));
+        // else: no eCrime/hacktivism signal - not shown in these sections.
+      }
+    }
   }
 
   return {
     ecrimeCards: toCards(ecrime, ECRIME_ACCENT, ECRIME_UNID),
-    hacktivismCards: toCards(hack, HACKTIVISM_ACCENT, null),
+    hacktivismCards: toCards(hack, HACKTIVISM_ACCENT, HACKTIVISM_UNID),
   };
 }

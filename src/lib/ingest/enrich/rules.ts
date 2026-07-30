@@ -301,9 +301,17 @@ export function rulesClassify(
   if (!c.title || !c.url) return { kind: "drop" };
   if (isMarketing(c)) return { kind: "drop" };
 
-  const group = matchGroup(haystack(c), groups);
-  // eCrime / "other" nexus only qualifies when clearly large-scale.
-  if (group?.nexus === "other" && !isLargeScaleEcrime(c)) return { kind: "drop" };
+  const hay = haystack(c);
+  const group = matchGroup(hay, groups);
+  // eCrime / "other" nexus only qualifies when clearly large-scale - EXCEPT
+  // research/analysis about the crew, which is intelligence worth keeping even
+  // when it describes a single tool or campaign.
+  if (
+    group?.nexus === "other" &&
+    !isLargeScaleEcrime(c) &&
+    !RESEARCH_RE.test(hay)
+  )
+    return { kind: "drop" };
 
   const itemType = classifyItemType(c, group);
   // Hacktivist activity (named collective or explicit hacktivism) is genuine

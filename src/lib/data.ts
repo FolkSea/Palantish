@@ -291,10 +291,9 @@ export async function loadDashboard(): Promise<DashboardData> {
   const hacktivismGroups = buildHacktivismGroups();
 
   // Activity-by-actor sections: per-country nation-state cards (built above),
-  // and per-actor eCrime and hacktivism cards derived from breaches (and
-  // hacktivism-tagged reports).
+  // and per-actor eCrime and hacktivism cards. All three carry intelligence
+  // reports only; breach/leak posts stay in the dedicated Breaches list.
   const { ecrimeCards, hacktivismCards } = buildActorSectionCards(
-    breaches,
     reports,
     ecrimeGroups,
     hacktivismGroups,

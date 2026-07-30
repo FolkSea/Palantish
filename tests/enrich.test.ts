@@ -85,11 +85,13 @@ describe("RulesEnricher classification", () => {
     expect(large!.itemType).toBe("breach");
   });
 
-  it("keeps eCrime research/analysis as a report, not a breach", async () => {
+  it("keeps eCrime research/analysis as a report, even when not large-scale", async () => {
+    // No large-scale language: the crew drop-gate would drop this, but research
+    // about the crew is intelligence worth keeping.
     const out = await enricher.enrich(
       candidate({
         title: "LockBit's new loader dissected: a technical analysis",
-        description: "The tooling has been seen across multiple sectors.",
+        description: "A close look at the loader's obfuscation.",
       }),
     );
     expect(out).not.toBeNull();
