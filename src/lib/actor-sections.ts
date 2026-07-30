@@ -1,14 +1,7 @@
 import type { Database } from "@/lib/supabase/database.types";
 import type { GroupEntry } from "@/lib/ingest/enrich/rules";
-import {
-  matchGroup,
-  buildHacktivismGroups,
-  hasHacktivismKeyword,
-} from "@/lib/ingest/enrich/rules";
+import { matchGroup, hasHacktivismKeyword } from "@/lib/ingest/enrich/rules";
 import { NEXUS_ACCENT } from "@/lib/badges";
-
-// Re-exported so existing importers (lib/data) keep a single import site.
-export { buildHacktivismGroups };
 
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
 

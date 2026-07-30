@@ -1,83 +1,23 @@
 import type { Nexus, Confidence } from "@/lib/badges";
 import { adversaryLabel } from "@/lib/badges";
+import type { Motivation } from "@/lib/actor-catalogue";
 import { computeHash } from "@/lib/ingest/dedup";
 import type { Enricher, EnrichedItem, ItemType, RawCandidate } from "@/lib/ingest/types";
 
 /**
- * Known threat-group aliases mapped to their nation-state nexus and, where a
- * public CrowdStrike cryptonym exists, that adversary name. Matching is
- * case-insensitive substring on the combined title+description.
+ * A threat-group alias mapped to its nexus and, where a public CrowdStrike
+ * cryptonym exists, that adversary name plus its motivation. Every entry is
+ * derived from the `adversaries` catalogue (see buildGroupsFromAdversaries) -
+ * there is no hard-coded actor list. Matching is case-insensitive, on word
+ * boundaries, over the combined title+description. `motivation` lets the
+ * classifier tell eCrime from hacktivism (both share the "other" nexus).
  */
-export type GroupEntry = { alias: string; nexus: Nexus; cs?: string };
-
-export const GROUP_TABLE: GroupEntry[] = [
-  // North Korea (Chollima)
-  { alias: "lazarus", nexus: "north_korea", cs: "Labyrinth Chollima" },
-  { alias: "apt38", nexus: "north_korea", cs: "Stardust Chollima" },
-  { alias: "bluenoroff", nexus: "north_korea", cs: "Stardust Chollima" },
-  { alias: "kimsuky", nexus: "north_korea", cs: "Velvet Chollima" },
-  { alias: "andariel", nexus: "north_korea", cs: "Silent Chollima" },
-  { alias: "chollima", nexus: "north_korea" },
-  { alias: "north korea", nexus: "north_korea" },
-  { alias: "dprk", nexus: "north_korea" },
-  // Russia (Bear)
-  { alias: "apt28", nexus: "russia", cs: "Fancy Bear" },
-  { alias: "fancy bear", nexus: "russia", cs: "Fancy Bear" },
-  { alias: "apt29", nexus: "russia", cs: "Cozy Bear" },
-  { alias: "cozy bear", nexus: "russia", cs: "Cozy Bear" },
-  { alias: "midnight blizzard", nexus: "russia", cs: "Cozy Bear" },
-  { alias: "sandworm", nexus: "russia", cs: "Voodoo Bear" },
-  { alias: "turla", nexus: "russia", cs: "Venomous Bear" },
-  { alias: "gamaredon", nexus: "russia", cs: "Primitive Bear" },
-  { alias: "bear", nexus: "russia" },
-  // China (Panda)
-  { alias: "apt41", nexus: "china", cs: "Wicked Panda" },
-  { alias: "volt typhoon", nexus: "china", cs: "Vanguard Panda" },
-  { alias: "salt typhoon", nexus: "china" },
-  { alias: "mustang panda", nexus: "china", cs: "Mustang Panda" },
-  { alias: "apt31", nexus: "china", cs: "Judgment Panda" },
-  { alias: "apt10", nexus: "china", cs: "Stone Panda" },
-  { alias: "aquatic panda", nexus: "china", cs: "Aquatic Panda" },
-  { alias: "panda", nexus: "china" },
-  // Iran (Kitten)
-  { alias: "charming kitten", nexus: "iran", cs: "Charming Kitten" },
-  { alias: "apt35", nexus: "iran", cs: "Charming Kitten" },
-  { alias: "muddywater", nexus: "iran", cs: "Static Kitten" },
-  { alias: "oilrig", nexus: "iran", cs: "Helix Kitten" },
-  { alias: "apt34", nexus: "iran", cs: "Helix Kitten" },
-  { alias: "apt33", nexus: "iran", cs: "Refined Kitten" },
-  { alias: "imperial kitten", nexus: "iran", cs: "Imperial Kitten" },
-  { alias: "kitten", nexus: "iran" },
-  // eCrime (Spider) - only surfaced when large-scale, see isLargeScaleEcrime
-  { alias: "scattered spider", nexus: "other", cs: "Scattered Spider" },
-  { alias: "wizard spider", nexus: "other", cs: "Wizard Spider" },
-  { alias: "lockbit", nexus: "other" },
-  { alias: "alphv", nexus: "other" },
-  { alias: "blackcat", nexus: "other" },
-  { alias: "cl0p", nexus: "other" },
-  { alias: "clop", nexus: "other" },
-  { alias: "shinyhunters", nexus: "other", cs: "ShinyHunters" },
-  { alias: "shiny hunters", nexus: "other", cs: "ShinyHunters" },
-  // Rest of the World - other nation-states, by named group (country animal
-  // via badges). Generic "India-linked" attribution is left to the LLM.
-  // India (Tiger)
-  { alias: "sidewinder", nexus: "rest_of_world", cs: "Razor Tiger" },
-  { alias: "razor tiger", nexus: "rest_of_world", cs: "Razor Tiger" },
-  { alias: "patchwork", nexus: "rest_of_world", cs: "Quilted Tiger" },
-  { alias: "donot team", nexus: "rest_of_world", cs: "Viceroy Tiger" },
-  { alias: "confucius", nexus: "rest_of_world" },
-  // Pakistan (Leopard)
-  { alias: "transparent tribe", nexus: "rest_of_world", cs: "Mythic Leopard" },
-  { alias: "apt36", nexus: "rest_of_world", cs: "Mythic Leopard" },
-  { alias: "sidecopy", nexus: "rest_of_world" },
-  // Vietnam (Buffalo)
-  { alias: "oceanlotus", nexus: "rest_of_world", cs: "Ocean Buffalo" },
-  { alias: "ocean lotus", nexus: "rest_of_world", cs: "Ocean Buffalo" },
-  { alias: "apt32", nexus: "rest_of_world", cs: "Ocean Buffalo" },
-  // Turkey (Wolf)
-  { alias: "sea turtle", nexus: "rest_of_world", cs: "Cosmic Wolf" },
-  { alias: "cosmic wolf", nexus: "rest_of_world", cs: "Cosmic Wolf" },
-];
+export type GroupEntry = {
+  alias: string;
+  nexus: Nexus;
+  cs?: string;
+  motivation?: Motivation;
+};
 
 const MARKETING_RE =
   /\b(webinar|introducing|announc|acquir|acquisition|partner(ship)?|pricing|gartner|magic quadrant|now available|product update|forrester|sponsor|join us|register (now|today)|ebook|whitepaper series|customer story|case study)\b/i;
@@ -137,49 +77,21 @@ export function matchGroup(
   return sortedGroups.find((g) => wordBoundaryIncludes(hay, g.alias)) ?? null;
 }
 
-/** Returns the matched group entry (nexus + optional CS name) or null. */
-export function classifyGroup(c: RawCandidate): GroupEntry | null {
-  return matchGroup(haystack(c), sortGroups(GROUP_TABLE));
-}
-
 /**
- * Surface a specific adversary name mentioned in the text (original casing) when
- * no CrowdStrike cryptonym applies - e.g. "Salt Typhoon". Generic single-word
- * aliases (panda/bear/...) are ignored so only real names are shown.
+ * Surface the specific adversary for text that matches a catalogue actor - its
+ * CrowdStrike cryptonym or actor name. Returns null when nothing in the
+ * catalogue matches. Every catalogue entry carries a `cs` name, so there is no
+ * generic-keyword fallback: a bare country mention ("North Korean hackers")
+ * matches no actor and yields null, leaving the UNID <animal> label to the
+ * caller.
  */
-// Generic country / family keywords that exist only for nexus detection. They
-// must never become an adversary *name* (a "North Korea" post is UNID CHOLLIMA,
-// not "North Korea"), and must not shadow a specific actor named in the same
-// text (e.g. Lazarus), so they are excluded when deriving a name.
-const NEXUS_KEYWORDS = new Set([
-  "north korea",
-  "dprk",
-  "chollima",
-  "china",
-  "chinese",
-  "prc",
-  "panda",
-  "russia",
-  "russian",
-  "bear",
-  "iran",
-  "iranian",
-  "kitten",
-]);
-
 export function deriveAdversaryFromText(
   title: string,
   description: string | null | undefined,
   groups: GroupEntry[],
 ): string | null {
-  const text = `${title} ${description ?? ""}`;
-  const named = groups.filter((g) => g.cs || !NEXUS_KEYWORDS.has(g.alias));
-  const group = matchGroup(text.toLowerCase(), named);
-  if (!group) return null;
-  if (group.cs) return group.cs;
-  if (!group.alias.includes(" ")) return null;
-  const idx = text.toLowerCase().indexOf(group.alias);
-  return idx >= 0 ? text.slice(idx, idx + group.alias.length) : null;
+  const group = matchGroup(`${title} ${description ?? ""}`.toLowerCase(), groups);
+  return group?.cs ?? null;
 }
 
 /**
@@ -209,53 +121,11 @@ export function isLargeScaleEcrime(c: RawCandidate): boolean {
   return LARGE_SCALE_RE.test(haystack(c));
 }
 
-// Known hacktivist collectives (distinctive, ASCII-only names). Single source of
-// truth, also used by the activity-by-actor hacktivism section.
-export const KNOWN_HACKTIVISM_NAMES = [
-  "Anonymous Sudan",
-  "NoName057(16)",
-  "NoName057",
-  "KillNet",
-  "IT Army of Ukraine",
-  "SiegedSec",
-  "GhostSec",
-  "Cyber Av3ngers",
-  "Handala",
-  "Mysterious Team Bangladesh",
-  "Team Insane PK",
-  "RipperSec",
-  "Dark Storm Team",
-  "Turk Hack Team",
-  "SylhetGang",
-  "CyberVolk",
-  "Holy League",
-  "Hunt3r Kill3rs",
-];
-
 const HACKTIVISM_RE = /\bhacktivis(?:m|t|ts)\b/i;
-
-/** Hacktivist collective aliases, sorted longest-first for matching. */
-export function buildHacktivismGroups(): GroupEntry[] {
-  return sortGroups(
-    KNOWN_HACKTIVISM_NAMES.map((n) => ({
-      alias: n.toLowerCase(),
-      nexus: "other" as const,
-      cs: n,
-    })),
-  );
-}
-
-const HACKTIVISM_GROUPS = buildHacktivismGroups();
 
 /** True when text reads as hacktivism (independent of a named collective). */
 export function hasHacktivismKeyword(text: string): boolean {
   return HACKTIVISM_RE.test(text);
-}
-
-/** True when the candidate names a hacktivist collective or reads as hacktivism. */
-export function isHacktivism(c: RawCandidate): boolean {
-  const hay = haystack(c);
-  return HACKTIVISM_RE.test(hay) || matchGroup(hay, HACKTIVISM_GROUPS) !== null;
 }
 
 export function classifyItemType(
@@ -264,13 +134,20 @@ export function classifyItemType(
 ): ItemType {
   const hay = haystack(c);
   if (CVE_RE.test(hay)) return "vuln";
-  // Research/analysis about a named eCrime or hacktivist crew is a report, not a
-  // breach event - even when it discusses that crew's ransomware or extortion.
-  if (group?.nexus === "other" && RESEARCH_RE.test(hay)) return "report";
+  // "other" nexus is eCrime or hacktivism (told apart by the catalogue
+  // motivation on the matched group).
+  if (group?.nexus === "other") {
+    // Hacktivist activity is reporting for the hacktivism cards, not a breach
+    // event - unless the post is explicitly a breach/leak.
+    if (group.motivation === "hacktivism")
+      return BREACH_RE.test(hay) ? "breach" : "report";
+    // Research/analysis about an eCrime crew is a report, not a breach event -
+    // even when it discusses that crew's ransomware or extortion.
+    if (RESEARCH_RE.test(hay)) return "report";
+    // An eCrime incident/campaign is a breach-type event.
+    return "breach";
+  }
   if (BREACH_RE.test(hay)) return "breach";
-  // Large-scale eCrime/hacktivism that reaches this point (small-scale is dropped
-  // earlier) is a breach-type event, not an actor-activity card.
-  if (group?.nexus === "other") return "breach";
   if (group) return "actor_activity";
   // News-category, high-signal items become breaking headlines.
   if (c.sourceCategory === "news" && (BREACH_RE.test(hay) || LARGE_SCALE_RE.test(hay)))
@@ -333,12 +210,15 @@ export function rulesClassify(
 
   const hay = haystack(c);
   const group = matchGroup(hay, groups);
-  // A post naming an eCrime / hacktivist crew is kept whenever it carries any
-  // substance - a breach/leak/ransomware incident, a large-scale campaign, or
-  // analysis. Only a bare crew mention with none of those signals is dropped, so
-  // we never drop actual ransomware-group activity.
+  const isHacktivistGroup = group?.motivation === "hacktivism";
+  // A post naming an eCrime crew is kept whenever it carries any substance - a
+  // breach/leak/ransomware incident, a large-scale campaign, or analysis. Only a
+  // bare crew mention with none of those signals is dropped, so we never drop
+  // actual ransomware-group activity. Hacktivist collectives are exempt: their
+  // activity is tracked intelligence, kept below.
   if (
     group?.nexus === "other" &&
+    !isHacktivistGroup &&
     !isLargeScaleEcrime(c) &&
     !RESEARCH_RE.test(hay) &&
     !ECRIME_INCIDENT_RE.test(hay)
@@ -346,10 +226,10 @@ export function rulesClassify(
     return { kind: "drop", reason: "low-signal crew mention" };
 
   const itemType = classifyItemType(c, group);
-  // Hacktivist activity (named collective or explicit hacktivism) is genuine
-  // intelligence - keep it rather than letting it fall into the ambiguous
-  // news bucket where it could be dropped.
-  if (isHacktivism(c)) {
+  // Hacktivist activity (named collective from the catalogue, or explicit
+  // hacktivism wording) is genuine intelligence - keep it rather than letting it
+  // fall into the ambiguous news bucket where it could be dropped.
+  if (isHacktivistGroup || hasHacktivismKeyword(hay)) {
     return { kind: "keep", item: buildEnriched(c, group, itemType) };
   }
   // A generic news post with no nation-state nexus and no vuln/breach signal is
@@ -369,12 +249,12 @@ export class RulesEnricher implements Enricher {
   private readonly groups: GroupEntry[];
 
   /**
-   * @param extraGroups adversary aliases loaded from the `adversaries` table.
-   * These take priority (checked longest-first alongside the built-in table),
-   * giving CrowdStrike-name and nexus coverage far beyond the hard-coded list.
+   * @param groups adversary aliases built from the `adversaries` catalogue (see
+   * buildGroupsFromAdversaries) - the single source of actor identification.
+   * Sorted longest-alias-first so specific names beat generic ones.
    */
-  constructor(extraGroups: GroupEntry[] = []) {
-    this.groups = sortGroups([...extraGroups, ...GROUP_TABLE]);
+  constructor(groups: GroupEntry[] = []) {
+    this.groups = sortGroups(groups);
   }
 
   async enrich(c: RawCandidate): Promise<EnrichedItem | null> {

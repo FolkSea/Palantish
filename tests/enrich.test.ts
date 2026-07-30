@@ -1,16 +1,18 @@
 import { describe, it, expect } from "vitest";
 import {
   RulesEnricher,
-  GROUP_TABLE,
-  sortGroups,
   deriveAdversaryFromText,
   computeAdversaryLabel,
   classifyItemType,
   type GroupEntry,
 } from "@/lib/ingest/enrich/rules";
+import { catalogueGroups } from "./helpers/catalogue";
 import type { RawCandidate } from "@/lib/ingest/types";
 
-const enricher = new RulesEnricher();
+// The enricher and all attribution are driven by the real adversary catalogue -
+// the single source of actor identity, no hard-coded table.
+const groups = catalogueGroups();
+const enricher = new RulesEnricher(groups);
 
 function candidate(partial: Partial<RawCandidate>): RawCandidate {
   return {
@@ -35,7 +37,7 @@ describe("RulesEnricher classification", () => {
     expect(out).not.toBeNull();
     expect(out!.nexus).toBe("china");
     expect(out!.itemType).toBe("actor_activity");
-    expect(out!.crowdstrikeAdversary).toBe("Vanguard Panda");
+    expect(out!.crowdstrikeAdversary).toBe("VANGUARD PANDA");
   });
 
   it("routes a CVE advisory to the vuln type", async () => {
@@ -56,7 +58,7 @@ describe("RulesEnricher classification", () => {
       candidate({ title: "Fancy Bear spearphishing campaign" }),
     );
     expect(out!.nexus).toBe("russia");
-    expect(out!.crowdstrikeAdversary).toBe("Fancy Bear");
+    expect(out!.crowdstrikeAdversary).toBe("FANCY BEAR");
   });
 
   it("drops marketing / product-announcement content", async () => {
@@ -149,7 +151,7 @@ describe("Rest of the World attribution", () => {
     expect(out).not.toBeNull();
     expect(out!.nexus).toBe("rest_of_world");
     expect(out!.itemType).toBe("actor_activity");
-    expect(out!.crowdstrikeAdversary).toBe("Razor Tiger");
+    expect(out!.crowdstrikeAdversary).toBe("RAZOR TIGER");
   });
 
   it("labels an unnamed India post as UNID TIGER", () => {
@@ -158,46 +160,45 @@ describe("Rest of the World attribution", () => {
       "rest_of_world",
       "Indian APT campaign against neighbours",
       null,
-      sortGroups(GROUP_TABLE),
+      groups,
     );
     expect(label).toBe("UNID TIGER");
   });
 });
 
 describe("deriveAdversaryFromText", () => {
-  const groups = sortGroups(GROUP_TABLE);
-
-  it("returns a specific named mention (original casing) when there is no CS name", () => {
+  it("resolves a community alias to its CrowdStrike cryptonym", () => {
     expect(
       deriveAdversaryFromText("Salt Typhoon breached US telecoms", null, groups),
-    ).toBe("Salt Typhoon");
+    ).toBe("OPERATOR PANDA");
   });
 
   it("prefers the CrowdStrike cryptonym when the group has one", () => {
     expect(
       deriveAdversaryFromText("Volt Typhoon pre-positions in OT", null, groups),
-    ).toBe("Vanguard Panda");
+    ).toBe("VANGUARD PANDA");
   });
 
-  it("ignores generic single-word aliases", () => {
+  it("ignores generic single-word words that are not actors", () => {
     expect(deriveAdversaryFromText("A panda in the zoo", null, groups)).toBeNull();
   });
 
   it("never returns a country name as an adversary", () => {
-    // "north korea" is a nexus keyword, not an actor - the label is UNID CHOLLIMA.
+    // No catalogue actor is named "North Korea", so a bare country mention has
+    // no specific attribution - the label falls back to UNID CHOLLIMA.
     expect(
       deriveAdversaryFromText("North Korean hackers hit a firm", null, groups),
     ).toBeNull();
   });
 
-  it("matches Lazarus to Labyrinth Chollima even when the country is named", () => {
+  it("matches Lazarus to LABYRINTH CHOLLIMA even when the country is named", () => {
     expect(
       deriveAdversaryFromText(
         "North Korea's Lazarus Group shares tools with a crew",
         null,
         groups,
       ),
-    ).toBe("Labyrinth Chollima");
+    ).toBe("LABYRINTH CHOLLIMA");
   });
 
   it("matches the eCrime crew ShinyHunters by name", () => {

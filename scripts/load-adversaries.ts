@@ -13,6 +13,7 @@ import { config } from "dotenv";
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
+import type { RawAdversaryRecord } from "@/lib/ingest/adversaries";
 
 const [argUrl, argKey] = process.argv.slice(2);
 let SUPABASE_URL = argUrl || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -26,28 +27,6 @@ if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   SERVICE_ROLE_KEY = SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 
-type RawAdversary = {
-  ID?: string;
-  cs_id?: string;
-  name?: string;
-  animal_classifier?: string | null;
-  status?: string | null;
-  description?: string | null;
-  short_description?: string | null;
-  first_seen?: string | null;
-  last_seen?: string | null;
-  objectives?: string[] | null;
-  // Either our explicit term ("nation_state" | "ecrime" | "hacktivism") as a
-  // string, or the legacy CrowdStrike array (["StateSponsored", ...]).
-  motivation?: string | string[] | null;
-  country?: string | null;
-  targeting_profile?: string[] | null;
-  community_identifiers?: string[] | null;
-  internal_alternative_names?: string[] | null;
-};
-
-const OUR_MOTIVATIONS = new Set(["nation_state", "ecrime", "hacktivism"]);
-
 async function main() {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
     console.error(
@@ -59,56 +38,13 @@ async function main() {
   }
   console.log(`Loading adversaries into ${SUPABASE_URL}`);
 
-  const { deriveNexus, deriveMotivation, deriveCountry } = await import(
-    "@/lib/ingest/adversaries"
-  );
-  const { nexusForCountry } = await import("@/lib/actor-classify");
+  const { mapAdversaryRecords } = await import("@/lib/ingest/adversaries");
 
   const raw = JSON.parse(
     readFileSync("adversaries.json", "utf8"),
-  ) as RawAdversary[];
+  ) as RawAdversaryRecord[];
 
-  const slug = (s: string) =>
-    s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-
-  const rows = raw
-    .filter((a) => a.name)
-    .map((a) => {
-      // Prefer explicit motivation + country (the new curated format); fall back
-      // to deriving them from the CrowdStrike animal cryptonym (legacy format).
-      const explicit =
-        typeof a.motivation === "string" && OUR_MOTIVATIONS.has(a.motivation);
-      // The legacy derive functions expect the CrowdStrike array form.
-      const legacy = {
-        ...a,
-        motivation: Array.isArray(a.motivation) ? a.motivation : null,
-      };
-      const motivation = explicit
-        ? (a.motivation as string)
-        : deriveMotivation(legacy);
-      const country = explicit ? a.country ?? null : deriveCountry(legacy);
-      const nexus = explicit
-        ? motivation === "nation_state"
-          ? nexusForCountry(country)
-          : "other"
-        : deriveNexus(legacy);
-      return {
-        cs_id: a.cs_id ?? a.ID ?? slug(a.name!),
-        name: a.name!,
-        nexus,
-        motivation: [motivation],
-        country,
-        status: a.status ?? null,
-        description: a.description ?? null,
-        short_description: a.short_description ?? null,
-        first_seen: a.first_seen ?? null,
-        last_seen: a.last_seen ?? null,
-        objectives: a.objectives ?? null,
-        targeting_profile: a.targeting_profile ?? null,
-        community_identifiers: a.community_identifiers ?? null,
-        internal_alternative_names: a.internal_alternative_names ?? null,
-      };
-    });
+  const rows = mapAdversaryRecords(raw);
 
   const db = createClient<Database>(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },

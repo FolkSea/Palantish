@@ -1477,7 +1477,8 @@
       "GOLD TAHOE",
       "FIN11",
       "Dudear",
-      "GOLD EVERGREEN"
+      "GOLD EVERGREEN",
+      "Clop"
     ],
     "internal_alternative_names": [],
     "short_description": "Unattributed-nexus eCrime adversary."
@@ -1800,7 +1801,8 @@
     "community_identifiers": [
       "Strawberry Tempest",
       "DEV-0537",
-      "LAPSUS$"
+      "LAPSUS$",
+      "Lapsus"
     ],
     "internal_alternative_names": [],
     "short_description": "Unattributed-nexus eCrime adversary."
@@ -2409,5 +2411,253 @@
     "community_identifiers": [],
     "internal_alternative_names": [],
     "short_description": "Unattributed-nexus eCrime adversary."
+  },
+  {
+    "name": "ShinyHunters",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "Financially motivated data-theft and extortion group.",
+    "community_identifiers": [
+      "ShinyHunters",
+      "Shiny Hunters"
+    ]
+  },
+  {
+    "name": "Qilin",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "Ransomware-as-a-service operation (aka Agenda).",
+    "community_identifiers": [
+      "Qilin",
+      "Agenda"
+    ]
+  },
+  {
+    "name": "RansomHub",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "Ransomware-as-a-service operation.",
+    "community_identifiers": [
+      "RansomHub"
+    ]
+  },
+  {
+    "name": "BianLian",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "Data-theft and extortion group.",
+    "community_identifiers": [
+      "BianLian"
+    ]
+  },
+  {
+    "name": "Hunters International",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "Ransomware and extortion group.",
+    "community_identifiers": [
+      "Hunters International",
+      "Hunters Intl"
+    ]
+  },
+  {
+    "name": "DragonForce",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "Ransomware cartel / RaaS operation.",
+    "community_identifiers": [
+      "DragonForce"
+    ]
+  },
+  {
+    "name": "Trigona",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "Ransomware operation.",
+    "community_identifiers": [
+      "Trigona"
+    ]
+  },
+  {
+    "name": "INC Ransom",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "Ransomware and extortion group.",
+    "community_identifiers": [
+      "INC Ransom",
+      "INC Ransomware"
+    ]
+  },
+  {
+    "name": "Snatch",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "Ransomware and extortion group.",
+    "community_identifiers": [
+      "Snatch"
+    ]
+  },
+  {
+    "name": "Fairlife",
+    "motivation": "ecrime",
+    "country": null,
+    "short_description": "eCrime extortion actor.",
+    "community_identifiers": [
+      "Fairlife"
+    ]
+  },
+  {
+    "name": "Anonymous Sudan",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "Anonymous Sudan"
+    ]
+  },
+  {
+    "name": "NoName057(16)",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "NoName057(16)",
+      "NoName057"
+    ]
+  },
+  {
+    "name": "KillNet",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "KillNet"
+    ]
+  },
+  {
+    "name": "IT Army of Ukraine",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "IT Army of Ukraine"
+    ]
+  },
+  {
+    "name": "SiegedSec",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "SiegedSec"
+    ]
+  },
+  {
+    "name": "GhostSec",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "GhostSec"
+    ]
+  },
+  {
+    "name": "Cyber Av3ngers",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "Cyber Av3ngers"
+    ]
+  },
+  {
+    "name": "Handala",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "Handala"
+    ]
+  },
+  {
+    "name": "Mysterious Team Bangladesh",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "Mysterious Team Bangladesh"
+    ]
+  },
+  {
+    "name": "Team Insane PK",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "Team Insane PK"
+    ]
+  },
+  {
+    "name": "RipperSec",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "RipperSec"
+    ]
+  },
+  {
+    "name": "Dark Storm Team",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "Dark Storm Team"
+    ]
+  },
+  {
+    "name": "Turk Hack Team",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "Turk Hack Team"
+    ]
+  },
+  {
+    "name": "SylhetGang",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "SylhetGang"
+    ]
+  },
+  {
+    "name": "CyberVolk",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "CyberVolk"
+    ]
+  },
+  {
+    "name": "Holy League",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "Holy League"
+    ]
+  },
+  {
+    "name": "Hunt3r Kill3rs",
+    "motivation": "hacktivism",
+    "country": null,
+    "short_description": "Hacktivist collective.",
+    "community_identifiers": [
+      "Hunt3r Kill3rs"
+    ]
   }
 ]

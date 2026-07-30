@@ -1,9 +1,6 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildActorSectionCards,
-  buildHacktivismGroups,
-} from "@/lib/actor-sections";
-import { buildEcrimeActorGroups } from "@/lib/ecrime";
+import { buildActorSectionCards } from "@/lib/actor-sections";
+import { sortGroups, type GroupEntry } from "@/lib/ingest/enrich/rules";
 import type { Database } from "@/lib/supabase/database.types";
 
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
@@ -29,8 +26,17 @@ function report(p: Partial<IntelItemRow>): IntelItemRow {
   } as IntelItemRow;
 }
 
-const ecrimeGroups = buildEcrimeActorGroups([]);
-const hacktivismGroups = buildHacktivismGroups();
+// Catalogue-derived matchers, mirrored here as small fixtures: eCrime crews and
+// hacktivist collectives now live in the adversaries catalogue (motivation
+// tells them apart), so the tests feed the same shape buildGroupsFromAdversaries
+// produces.
+const ecrimeGroups: GroupEntry[] = sortGroups([
+  { alias: "lockbit", nexus: "other", cs: "LockBit", motivation: "ecrime" },
+  { alias: "qilin", nexus: "other", cs: "Qilin", motivation: "ecrime" },
+]);
+const hacktivismGroups: GroupEntry[] = sortGroups([
+  { alias: "killnet", nexus: "other", cs: "KillNet", motivation: "hacktivism" },
+]);
 
 function run(reports: IntelItemRow[]) {
   return buildActorSectionCards(reports, ecrimeGroups, hacktivismGroups);

@@ -10,7 +10,6 @@ import {
   computeAdversaryLabel,
   hasHacktivismKeyword,
   sortGroups,
-  GROUP_TABLE,
 } from "./enrich/rules";
 import { updateFeedHealth } from "./feed-health";
 import { ilog } from "./log";
@@ -125,8 +124,8 @@ export async function runIngest(
     ]);
 
     const adversaryGroups = buildGroupsFromAdversaries(adversaries ?? []);
-    // Group list used to derive an adversary label when there is no CS name.
-    const labelGroups = sortGroups([...adversaryGroups, ...GROUP_TABLE]);
+    // Catalogue-derived group list used to derive an adversary label.
+    const labelGroups = sortGroups(adversaryGroups);
 
     const sourceIdByName = new Map(
       (sources ?? []).map((s) => [s.name, s.id]),

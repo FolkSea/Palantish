@@ -1,19 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
-import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
-import { buildEcrimeActorGroups } from "@/lib/ecrime";
+import {
+  buildGroupsFromAdversaries,
+  type AdversaryGroupInput,
+} from "@/lib/ingest/adversaries";
 import { isThreatIntel } from "@/lib/relevance";
 import { adversaryLabel, NEXUS_ACCENT, type Nexus } from "@/lib/badges";
 import { nexusForCountry } from "@/lib/actor-classify";
 import { countryFlag } from "@/lib/flags";
-import {
-  GROUP_TABLE,
-  sortGroups,
-  deriveAdversaryFromText,
-} from "@/lib/ingest/enrich/rules";
+import { sortGroups, deriveAdversaryFromText } from "@/lib/ingest/enrich/rules";
 import {
   buildActorSectionCards,
-  buildHacktivismGroups,
   type ActorItem,
   type ActorCard,
 } from "@/lib/actor-sections";
@@ -115,7 +112,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     breachRes,
     exploitRes,
     otherRes,
-    ecrimeAdvRes,
+    advRes,
     summaryRes,
     staleFeedsRes,
     refreshRes,
@@ -146,11 +143,13 @@ export async function loadDashboard(): Promise<DashboardData> {
       .eq("kind", "other")
       .gte("published_at", recentCutoff)
       .order("published_at", { ascending: false }),
-    // eCrime adversary aliases (CrowdStrike cryptonyms) for attribution.
+    // The whole adversary catalogue - the single source of actor identity. Split
+    // by nexus/motivation below into nation-state, eCrime and hacktivism matchers.
     supabase
       .from("adversaries")
-      .select("name, nexus, community_identifiers, internal_alternative_names")
-      .eq("nexus", "other"),
+      .select(
+        "name, nexus, motivation, community_identifiers, internal_alternative_names",
+      ),
     supabase
       .from("executive_summaries")
       .select("summary, source, model, generated_at, citations")
@@ -183,11 +182,19 @@ export async function loadDashboard(): Promise<DashboardData> {
   // and drop anything this user has hidden.
   const keep = (i: { title: string | null; description?: string | null; raw_hash: string }) =>
     isThreatIntel(i.title, i.description) && !hidden.has(i.raw_hash);
+  // Split the adversary catalogue into the three matchers the dashboard needs.
+  // "other" nexus is eCrime or hacktivism, told apart by the actor's motivation;
+  // everything else is nation-state / rest-of-world.
+  const allAdv = (advRes.data ?? []) as AdversaryGroupInput[];
+  const hasMotivation = (a: AdversaryGroupInput, m: string) =>
+    (a.motivation ?? []).includes(m);
   // Every country-attributed item gets a label: the stored adversary_label if
   // present (so operator edits stick), otherwise a computed fallback - the
   // specific name, or "UNID <animal>" keyed by the actor's nexus (country-
   // specific for Rest of the World).
-  const nsGroups = sortGroups(GROUP_TABLE);
+  const nsGroups = sortGroups(
+    buildGroupsFromAdversaries(allAdv.filter((a) => a.nexus !== "other")),
+  );
   // Research items feed the actor sections + timeline. Cards show the last 7d.
   const research30 = (researchRes.data ?? []).filter(keep);
   const researchRecent = research30.filter(
@@ -249,9 +256,9 @@ export async function loadDashboard(): Promise<DashboardData> {
       }
     : null;
 
-  // eCrime attribution matcher (catalogue CrowdStrike names + known crews).
-  const ecrimeGroups = buildEcrimeActorGroups(
-    buildGroupsFromAdversaries(ecrimeAdvRes.data ?? []),
+  // eCrime attribution matcher: catalogue actors whose motivation is eCrime.
+  const ecrimeGroups = sortGroups(
+    buildGroupsFromAdversaries(allAdv.filter((a) => hasMotivation(a, "ecrime"))),
   );
 
   const breach30 = (breachRes.data ?? []).filter(keep);
@@ -292,7 +299,12 @@ export async function loadDashboard(): Promise<DashboardData> {
       })),
   ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
-  const hacktivismGroups = buildHacktivismGroups();
+  // Hacktivism matcher: catalogue actors whose motivation is hacktivism.
+  const hacktivismGroups = sortGroups(
+    buildGroupsFromAdversaries(
+      allAdv.filter((a) => hasMotivation(a, "hacktivism")),
+    ),
+  );
 
   // Activity-by-actor sections: per-country nation-state cards (built above),
   // and per-actor eCrime and hacktivism cards. All three carry research

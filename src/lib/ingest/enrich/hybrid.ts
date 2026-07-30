@@ -3,7 +3,6 @@ import {
   buildReport,
   rulesClassify,
   sortGroups,
-  GROUP_TABLE,
   type GroupEntry,
 } from "./rules";
 
@@ -41,10 +40,10 @@ export class HybridEnricher implements Enricher {
 
   constructor(
     private llm: LlmClassifier | null,
-    extraGroups: GroupEntry[] = [],
+    groups: GroupEntry[] = [],
     private report?: EnrichReport,
   ) {
-    this.groups = sortGroups([...extraGroups, ...GROUP_TABLE]);
+    this.groups = sortGroups(groups);
   }
 
   async enrich(c: RawCandidate): Promise<EnrichedItem | null> {

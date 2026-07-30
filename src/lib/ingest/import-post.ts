@@ -11,7 +11,7 @@ import { selectEnricher } from "./enrich/select";
 import { toAscii } from "@/lib/text";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import { computeHash } from "./dedup";
-import { computeAdversaryLabel, sortGroups, GROUP_TABLE } from "./enrich/rules";
+import { computeAdversaryLabel, sortGroups } from "./enrich/rules";
 import { kindFor, type ReportKind } from "./pipeline";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
 import type { EnrichedItem, RawCandidate } from "./types";
@@ -133,7 +133,8 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     .select(
       "name, nexus, country, motivation, community_identifiers, internal_alternative_names",
     );
-  const enricher = selectEnricher(buildGroupsFromAdversaries(adversaries ?? []));
+  const adversaryGroups = buildGroupsFromAdversaries(adversaries ?? []);
+  const enricher = selectEnricher(adversaryGroups);
   const candidate: RawCandidate = {
     title: article.title,
     url: article.finalUrl,
@@ -183,7 +184,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     enriched.nexus,
     enriched.title,
     enriched.description,
-    sortGroups(GROUP_TABLE),
+    sortGroups(adversaryGroups),
   );
   const title = isExploit ? cveMatch![0].toUpperCase() : enriched.title;
   const confidence = isExploit ? null : "medium";

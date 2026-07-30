@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { HybridEnricher, type LlmClassifier } from "@/lib/ingest/enrich/hybrid";
+import { catalogueGroups } from "./helpers/catalogue";
 import type { EnrichedItem, RawCandidate } from "@/lib/ingest/types";
+
+// Actor identification comes from the real catalogue (single source of truth).
+const groups = catalogueGroups();
 
 function candidate(partial: Partial<RawCandidate>): RawCandidate {
   return {
@@ -23,7 +27,7 @@ const neverLlm: LlmClassifier = {
 describe("HybridEnricher (rules-first)", () => {
   it("keeps a confident actor match without touching the LLM", async () => {
     const spy = vi.fn(async () => "drop" as const);
-    const h = new HybridEnricher({ classify: spy });
+    const h = new HybridEnricher({ classify: spy }, groups);
     const out = await h.enrich(
       candidate({ title: "Volt Typhoon targets critical infrastructure" }),
     );

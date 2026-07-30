@@ -1,5 +1,6 @@
 import type { Nexus } from "@/lib/badges";
 import type { Motivation } from "@/lib/actor-catalogue";
+import { nexusForCountry } from "@/lib/actor-classify";
 import type { GroupEntry } from "./enrich/rules";
 
 /**
@@ -113,11 +114,12 @@ export function deriveNexus(a: AdversaryRecord): Nexus {
 // Aliases shorter than this are too generic to match safely.
 const MIN_ALIAS_LEN = 4;
 
-/** The stored adversary shape used to build the alias matcher (nexus comes
- * straight from the row - it was derived from the animal at load time). */
+/** The stored adversary shape used to build the alias matcher (nexus + motivation
+ * come straight from the row - derived at load time). */
 export type AdversaryGroupInput = {
   name?: string | null;
   nexus?: Nexus | null;
+  motivation?: string[] | null;
   community_identifiers?: string[] | null;
   internal_alternative_names?: string[] | null;
 };
@@ -136,6 +138,7 @@ export function buildGroupsFromAdversaries(
   for (const a of records) {
     if (!a.name) continue;
     const nexus = (a.nexus ?? "other") as Nexus;
+    const motivation = (a.motivation?.[0] as Motivation | undefined) ?? undefined;
     const aliases = [
       a.name,
       ...(a.community_identifiers ?? []),
@@ -147,8 +150,101 @@ export function buildGroupsFromAdversaries(
       const key = `${alias}|${a.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      entries.push({ alias, nexus, cs: a.name });
+      entries.push({ alias, nexus, cs: a.name, motivation });
     }
   }
   return entries;
+}
+
+/**
+ * A raw record as it appears in adversaries.json - either the curated format
+ * (explicit `motivation` string + `country`) or the legacy CrowdStrike export
+ * (motivation array + animal_classifier).
+ */
+export type RawAdversaryRecord = {
+  ID?: string;
+  cs_id?: string;
+  name?: string;
+  animal_classifier?: string | null;
+  status?: string | null;
+  description?: string | null;
+  short_description?: string | null;
+  first_seen?: string | null;
+  last_seen?: string | null;
+  objectives?: string[] | null;
+  motivation?: string | string[] | null;
+  country?: string | null;
+  targeting_profile?: string[] | null;
+  community_identifiers?: string[] | null;
+  internal_alternative_names?: string[] | null;
+};
+
+/** A row ready to upsert into the `adversaries` table (nexus/motivation/country
+ * resolved). Also the shape buildGroupsFromAdversaries consumes. */
+export type AdversaryRow = {
+  cs_id: string;
+  name: string;
+  nexus: Nexus;
+  motivation: string[];
+  country: string | null;
+  status: string | null;
+  description: string | null;
+  short_description: string | null;
+  first_seen: string | null;
+  last_seen: string | null;
+  objectives: string[] | null;
+  targeting_profile: string[] | null;
+  community_identifiers: string[] | null;
+  internal_alternative_names: string[] | null;
+};
+
+const OUR_MOTIVATIONS = new Set<string>(["nation_state", "ecrime", "hacktivism"]);
+
+const slug = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/**
+ * Map raw adversaries.json records to table rows, resolving nexus / motivation /
+ * country. Shared by the loader (scripts/load-adversaries) and tests so both see
+ * exactly the classification the app uses - the `adversaries` catalogue is the
+ * single source of actor identity. Pure (no DB, no fs).
+ */
+export function mapAdversaryRecords(raw: RawAdversaryRecord[]): AdversaryRow[] {
+  return raw
+    .filter((a) => a.name)
+    .map((a) => {
+      // Prefer explicit motivation + country (the curated format); fall back to
+      // deriving them from the CrowdStrike animal cryptonym (legacy format).
+      const explicit =
+        typeof a.motivation === "string" && OUR_MOTIVATIONS.has(a.motivation);
+      const legacy: AdversaryRecord = {
+        ...a,
+        motivation: Array.isArray(a.motivation) ? a.motivation : null,
+      };
+      const motivation = explicit
+        ? (a.motivation as string)
+        : deriveMotivation(legacy);
+      const country = explicit ? a.country ?? null : deriveCountry(legacy);
+      const nexus = explicit
+        ? motivation === "nation_state"
+          ? nexusForCountry(country)
+          : "other"
+        : deriveNexus(legacy);
+      return {
+        cs_id: a.cs_id ?? a.ID ?? slug(a.name!),
+        name: a.name!,
+        nexus,
+        motivation: [motivation],
+        country,
+        status: a.status ?? null,
+        description: a.description ?? null,
+        short_description: a.short_description ?? null,
+        first_seen: a.first_seen ?? null,
+        last_seen: a.last_seen ?? null,
+        objectives: a.objectives ?? null,
+        targeting_profile: a.targeting_profile ?? null,
+        community_identifiers: a.community_identifiers ?? null,
+        internal_alternative_names: a.internal_alternative_names ?? null,
+      };
+    });
 }

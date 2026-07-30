@@ -11,8 +11,7 @@ import {
   UNID_COLOR,
   type TimelineFilters,
 } from "@/lib/timeline";
-import { buildHacktivismGroups } from "@/lib/ingest/enrich/rules";
-import { buildEcrimeActorGroups } from "@/lib/ecrime";
+import { sortGroups, type GroupEntry } from "@/lib/ingest/enrich/rules";
 import type { Database } from "@/lib/supabase/database.types";
 
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
@@ -68,8 +67,14 @@ function vuln(
   });
 }
 
-const ecrimeGroups = buildEcrimeActorGroups([]);
-const hacktivismGroups = buildHacktivismGroups();
+// eCrime crews and hacktivist collectives are catalogue actors now (motivation
+// tells them apart); these fixtures mirror that shape.
+const ecrimeGroups: GroupEntry[] = sortGroups([
+  { alias: "lockbit", nexus: "other", cs: "LockBit", motivation: "ecrime" },
+]);
+const hacktivismGroups: GroupEntry[] = sortGroups([
+  { alias: "killnet", nexus: "other", cs: "KillNet", motivation: "hacktivism" },
+]);
 
 function run(
   intelRows: IntelItemRow[] = [],
