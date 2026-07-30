@@ -13,6 +13,7 @@
     "summary": "NODE_OPTIONS='--conditions=react-server' tsx scripts/generate-summary.ts",
     "sanitize": "NODE_OPTIONS='--conditions=react-server' tsx scripts/sanitize-existing.ts",
     "feeds:health": "NODE_OPTIONS='--conditions=react-server' tsx scripts/refresh-feed-health.ts",
+    "dev:login": "tsx scripts/dev-login.ts",
     "ascii-check": "tsx scripts/ascii-check.ts",
     "test": "vitest run",
     "db:reset": "supabase db reset",

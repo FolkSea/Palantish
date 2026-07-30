@@ -91,6 +91,11 @@ curl -s -X POST "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/admin/users" \
 Any user that exists in Supabase Auth may sign in; there is no separate
 allow-list to maintain.
 
+For a **passwordless** local sign-in (handy for automated/browser checks),
+`pnpm dev:login` mints a magic-link token for a throwaway dev user via the local
+service-role key and prints an `/auth/confirm` URL; open it to establish a
+session. It refuses to run against a non-local Supabase project.
+
 ### 4. Run the app
 
 ```bash
