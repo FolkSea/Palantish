@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isEmailAllowed } from "@/lib/env";
 import { toAscii } from "@/lib/text";
 import {
   MOTIVATIONS,
@@ -22,7 +21,7 @@ async function requireAllowed(): Promise<string | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isEmailAllowed(user.email)) return "Not authorized.";
+  if (!user) return "Not authorized.";
   return null;
 }
 

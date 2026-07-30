@@ -1,9 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "./database.types";
-import { publicEnv, isEmailAllowed } from "@/lib/env";
+import { publicEnv } from "@/lib/env";
 
-/** Paths reachable without an authenticated, allow-listed session. */
+/** Paths reachable without an authenticated session. */
 const PUBLIC_PATHS = ["/login", "/auth", "/api/ingest"];
 
 function isPublicPath(pathname: string): boolean {
@@ -13,8 +13,9 @@ function isPublicPath(pathname: string): boolean {
 }
 
 /**
- * Refreshes the Supabase session cookie and gates access. Unauthenticated or
- * non-allow-listed users are redirected to /login for any non-public path.
+ * Refreshes the Supabase session cookie and gates access. Unauthenticated users
+ * are redirected to /login for any non-public path; access is otherwise managed
+ * entirely in Supabase Auth.
  */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -47,20 +48,16 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const allowed = user && isEmailAllowed(user.email);
 
-  if (!allowed && !isPublicPath(pathname)) {
+  if (!user && !isPublicPath(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirectedFrom", pathname);
-    if (user && !isEmailAllowed(user.email)) {
-      url.searchParams.set("error", "not_allowed");
-    }
     return NextResponse.redirect(url);
   }
 
-  // Signed-in allow-listed users hitting /login go to the dashboard.
-  if (allowed && pathname === "/login") {
+  // Signed-in users hitting /login go to the dashboard.
+  if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.search = "";

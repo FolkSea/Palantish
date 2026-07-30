@@ -1,7 +1,6 @@
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { isEmailAllowed } from "@/lib/env";
 
 /** Magic-link callback: verifies the OTP token and establishes a session. */
 export async function GET(request: NextRequest) {
@@ -22,15 +21,11 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.verifyOtp({ token_hash, type });
+  const { error } = await supabase.auth.verifyOtp({ token_hash, type });
 
   if (error) return redirectTo("/login", "invalid_link");
 
-  // Enforce the allow-list even if a link was somehow issued to another email.
-  if (!isEmailAllowed(data.user?.email)) {
-    await supabase.auth.signOut();
-    return redirectTo("/login", "not_allowed");
-  }
-
+  // Any user Supabase issued a valid link to is allowed in; access is managed
+  // entirely in Supabase Auth.
   return redirectTo(next);
 }

@@ -30,22 +30,9 @@ export const publicEnv = {
   },
 };
 
-/** Comma-separated allow-list of permitted emails, lower-cased. */
-export function allowedEmails(): string[] {
-  return (process.env.ALLOWED_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-/** True when the given email is permitted to access the dashboard. */
-export function isEmailAllowed(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const list = allowedEmails();
-  // Empty allow-list => deny everyone (fail closed).
-  if (list.length === 0) return false;
-  return list.includes(email.trim().toLowerCase());
-}
+// Access control is managed entirely in Supabase Auth: any user that exists in
+// the project (created/invited via the Supabase dashboard) may sign in. There
+// is no application-level email allow-list.
 
 /** Server-only secrets. Throws if accessed where they are undefined. */
 export const serverEnv = {

@@ -8,7 +8,6 @@ type ActionResult = { error?: string; message?: string };
 const initial: ActionResult = {};
 
 const ERROR_COPY: Record<string, string> = {
-  not_allowed: "That account is not on the access allow-list.",
   invalid_link: "That sign-in link was invalid or has expired.",
 };
 
@@ -62,7 +61,7 @@ function LoginForm() {
           </div>
         </div>
         <p className="mt-3 text-[12px] text-slate-500">
-          Restricted access. Sign in with an allow-listed email.
+          Restricted access. Sign in with your authorised account.
         </p>
 
         <div className="mt-4 flex gap-1 rounded-md bg-slate-100 p-1 text-[12px]">

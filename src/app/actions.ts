@@ -3,7 +3,6 @@
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isEmailAllowed } from "@/lib/env";
 import {
   ingestArticle,
   importBlogPostWithAI,
@@ -32,7 +31,7 @@ async function ensureAllowed(): Promise<string | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isEmailAllowed(user.email)) return "Not authorized.";
+  if (!user) return "Not authorized.";
   return null;
 }
 
@@ -58,7 +57,7 @@ export async function deleteItemAction(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isEmailAllowed(user.email)) {
+  if (!user) {
     return { ok: false, error: "Not authorized." };
   }
 
@@ -127,7 +126,7 @@ export async function hideItemAction(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isEmailAllowed(user.email)) {
+  if (!user) {
     return { ok: false, error: "Not authorized." };
   }
 
@@ -150,7 +149,7 @@ export async function unhideItemAction(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isEmailAllowed(user.email)) {
+  if (!user) {
     return { ok: false, error: "Not authorized." };
   }
 
@@ -356,7 +355,7 @@ export async function getReportIndicatorsAction(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isEmailAllowed(user.email)) {
+  if (!user) {
     return { ok: false, error: "Not authorized." };
   }
 
@@ -928,7 +927,7 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user || !isEmailAllowed(user.email)) return empty;
+  if (!user) return empty;
 
   // Strip characters significant to PostgREST's or()/ilike grammar so the query
   // is a safe literal substring match.

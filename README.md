@@ -25,11 +25,11 @@ RSS/Atom feeds --> ingest pipeline --> enrich (rules | LLM) --> dedup --> Supaba
                                                                            v
 Browser <-- Next.js (RSC) <-- RLS-gated SELECT <---------------- intel tables
    ^
-   +-- Supabase Auth (magic link / password), email allow-list
+   +-- Supabase Auth (magic link / password)
 ```
 
 - **Reads**: Server Components query Supabase with the anon key; RLS limits access
-  to authenticated, allow-listed users.
+  to authenticated users (managed entirely in Supabase Auth).
 - **Writes**: only the ingest pipeline, using the service-role key (server-only).
   There are no client-side write policies.
 
@@ -58,8 +58,8 @@ pnpm supabase start
 ```
 
 Copy `.env.example` to `.env.local` and fill in the values printed by
-`supabase start` (`API_URL`, `ANON_KEY`, `SERVICE_ROLE_KEY`). `ALLOWED_EMAILS`
-gates who may sign in.
+`supabase start` (`API_URL`, `ANON_KEY`, `SERVICE_ROLE_KEY`). Who may sign in is
+managed entirely in Supabase Auth (create/invite users; disable public sign-ups).
 
 ### 2. Apply schema + seed
 
@@ -88,7 +88,8 @@ curl -s -X POST "$NEXT_PUBLIC_SUPABASE_URL/auth/v1/admin/users" \
   -d '{"email":"you@example.com","password":"localdevpass123","email_confirm":true}'
 ```
 
-The email must also be in `ALLOWED_EMAILS` (and the `allowed_users` table).
+Any user that exists in Supabase Auth may sign in; there is no separate
+allow-list to maintain.
 
 ### 4. Run the app
 
@@ -145,10 +146,11 @@ pnpm build
 
 1. Import the repo into Vercel (framework auto-detected as Next.js).
 2. Create a Supabase project; run the migration (`supabase db push` or paste the
-   SQL) and `seed.sql`. Add allow-listed emails to `allowed_users`.
+   SQL) and `seed.sql`. Create/invite users in Supabase Auth (and disable public
+   sign-ups) to control access.
 3. Set environment variables (see `.env.example`):
    `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY`, `INGEST_CRON_SECRET`, `ALLOWED_EMAILS`, and
+   `SUPABASE_SERVICE_ROLE_KEY`, `INGEST_CRON_SECRET`, and
    optionally `ANTHROPIC_API_KEY` / `SEARCH_API_KEY`.
 4. Also set `CRON_SECRET` equal to `INGEST_CRON_SECRET` - Vercel Cron sends it as
    `Authorization: Bearer <CRON_SECRET>`, which `/api/ingest` accepts.
