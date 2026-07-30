@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "IntelBook",
+  title: "Palantish",
   description:
-    "Authenticated intelligence dashboard tracking nation-state cyber activity, exploited vulnerabilities, breaches, and vendor reporting.",
+    "An intelligence portal with the confidence of an all-seeing stone and the caveats of a responsible analyst.",
 };
 
 export default function RootLayout({
@@ -19,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} h-full`}>
+    <html lang="en" className={`${inter.variable} h-full`}>
       <body className="min-h-full">{children}</body>
     </html>
   );

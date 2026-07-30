@@ -37,23 +37,39 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       {/* Header */}
-      <header className="mb-4 rounded-lg bg-[#1877F2] px-4 py-3 shadow-sm">
+      <header className="mb-4 rounded-lg bg-[#2855D9] px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-[24px] font-bold leading-none text-[#1877F2] shadow-sm">
-              i
+            {/* All-seeing stone */}
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9"
+                  stroke="#2855D9"
+                  strokeWidth="2"
+                />
+                <circle cx="12" cy="12" r="3.5" fill="#2855D9" />
+              </svg>
             </span>
             <div>
-              <h1 className="text-[22px] font-bold leading-none tracking-tight text-white">
-                IntelBook
+              <h1 className="text-[22px] font-bold lowercase leading-none tracking-tight text-white">
+                palantish
               </h1>
-              <p className="mt-1 text-[12px] text-blue-100">
-                Consolidated Cybersecurity Intelligence Feeds
+              <p className="mt-1 text-[12px] text-[#90A9FF]">
+                See what we think we know.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-blue-100">{identityLabel}</span>
+            <span className="text-[11px] text-[#90A9FF]">{identityLabel}</span>
             <ImportPostButton />
             <form action="/auth/signout" method="post">
               <button
@@ -86,7 +102,7 @@ export default async function DashboardPage() {
           </Link>
           </div>
         </div>
-        <p className="mt-2 text-[11px] text-blue-200">
+        <p className="mt-2 text-[11px] text-[#90A9FF]">
           <CompiledTime iso={data.compiledAt} />
         </p>
       </header>
