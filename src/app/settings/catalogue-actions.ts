@@ -13,6 +13,8 @@ import {
   type Motivation,
 } from "@/lib/actor-catalogue";
 import type { Nexus } from "@/lib/badges";
+import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
+import { sortGroups, matchGroup } from "@/lib/ingest/enrich/rules";
 
 async function requireAllowed(): Promise<string | null> {
   const supabase = await createClient();
@@ -73,6 +75,56 @@ function actorRow(input: ActorInput) {
   };
 }
 
+/**
+ * Rescan currently-unattributed reports against one adversary's aliases and,
+ * where the text matches, attribute them to it (updating country + motivation).
+ * Only reports with no specific adversary (crowdstrike_adversary null and no
+ * label, or a generic "UNID ..." label) are ever changed. Returns the count.
+ */
+async function rescanUnattributed(
+  db: ReturnType<typeof createAdminClient>,
+  id: string,
+): Promise<number> {
+  const { data: adv } = await db
+    .from("adversaries")
+    .select(
+      "name, nexus, country, motivation, community_identifiers, internal_alternative_names",
+    )
+    .eq("id", id)
+    .single();
+  if (!adv?.name) return 0;
+
+  const groups = sortGroups(buildGroupsFromAdversaries([adv]));
+  if (groups.length === 0) return 0;
+
+  const { data: items } = await db
+    .from("intel_items")
+    .select("id, title, description, adversary_label")
+    .is("crowdstrike_adversary", null);
+  const unattributed = (items ?? []).filter(
+    (i) => !i.adversary_label || /^unid\s/i.test(i.adversary_label),
+  );
+  if (unattributed.length === 0) return 0;
+
+  const motivation = adv.motivation?.[0] ?? null;
+  let updated = 0;
+  for (const it of unattributed) {
+    const hay = `${it.title} ${it.description ?? ""}`.toLowerCase();
+    if (!matchGroup(hay, groups)) continue;
+    const { error } = await db
+      .from("intel_items")
+      .update({
+        crowdstrike_adversary: adv.name,
+        adversary_label: adv.name,
+        country: adv.country,
+        motivation,
+      })
+      .eq("id", it.id);
+    if (!error) updated++;
+  }
+  return updated;
+}
+
 export async function addActor(input: ActorInput): Promise<ActorResult> {
   const unauth = await requireAllowed();
   if (unauth) return { ok: false, error: unauth };
@@ -86,8 +138,10 @@ export async function addActor(input: ActorInput): Promise<ActorResult> {
     .select(ACTOR_SELECT)
     .single();
   if (error) return { ok: false, error: error.message };
+  const attributed = await rescanUnattributed(db, data.id);
   revalidatePath("/settings");
-  return { ok: true, actor: data as ActorRecord };
+  if (attributed > 0) revalidatePath("/");
+  return { ok: true, actor: data as ActorRecord, attributed };
 }
 
 export async function updateActor(
@@ -107,8 +161,10 @@ export async function updateActor(
     .select(ACTOR_SELECT)
     .single();
   if (error) return { ok: false, error: error.message };
+  const attributed = await rescanUnattributed(db, data.id);
   revalidatePath("/settings");
-  return { ok: true, actor: data as ActorRecord };
+  if (attributed > 0) revalidatePath("/");
+  return { ok: true, actor: data as ActorRecord, attributed };
 }
 
 export async function deleteActor(

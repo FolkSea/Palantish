@@ -37,6 +37,17 @@ export function ActorsPanel({
   const [editing, setEditing] = useState<string | "new" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  function afterSave(a: ActorRecord, attributed: number) {
+    upsertLocal(a);
+    setEditing(null);
+    setNotice(
+      attributed > 0
+        ? `Re-attributed ${attributed} previously unattributed report${attributed === 1 ? "" : "s"} to "${a.name}".`
+        : null,
+    );
+  }
 
   const [nameF, setNameF] = useState("");
   const [motivationF, setMotivationF] = useState("");
@@ -100,14 +111,14 @@ export function ActorsPanel({
         </p>
       ) : null}
 
+      {notice ? (
+        <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">
+          {notice}
+        </p>
+      ) : null}
+
       {editing === "new" ? (
-        <ActorForm
-          onCancel={() => setEditing(null)}
-          onSaved={(a) => {
-            upsertLocal(a);
-            setEditing(null);
-          }}
-        />
+        <ActorForm onCancel={() => setEditing(null)} onSaved={afterSave} />
       ) : null}
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -160,10 +171,7 @@ export function ActorsPanel({
                     <ActorForm
                       actor={a}
                       onCancel={() => setEditing(null)}
-                      onSaved={(u) => {
-                        upsertLocal(u);
-                        setEditing(null);
-                      }}
+                      onSaved={afterSave}
                     />
                   </td>
                 </tr>
@@ -220,7 +228,7 @@ function ActorForm({
   onCancel,
 }: {
   actor?: ActorRecord;
-  onSaved: (a: ActorRecord) => void;
+  onSaved: (a: ActorRecord, attributed: number) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(actor?.name ?? "");
@@ -252,7 +260,7 @@ function ActorForm({
       setError(res.error ?? "Save failed.");
       return;
     }
-    onSaved(res.actor);
+    onSaved(res.actor, res.attributed ?? 0);
   }
 
   return (
