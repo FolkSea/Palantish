@@ -623,8 +623,10 @@ export async function updateReportAdversaryAction(
     };
   }
 
-  // Recognised attribution: set the actor + its country/motivation and flag the
-  // item as research so it groups under the right actor card.
+  // Recognised attribution: set the actor + its country/motivation, and flag the
+  // item as research so it groups under the right actor card - except exploits,
+  // which stay in the Exploits section even when attributed.
+  const newKind = item.kind === "exploit" ? "exploit" : "research";
   let label: string;
   let country: string | null;
   let update: {
@@ -642,7 +644,7 @@ export async function updateReportAdversaryAction(
       crowdstrike_adversary: matched.name,
       country: matched.country,
       motivation: matched.motivation?.[0] ?? null,
-      kind: "research",
+      kind: newKind,
     };
   } else {
     label = raw.toUpperCase();
@@ -652,7 +654,7 @@ export async function updateReportAdversaryAction(
       crowdstrike_adversary: null,
       country: family!.country,
       motivation: family!.motivation,
-      kind: "research",
+      kind: newKind,
     };
   }
 
@@ -669,7 +671,7 @@ export async function updateReportAdversaryAction(
     country,
     regrouped: true,
     recognised: true,
-    moved: item.kind !== "research",
+    moved: item.kind !== newKind,
   };
 }
 
@@ -708,17 +710,18 @@ export async function updateReportCountryAction(
     return { ok: true, country: null, moved: false };
   }
 
-  // Setting a country is a nation-state attribution: group it under that
-  // country and flag the item as research.
+  // Setting a country is a nation-state attribution: group it under that country
+  // and flag it as research - except exploits, which stay in the Exploits list.
   const item = await resolveReport(db, rawHash);
   if (!item) return { ok: false, error: "Report not found." };
+  const newKind = item.kind === "exploit" ? "exploit" : "research";
   const { error } = await db
     .from("intel_items")
-    .update({ country: c, motivation: "nation_state", kind: "research" })
+    .update({ country: c, motivation: "nation_state", kind: newKind })
     .eq("id", item.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
-  return { ok: true, country: c, moved: item.kind !== "research" };
+  return { ok: true, country: c, moved: item.kind !== newKind };
 }
 
 const CONFIDENCE_VALUES = ["high", "medium", "low"];
