@@ -138,7 +138,7 @@ describe("Rest of the World attribution", () => {
       null,
       sortGroups(GROUP_TABLE),
     );
-    expect(label).toBe("UNID Tiger");
+    expect(label).toBe("UNID TIGER");
   });
 });
 

@@ -127,8 +127,10 @@ export function adversaryLabel(
   text = "",
 ): string {
   if (isSpecificAdversary(name)) return name as string;
-  if (nexus === "rest_of_world") return `UNID ${restOfWorldAnimal(text)}`;
-  return `UNID ${UNID_ANIMAL_BY_NEXUS[nexus]}`;
+  // Animal (family) is always upper-cased: UNID BAT, UNID PANDA, ...
+  if (nexus === "rest_of_world")
+    return `UNID ${restOfWorldAnimal(text).toUpperCase()}`;
+  return `UNID ${UNID_ANIMAL_BY_NEXUS[nexus].toUpperCase()}`;
 }
 
 // Nation-state colours for the timeline scatter + actor accents. Chosen for
