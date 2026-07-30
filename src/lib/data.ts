@@ -4,6 +4,7 @@ import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
 import { buildEcrimeActorGroups, deriveEcrimeActor } from "@/lib/ecrime";
 import { isThreatIntel } from "@/lib/relevance";
 import { adversaryLabel, type Nexus } from "@/lib/badges";
+import { nexusForCountry } from "@/lib/actor-classify";
 import {
   GROUP_TABLE,
   sortGroups,
@@ -18,7 +19,6 @@ import {
 type Tables = Database["public"]["Tables"];
 type Views = Database["public"]["Views"];
 
-export type ActorRow = Tables["actors"]["Row"];
 export type IntelItemRow = Tables["intel_items"]["Row"];
 export type VulnerabilityRow = Tables["vulnerabilities"]["Row"];
 export type BreachRow = Tables["breaches"]["Row"];
@@ -27,7 +27,14 @@ export type TimelineRow = Views["timeline_events"]["Row"];
 // An actor-card item, with a display adversary name (CS cryptonym when set,
 // otherwise a specific name derived from the item text).
 export type ActorItem = IntelItemRow & { adversary: string | null };
-export type ActorWithItems = ActorRow & { items: ActorItem[] };
+
+// A nation-state card: one country (or "Non Attributed") and its items.
+export type NationStateCard = {
+  key: string;
+  label: string;
+  nexus: Nexus; // accent colour bucket
+  items: ActorItem[];
+};
 
 export type EcrimeTimelinePoint = {
   id: string;
@@ -78,7 +85,7 @@ export type DashboardData = {
   compiledAt: string | null;
   executiveSummary: ExecutiveSummary | null;
   // Nation-state actor cards (China, Russia, North Korea, Iran, Rest of World).
-  nationStateActors: ActorWithItems[];
+  nationStateCards: NationStateCard[];
   // Per-actor eCrime and hacktivism cards (each with an "Unattributed" card).
   ecrimeCards: ActorGroupCard[];
   hacktivismCards: ActorGroupCard[];
@@ -118,7 +125,6 @@ export async function loadDashboard(): Promise<DashboardData> {
   ).toISOString();
 
   const [
-    actorsRes,
     activityRes,
     timelineRes,
     breakingRes,
@@ -130,7 +136,6 @@ export async function loadDashboard(): Promise<DashboardData> {
     staleFeedsRes,
     refreshRes,
   ] = await Promise.all([
-    supabase.from("actors").select("*").order("sort_order"),
     supabase
       .from("intel_items")
       .select("*")
@@ -210,22 +215,40 @@ export async function loadDashboard(): Promise<DashboardData> {
   // specific for Rest of the World).
   const nsGroups = sortGroups(GROUP_TABLE);
   const activityBase = (activityRes.data ?? []).filter(keep);
-  const actors: ActorWithItems[] = (actorsRes.data ?? []).map((actor) => ({
-    ...actor,
-    items: activityBase
-      .filter((i) => i.actor_id === actor.id)
-      .map((i) => ({
-        ...i,
-        adversary:
-          i.adversary_label ??
-          adversaryLabel(
-            i.crowdstrike_adversary ??
-              deriveAdversaryFromText(i.title, i.description, nsGroups),
-            actor.nexus as Nexus,
-            `${i.title} ${i.description ?? ""}`,
-          ),
-      })),
-  }));
+  // Nation-state activity grouped into one card per country, plus a
+  // "Non Attributed" card for nation-state items without a country.
+  const nsByCountry = new Map<string, ActorItem[]>();
+  for (const i of activityBase) {
+    if (i.motivation !== "nation_state") continue;
+    const item: ActorItem = {
+      ...i,
+      adversary:
+        i.adversary_label ??
+        adversaryLabel(
+          i.crowdstrike_adversary ??
+            deriveAdversaryFromText(i.title, i.description, nsGroups),
+          nexusForCountry(i.country),
+          `${i.title} ${i.description ?? ""}`,
+        ),
+    };
+    const key = i.country ?? "";
+    const arr = nsByCountry.get(key);
+    if (arr) arr.push(item);
+    else nsByCountry.set(key, [item]);
+  }
+  // Most-active country first; the "Non Attributed" card always sorts last.
+  const nationStateCards: NationStateCard[] = [...nsByCountry.entries()]
+    .map(([key, items]) => ({
+      key: key || "__none__",
+      label: key || "Non Attributed",
+      nexus: key ? nexusForCountry(key) : ("other" as Nexus),
+      items,
+    }))
+    .sort((a, b) => {
+      if (a.key === "__none__") return 1;
+      if (b.key === "__none__") return -1;
+      return b.items.length - a.items.length || a.label.localeCompare(b.label);
+    });
 
   const latestRefresh = refreshRes.data?.[0];
   const compiledAt =
@@ -284,9 +307,9 @@ export async function loadDashboard(): Promise<DashboardData> {
   const reports = (reportsRes.data ?? []).filter(keep);
   const breaking = (breakingRes.data ?? []).filter(keep);
 
-  // Activity-by-actor sections: nation-state cards, and per-actor eCrime and
-  // hacktivism cards derived from breaches (and hacktivism-tagged reports).
-  const nationStateActors = actors.filter((a) => a.nexus !== "other");
+  // Activity-by-actor sections: per-country nation-state cards (built above),
+  // and per-actor eCrime and hacktivism cards derived from breaches (and
+  // hacktivism-tagged reports).
   const { ecrimeCards, hacktivismCards } = buildActorSectionCards(
     breaches,
     reports,
@@ -297,7 +320,7 @@ export async function loadDashboard(): Promise<DashboardData> {
   return {
     compiledAt,
     executiveSummary,
-    nationStateActors,
+    nationStateCards,
     ecrimeCards,
     hacktivismCards,
     timeline: timelineRes.data ?? [],

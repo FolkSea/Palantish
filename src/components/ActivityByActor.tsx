@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { ActorWithItems, ActorItem } from "@/lib/data";
+import type { NationStateCard, ActorItem } from "@/lib/data";
 import type { ActorGroupCard, ActorReport } from "@/lib/actor-sections";
 import type { Focus } from "@/components/settings/AccountPanel";
 import {
   AdversaryBadge,
   ConfidenceBadge,
   SourceBadge,
-  StatusPill,
 } from "@/components/Badges";
 import { ItemActions } from "@/components/ItemActions";
 import { ReportTitle } from "@/components/ReportModal";
@@ -25,17 +24,17 @@ function displayDate(d: string | null): string {
 }
 
 export function ActivityByActor({
-  nationStateActors,
+  nationStateCards,
   ecrimeCards,
   hacktivismCards,
   focus,
 }: {
-  nationStateActors: ActorWithItems[];
+  nationStateCards: NationStateCard[];
   ecrimeCards: ActorGroupCard[];
   hacktivismCards: ActorGroupCard[];
   focus: Focus;
 }) {
-  const nsCount = nationStateActors.reduce((n, a) => n + a.items.length, 0);
+  const nsCount = nationStateCards.reduce((n, c) => n + c.items.length, 0);
   const ecCount = ecrimeCards.reduce((n, c) => n + c.items.length, 0);
   const hkCount = hacktivismCards.reduce((n, c) => n + c.items.length, 0);
 
@@ -53,11 +52,15 @@ export function ActivityByActor({
           count={nsCount}
           defaultOpen={startsOpen("nation_state")}
         >
-          <CardGrid>
-            {nationStateActors.map((a) => (
-              <ActorCard key={a.id} actor={a} />
-            ))}
-          </CardGrid>
+          {nationStateCards.length ? (
+            <CardGrid>
+              {nationStateCards.map((c) => (
+                <CountryCard key={c.key} card={c} />
+              ))}
+            </CardGrid>
+          ) : (
+            <Empty>No nation-state activity in the current window.</Empty>
+          )}
         </CollapsibleSection>
 
         <CollapsibleSection
@@ -165,8 +168,8 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ActorCard({ actor }: { actor: ActorWithItems }) {
-  const accent = NEXUS_ACCENT[actor.nexus as Nexus] ?? "#475569";
+function CountryCard({ card }: { card: NationStateCard }) {
+  const accent = NEXUS_ACCENT[card.nexus as Nexus] ?? "#475569";
   return (
     <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
       <div
@@ -175,32 +178,19 @@ function ActorCard({ actor }: { actor: ActorWithItems }) {
       >
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-[13px] font-semibold text-slate-900">
-            {actor.display_name}
+            {card.label}
           </h3>
-          <StatusPill status={actor.status} />
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+            {card.items.length}
+          </span>
         </div>
-        {actor.tracked_groups ? (
-          <p className="mt-1 text-[11px] text-slate-500">
-            Tracked: {actor.tracked_groups}
-          </p>
-        ) : null}
       </div>
 
       <div className="flex-1 space-y-3 px-4 py-3">
-        {actor.items.length === 0 ? (
-          <p className="text-[12px] text-slate-400">
-            {actor.note ?? "No new reporting in the current window."}
-          </p>
-        ) : (
-          actor.items.map((item) => <ActorEntry key={item.id} item={item} />)
-        )}
+        {card.items.map((item) => (
+          <ActorEntry key={item.id} item={item} />
+        ))}
       </div>
-
-      {actor.items.length > 0 && actor.note ? (
-        <div className="border-t border-[#e5e7eb] px-4 py-2 text-[11px] italic text-slate-500">
-          {actor.note}
-        </div>
-      ) : null}
     </div>
   );
 }

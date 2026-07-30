@@ -118,7 +118,7 @@ export default async function DashboardPage() {
 
         {/* Actor cards */}
         <ActivityByActor
-          nationStateActors={data.nationStateActors}
+          nationStateCards={data.nationStateCards}
           ecrimeCards={data.ecrimeCards}
           hacktivismCards={data.hacktivismCards}
           focus={focus}

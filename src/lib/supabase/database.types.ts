@@ -34,42 +34,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      actors: {
-        Row: {
-          created_at: string
-          display_name: string
-          id: string
-          nexus: Database["public"]["Enums"]["actor_nexus"]
-          note: string | null
-          sort_order: number
-          status: Database["public"]["Enums"]["actor_status"]
-          tracked_groups: string | null
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          display_name: string
-          id?: string
-          nexus: Database["public"]["Enums"]["actor_nexus"]
-          note?: string | null
-          sort_order?: number
-          status?: Database["public"]["Enums"]["actor_status"]
-          tracked_groups?: string | null
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          display_name?: string
-          id?: string
-          nexus?: Database["public"]["Enums"]["actor_nexus"]
-          note?: string | null
-          sort_order?: number
-          status?: Database["public"]["Enums"]["actor_status"]
-          tracked_groups?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
       adversaries: {
         Row: {
           community_identifiers: string[] | null
@@ -315,14 +279,15 @@ export type Database = {
       }
       intel_items: {
         Row: {
-          actor_id: string | null
           adversary_label: string | null
           confidence: Database["public"]["Enums"]["confidence_level"] | null
+          country: string | null
           created_at: string
           crowdstrike_adversary: string | null
           description: string | null
           id: string
           item_type: Database["public"]["Enums"]["item_type"]
+          motivation: string | null
           published_at: string
           raw_hash: string
           source_id: string | null
@@ -332,14 +297,15 @@ export type Database = {
           url: string | null
         }
         Insert: {
-          actor_id?: string | null
           adversary_label?: string | null
           confidence?: Database["public"]["Enums"]["confidence_level"] | null
+          country?: string | null
           created_at?: string
           crowdstrike_adversary?: string | null
           description?: string | null
           id?: string
           item_type: Database["public"]["Enums"]["item_type"]
+          motivation?: string | null
           published_at: string
           raw_hash: string
           source_id?: string | null
@@ -349,14 +315,15 @@ export type Database = {
           url?: string | null
         }
         Update: {
-          actor_id?: string | null
           adversary_label?: string | null
           confidence?: Database["public"]["Enums"]["confidence_level"] | null
+          country?: string | null
           created_at?: string
           crowdstrike_adversary?: string | null
           description?: string | null
           id?: string
           item_type?: Database["public"]["Enums"]["item_type"]
+          motivation?: string | null
           published_at?: string
           raw_hash?: string
           source_id?: string | null
@@ -366,13 +333,6 @@ export type Database = {
           url?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "intel_items_actor_id_fkey"
-            columns: ["actor_id"]
-            isOneToOne: false
-            referencedRelation: "actors"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "intel_items_source_id_fkey"
             columns: ["source_id"]
@@ -548,6 +508,24 @@ export type Database = {
           source_name: string | null
           title: string | null
           url: string | null
+        }
+        Insert: {
+          country?: never
+          description?: string | null
+          id?: string | null
+          published_at?: string | null
+          source_name?: string | null
+          title?: string | null
+          url?: string | null
+        }
+        Update: {
+          country?: never
+          description?: string | null
+          id?: string | null
+          published_at?: string | null
+          source_name?: string | null
+          title?: string | null
+          url?: string | null
         }
         Relationships: []
       }

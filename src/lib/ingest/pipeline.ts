@@ -16,6 +16,7 @@ import { ilog } from "./log";
 import { fetchArticleText } from "./scrape";
 import { indicatorRows, linkIocsToItem } from "./iocs";
 import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
+import { NEXUS_COUNTRY } from "@/lib/actor-classify";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
 import type { EnrichReport } from "./enrich/hybrid";
 import type { EnrichedItem } from "./types";
@@ -94,18 +95,16 @@ export async function runIngest(
     const sourcesSelect = db
       .from("sources")
       .select("id, name, url, feed_url, category");
-    const [{ data: sources }, { data: actors }, { data: adversaries }] =
-      await Promise.all([
-        options?.sourceIds
-          ? sourcesSelect.in("id", options.sourceIds)
-          : sourcesSelect.eq("active", true),
-        db.from("actors").select("id, nexus"),
-        db
-          .from("adversaries")
-          .select(
-            "name, nexus, community_identifiers, internal_alternative_names",
-          ),
-      ]);
+    const [{ data: sources }, { data: adversaries }] = await Promise.all([
+      options?.sourceIds
+        ? sourcesSelect.in("id", options.sourceIds)
+        : sourcesSelect.eq("active", true),
+      db
+        .from("adversaries")
+        .select(
+          "name, nexus, country, motivation, community_identifiers, internal_alternative_names",
+        ),
+    ]);
 
     const adversaryGroups = buildGroupsFromAdversaries(adversaries ?? []);
     // Group list used to derive an adversary label when there is no CS name.
@@ -114,8 +113,12 @@ export async function runIngest(
     const sourceIdByName = new Map(
       (sources ?? []).map((s) => [s.name, s.id]),
     );
-    const actorIdByNexus = new Map(
-      (actors ?? []).map((a) => [a.nexus, a.id]),
+    // Adversary name -> its stored classification, to attribute matched items.
+    const advByName = new Map(
+      (adversaries ?? []).map((a) => [
+        (a.name ?? "").toLowerCase(),
+        { motivation: a.motivation?.[0] ?? null, country: a.country ?? null },
+      ]),
     );
 
     const feedSources: FeedSource[] = (sources ?? [])
@@ -235,8 +238,23 @@ export async function runIngest(
           raw_hash: item.rawHash,
         });
       } else {
+        // Attribute the item: prefer the matched adversary's own classification,
+        // otherwise derive it from the enriched nexus.
+        const adv = item.crowdstrikeAdversary
+          ? advByName.get(item.crowdstrikeAdversary.toLowerCase())
+          : undefined;
+        let motivation: string | null = null;
+        let country: string | null = null;
+        if (adv?.motivation) {
+          motivation = adv.motivation;
+          country = adv.country;
+        } else if (item.nexus && item.nexus !== "other") {
+          motivation = "nation_state";
+          country = NEXUS_COUNTRY[item.nexus] ?? null;
+        }
         intelRows.push({
-          actor_id: item.nexus ? (actorIdByNexus.get(item.nexus) ?? null) : null,
+          motivation,
+          country,
           title: item.title,
           description: item.description,
           url: item.url,
@@ -338,10 +356,6 @@ export async function runIngest(
       );
     }
 
-    // Keep-most-recent behaviour: mark actors quiet when they have no items in
-    // the 30-day window, active otherwise. Existing rows are never deleted.
-    await refreshActorStatuses(db);
-
     // Recalculate the executive summary on every completed run so it always
     // reflects the latest data and the current 24h / 7d windows. Non-fatal.
     ilog("recalculating executive summary...");
@@ -399,27 +413,3 @@ export async function runIngest(
   }
 }
 
-async function refreshActorStatuses(
-  db: ReturnType<typeof createAdminClient>,
-): Promise<void> {
-  const { data: actors } = await db.from("actors").select("id");
-  if (!actors) return;
-  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
-
-  await Promise.all(
-    actors.map(async (a) => {
-      const { count } = await db
-        .from("intel_items")
-        .select("id", { count: "exact", head: true })
-        .eq("actor_id", a.id)
-        .eq("item_type", "actor_activity")
-        .gte("published_at", cutoff);
-      await db
-        .from("actors")
-        .update({ status: (count ?? 0) > 0 ? "active" : "quiet" })
-        .eq("id", a.id);
-    }),
-  );
-}

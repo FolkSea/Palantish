@@ -12,6 +12,7 @@ import { toAscii } from "@/lib/text";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import { computeHash } from "./dedup";
 import { computeAdversaryLabel, sortGroups, GROUP_TABLE } from "./enrich/rules";
+import { NEXUS_COUNTRY } from "@/lib/actor-classify";
 import type { EnrichedItem, RawCandidate } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -132,7 +133,9 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
   // Classify with the shared enricher (LLM when configured, else rules).
   const { data: adversaries } = await db
     .from("adversaries")
-    .select("name, nexus, community_identifiers, internal_alternative_names");
+    .select(
+      "name, nexus, country, motivation, community_identifiers, internal_alternative_names",
+    );
   const enricher = selectEnricher(buildGroupsFromAdversaries(adversaries ?? []));
   const candidate: RawCandidate = {
     title: article.title,
@@ -197,10 +200,23 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
 
   let report: ImportedReport | undefined;
   if (route === "intel") {
-    const { data: actors } = await db.from("actors").select("id, nexus");
-    const actorId = enriched.nexus
-      ? ((actors ?? []).find((a) => a.nexus === enriched.nexus)?.id ?? null)
-      : null;
+    // Attribute: prefer the matched adversary's classification, else the nexus.
+    const adv = enriched.crowdstrikeAdversary
+      ? (adversaries ?? []).find(
+          (a) =>
+            (a.name ?? "").toLowerCase() ===
+            enriched.crowdstrikeAdversary!.toLowerCase(),
+        )
+      : undefined;
+    let motivation: string | null = null;
+    let country: string | null = null;
+    if (adv?.motivation?.[0]) {
+      motivation = adv.motivation[0];
+      country = adv.country ?? null;
+    } else if (enriched.nexus && enriched.nexus !== "other") {
+      motivation = "nation_state";
+      country = NEXUS_COUNTRY[enriched.nexus] ?? null;
+    }
     const adversaryLabel = computeAdversaryLabel(
       enriched.crowdstrikeAdversary,
       enriched.nexus,
@@ -209,7 +225,8 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
       sortGroups(GROUP_TABLE),
     );
     const row: IntelInsert = {
-      actor_id: actorId,
+      motivation,
+      country,
       title: enriched.title,
       description: enriched.description,
       url: enriched.url,

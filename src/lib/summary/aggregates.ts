@@ -43,27 +43,18 @@ function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
 }
 
-const NEXUS_LABEL: Record<string, string> = {
-  china: "China",
-  russia: "Russia",
-  north_korea: "North Korea",
-  iran: "Iran",
-  rest_of_world: "Rest of World",
-  other: "eCrime/Other",
-};
 
 /** Compute the 24h / 7d activity aggregates used by the executive summary. */
 export async function computeAggregates(db: Db): Promise<Aggregates> {
   const cut7 = isoDaysAgo(7);
   const cut1 = isoDaysAgo(1);
 
-  const [{ data: actors }, { data: intel }, { data: vulns }, { data: breaches }] =
+  const [{ data: intel }, { data: vulns }, { data: breaches }] =
     await Promise.all([
-      db.from("actors").select("id, nexus, display_name"),
       db
         .from("intel_items")
         .select(
-          "title, item_type, actor_id, crowdstrike_adversary, published_at, url, description, source_name, raw_hash",
+          "title, item_type, motivation, country, crowdstrike_adversary, published_at, url, description, source_name, raw_hash",
         )
         .gte("published_at", cut7)
         .order("published_at", { ascending: false }),
@@ -79,10 +70,6 @@ export async function computeAggregates(db: Db): Promise<Aggregates> {
         .order("event_date", { ascending: false }),
     ]);
 
-  const nexusById = new Map(
-    (actors ?? []).map((a) => [a.id, a.nexus as string]),
-  );
-
   const emptyWindow = (): WindowCounts => ({
     nationState: 0,
     ecrime: 0,
@@ -93,14 +80,8 @@ export async function computeAggregates(db: Db): Promise<Aggregates> {
   const w7 = emptyWindow();
 
   for (const i of intel ?? []) {
-    const nexus = i.actor_id ? nexusById.get(i.actor_id) : undefined;
-    const label = nexus ? (NEXUS_LABEL[nexus] ?? "Other") : "Unattributed";
-    const isNation =
-      nexus === "china" ||
-      nexus === "russia" ||
-      nexus === "north_korea" ||
-      nexus === "iran" ||
-      nexus === "rest_of_world";
+    const isNation = i.motivation === "nation_state";
+    const label = i.country ?? (isNation ? "Non Attributed" : "Unattributed");
 
     for (const [w, cut] of [
       [w7, cut7],
@@ -127,10 +108,11 @@ export async function computeAggregates(db: Db): Promise<Aggregates> {
   }
 
   const notable: NotableItem[] = (intel ?? []).slice(0, 12).map((i) => {
-    const nexus = i.actor_id ? nexusById.get(i.actor_id) : undefined;
     return {
       title: i.title,
-      actor: nexus ? (NEXUS_LABEL[nexus] ?? "Other") : "Unattributed",
+      actor:
+        i.country ??
+        (i.motivation === "nation_state" ? "Non Attributed" : "Unattributed"),
       type: i.item_type,
       date: i.published_at ?? "",
       cs: i.crowdstrike_adversary,

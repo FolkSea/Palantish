@@ -11,17 +11,9 @@ insert into allowed_users (email, note) values
   ('andrew.m.dove@gmail.com', 'owner')
 on conflict (email) do nothing;
 
--- Actors (the nexus cards) ---------------------------------------------------
--- Structural reference data for the "activity by actor" section. The entries
--- (intel_items) inside each card are populated by the ingest pipeline from real
--- feeds, not seeded here.
-insert into actors (nexus, display_name, tracked_groups, status, sort_order) values
-  ('china',       'China',        'Volt Typhoon, Salt Typhoon, APT41, Mustang Panda, APT31',        'quiet', 1),
-  ('russia',      'Russia',       'APT28/Fancy Bear, APT29/Cozy Bear, Sandworm, Turla, Gamaredon',  'quiet', 2),
-  ('north_korea', 'North Korea',  'Lazarus, APT38, Kimsuky, Andariel, BlueNoroff',                  'quiet', 3),
-  ('iran',        'Iran',         'APT35/Charming Kitten, MuddyWater, APT34/OilRig, APT33',          'quiet', 4),
-  ('other',       'Rest of world / other clusters', 'Large-scale eCrime: LockBit, ALPHV/BlackCat, Scattered Spider, Cl0p', 'quiet', 5)
-on conflict (nexus) do nothing;
+-- Nation-state activity is grouped per country, derived from each intel item's
+-- own motivation + country (attributed by the ingest); there is no separate
+-- actors table to seed.
 
 -- RSS / source catalogue -----------------------------------------------------
 insert into sources (name, url, category, feed_url) values
