@@ -1,16 +1,16 @@
 import { ExtLink } from "@/components/ExtLink";
 import { formatDate } from "@/lib/format";
-import type { IntelItemRow } from "@/lib/data";
+import type { TickerItem } from "@/lib/data";
 
 /* --- Breaking news ticker -------------------------------------------------- */
-export function Ticker({ items }: { items: IntelItemRow[] }) {
+export function Ticker({ items }: { items: TickerItem[] }) {
   // Only rendered when there are last-24h items; the caller passes an already
   // filtered list, and an empty list hides the whole section.
   if (!items.length) return null;
 
   const row = items.map((i) => (
     <span key={i.id} className="mx-5 inline-flex items-center gap-1.5">
-      <span className="text-slate-400">{formatDate(i.published_at)}</span>
+      <span className="text-slate-400">{formatDate(i.date)}</span>
       <ExtLink href={i.url}>{i.title}</ExtLink>
     </span>
   ));

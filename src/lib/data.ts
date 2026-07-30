@@ -50,6 +50,14 @@ export type ExecutiveSummary = {
   citations: SummaryCitation[];
 };
 
+// A single breaking-ticker entry (a PoC exploit or a breach).
+export type TickerItem = {
+  id: string;
+  date: string | null;
+  title: string;
+  url: string | null;
+};
+
 export type StaleFeed = {
   name: string;
   category: string;
@@ -66,7 +74,8 @@ export type DashboardData = {
   hacktivismCards: ActorCard[];
   // One unified timeline: a stream per adversary (plus an Exploits lane).
   timeline: { events: TimelineEvent[]; streams: TimelineStream[] };
-  breaking: IntelItemRow[];
+  // Breaking ticker: PoC exploits + breaches from the last ~24h. Nothing else.
+  breaking: TickerItem[];
   reports: IntelItemRow[];
   vulnerabilities: VulnerabilityRow[];
   breaches: BreachRow[];
@@ -101,7 +110,6 @@ export async function loadDashboard(): Promise<DashboardData> {
   const [
     activityRes,
     timelineRes,
-    breakingRes,
     reportsRes,
     vulnsRes,
     breachesRes,
@@ -122,13 +130,6 @@ export async function loadDashboard(): Promise<DashboardData> {
       .select("*")
       .gte("published_at", timelineCutoff)
       .order("published_at", { ascending: true }),
-    supabase
-      .from("intel_items")
-      .select("*")
-      .eq("item_type", "breaking")
-      .gte("published_at", breakingCutoff)
-      .order("published_at", { ascending: false })
-      .limit(10),
     supabase
       .from("intel_items")
       .select("*")
@@ -262,7 +263,27 @@ export async function loadDashboard(): Promise<DashboardData> {
   );
 
   const reports = (reportsRes.data ?? []).filter(keep);
-  const breaking = (breakingRes.data ?? []).filter(keep);
+
+  // Breaking ticker: PoC exploits and breaches observed in the last ~24h only,
+  // newest first. Nothing else feeds the ticker.
+  const breaking: TickerItem[] = [
+    ...vulns30
+      .filter((v) => v.status === "poc" && (v.added_at ?? "") >= breakingCutoff)
+      .map((v) => ({
+        id: `vuln-${v.id}`,
+        date: v.added_at,
+        title: v.target ? `${v.cve_id} - ${v.target}` : v.cve_id,
+        url: v.url,
+      })),
+    ...breaches30
+      .filter((b) => (b.event_date ?? "") >= breakingCutoff)
+      .map((b) => ({
+        id: `breach-${b.id}`,
+        date: b.event_date,
+        title: b.org_name,
+        url: b.url,
+      })),
+  ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
   const hacktivismGroups = buildHacktivismGroups();
 
