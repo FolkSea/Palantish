@@ -1,0 +1,177 @@
+import { describe, it, expect } from "vitest";
+import {
+  buildTimeline,
+  eventVisible,
+  DEFAULT_FILTERS,
+  UNID_NATION,
+  UNID_ECRIME,
+  UNID_HACKTIVISM,
+  type TimelineFilters,
+} from "@/lib/timeline";
+import { buildHacktivismGroups } from "@/lib/ingest/enrich/rules";
+import { buildEcrimeActorGroups } from "@/lib/ecrime";
+import type { Database } from "@/lib/supabase/database.types";
+
+type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
+type BreachRow = Database["public"]["Tables"]["breaches"]["Row"];
+type VulnRow = Database["public"]["Tables"]["vulnerabilities"]["Row"];
+
+let seq = 0;
+function intel(p: Partial<IntelItemRow>): IntelItemRow {
+  seq += 1;
+  return {
+    id: `i-${seq}`,
+    title: "t",
+    description: "",
+    url: null,
+    source_name: "src",
+    published_at: "2026-07-20",
+    motivation: null,
+    country: null,
+    crowdstrike_adversary: null,
+    adversary_label: null,
+    raw_hash: `hi-${seq}`,
+    ...p,
+  } as IntelItemRow;
+}
+function breach(p: Partial<BreachRow>): BreachRow {
+  seq += 1;
+  return {
+    id: `b-${seq}`,
+    org_name: "org",
+    summary: "",
+    url: null,
+    source_name: "src",
+    event_date: "2026-07-20",
+    event_date_label: null,
+    adversary_label: null,
+    crowdstrike_adversary: null,
+    raw_hash: `hb-${seq}`,
+    ...p,
+  } as BreachRow;
+}
+function vuln(p: Partial<VulnRow>): VulnRow {
+  seq += 1;
+  return {
+    id: `v-${seq}`,
+    cve_id: "CVE-2026-0001",
+    target: "Acme",
+    detail: "",
+    url: null,
+    added_at: "2026-07-20",
+    status: "poc",
+    raw_hash: `hv-${seq}`,
+    ...p,
+  } as VulnRow;
+}
+
+const ecrimeGroups = buildEcrimeActorGroups([]);
+const hacktivismGroups = buildHacktivismGroups();
+
+function run(
+  intelRows: IntelItemRow[] = [],
+  breachRows: BreachRow[] = [],
+  vulnRows: VulnRow[] = [],
+) {
+  return buildTimeline(intelRows, breachRows, vulnRows, ecrimeGroups, hacktivismGroups);
+}
+
+describe("buildTimeline", () => {
+  it("puts a named nation-state report on its actor lane", () => {
+    const { events, streams } = run([
+      intel({ motivation: "nation_state", crowdstrike_adversary: "COZY BEAR" }),
+    ]);
+    expect(events[0]).toMatchObject({
+      actor: "COZY BEAR",
+      category: "nation_state",
+      kind: "report",
+    });
+    expect(streams.map((s) => s.actor)).toContain("COZY BEAR");
+  });
+
+  it("collapses unattributed nation-state to UNID BAT", () => {
+    const { events } = run([intel({ motivation: "nation_state" })]);
+    expect(events[0].actor).toBe(UNID_NATION);
+  });
+
+  it("collapses unattributed eCrime to UNID SPIDER, hacktivism to UNID JACKAL", () => {
+    const { events } = run([
+      intel({ motivation: "ecrime" }),
+      intel({ motivation: "hacktivism" }),
+    ]);
+    expect(events[0].actor).toBe(UNID_ECRIME);
+    expect(events[1].actor).toBe(UNID_HACKTIVISM);
+  });
+
+  it("routes a breach with no crew to UNID SPIDER as a breach marker", () => {
+    const { events } = run([], [breach({ summary: "data theft, no crew" })]);
+    expect(events[0]).toMatchObject({ actor: UNID_ECRIME, category: "ecrime", kind: "breach" });
+  });
+
+  it("honours a stored breach attribution over the derived crew", () => {
+    const { events } = run([], [breach({ adversary_label: "Toy Ghouls" })]);
+    expect(events[0].actor).toBe("Toy Ghouls");
+  });
+
+  it("routes a hacktivist-named breach to the hacktivism category", () => {
+    const { events } = run([], [breach({ org_name: "Gov", summary: "KillNet DDoS" })]);
+    expect(events[0]).toMatchObject({ category: "hacktivism", actor: "KillNet" });
+  });
+
+  it("puts exploits on a single Exploits lane", () => {
+    const { events, streams } = run([], [], [vuln({}), vuln({})]);
+    expect(events.every((e) => e.actor === "Exploits" && e.kind === "exploit")).toBe(true);
+    expect(streams.filter((s) => s.category === "exploit")).toHaveLength(1);
+  });
+
+  it("orders lanes nation-state, eCrime, hacktivism, exploits", () => {
+    const { streams } = run(
+      [intel({ motivation: "nation_state", crowdstrike_adversary: "COZY BEAR" })],
+      [breach({ summary: "LockBit ransomware" })],
+      [vuln({})],
+    );
+    expect(streams.map((s) => s.category)).toEqual([
+      "nation_state",
+      "ecrime",
+      "exploit",
+    ]);
+  });
+
+  it("gives each named actor a distinct colour", () => {
+    const { streams } = run([
+      intel({ motivation: "nation_state", crowdstrike_adversary: "COZY BEAR" }),
+      intel({ motivation: "ecrime", crowdstrike_adversary: "WICKED SPIDER" }),
+    ]);
+    const colors = streams.map((s) => s.color);
+    expect(new Set(colors).size).toBe(colors.length);
+  });
+});
+
+describe("eventVisible", () => {
+  const base = { id: "x", date: "2026-07-20", title: "t", description: null, source: null, url: null };
+  const off = (k: keyof TimelineFilters): TimelineFilters => ({ ...DEFAULT_FILTERS, [k]: false });
+
+  it("shows everything by default", () => {
+    const e = { ...base, actor: "A", category: "ecrime", kind: "breach" } as const;
+    expect(eventVisible(e, DEFAULT_FILTERS)).toBe(true);
+  });
+
+  it("hides breaches when the Breaches toggle is off", () => {
+    const e = { ...base, actor: "A", category: "ecrime", kind: "breach" } as const;
+    expect(eventVisible(e, off("breaches"))).toBe(false);
+    // an eCrime report is still shown
+    const r = { ...base, actor: "A", category: "ecrime", kind: "report" } as const;
+    expect(eventVisible(r, off("breaches"))).toBe(true);
+  });
+
+  it("hides a whole category when its toggle is off", () => {
+    const e = { ...base, actor: UNID_NATION, category: "nation_state", kind: "report" } as const;
+    expect(eventVisible(e, off("nation_state"))).toBe(false);
+  });
+
+  it("gates exploits solely on the Exploits toggle", () => {
+    const e = { ...base, actor: "Exploits", category: "exploit", kind: "exploit" } as const;
+    expect(eventVisible(e, off("exploits"))).toBe(false);
+    expect(eventVisible(e, off("breaches"))).toBe(true);
+  });
+});

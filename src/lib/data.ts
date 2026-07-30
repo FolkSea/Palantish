@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
-import { buildEcrimeActorGroups, deriveEcrimeActor } from "@/lib/ecrime";
+import { buildEcrimeActorGroups } from "@/lib/ecrime";
 import { isThreatIntel } from "@/lib/relevance";
 import { adversaryLabel, NEXUS_ACCENT, type Nexus } from "@/lib/badges";
 import { nexusForCountry } from "@/lib/actor-classify";
@@ -17,38 +17,21 @@ import {
   type ActorItem,
   type ActorCard,
 } from "@/lib/actor-sections";
+import {
+  buildTimeline,
+  type TimelineEvent,
+  type TimelineStream,
+} from "@/lib/timeline";
 
 // A single card/item shape drives all three activity-by-actor sections.
 export type { ActorItem, ActorCard };
+export type { TimelineEvent, TimelineStream };
 
 type Tables = Database["public"]["Tables"];
-type Views = Database["public"]["Views"];
 
 export type IntelItemRow = Tables["intel_items"]["Row"];
 export type VulnerabilityRow = Tables["vulnerabilities"]["Row"];
 export type BreachRow = Tables["breaches"]["Row"];
-export type TimelineRow = Views["timeline_events"]["Row"];
-
-export type EcrimeTimelinePoint = {
-  id: string;
-  actor: string;
-  date: string;
-  title: string;
-  summary: string | null;
-  source: string | null;
-  url: string | null;
-};
-
-export type VulnTimelinePoint = {
-  id: string;
-  status: "confirmed" | "poc" | "suspected";
-  date: string;
-  cveId: string;
-  target: string | null;
-  detail: string | null;
-  url: string | null;
-};
-
 export type SummaryCitation = {
   id: number;
   title: string;
@@ -81,9 +64,8 @@ export type DashboardData = {
   nationStateCards: ActorCard[];
   ecrimeCards: ActorCard[];
   hacktivismCards: ActorCard[];
-  timeline: TimelineRow[];
-  ecrimeTimeline: EcrimeTimelinePoint[];
-  vulnTimeline: VulnTimelinePoint[];
+  // One unified timeline: a stream per adversary (plus an Exploits lane).
+  timeline: { events: TimelineEvent[]; streams: TimelineStream[] };
   breaking: IntelItemRow[];
   reports: IntelItemRow[];
   vulnerabilities: VulnerabilityRow[];
@@ -134,10 +116,11 @@ export async function loadDashboard(): Promise<DashboardData> {
       .eq("item_type", "actor_activity")
       .gte("published_at", recentCutoff)
       .order("published_at", { ascending: false }),
-    // Nation-state timeline: 30-day window (the view enforces the range).
+    // Unified timeline: all intel over the 30-day window, attributed to a stream.
     supabase
-      .from("timeline_events")
+      .from("intel_items")
       .select("*")
+      .gte("published_at", timelineCutoff)
       .order("published_at", { ascending: true }),
     supabase
       .from("intel_items")
@@ -272,36 +255,16 @@ export async function loadDashboard(): Promise<DashboardData> {
     (b) => isThreatIntel(b.org_name, b.summary) && !hidden.has(b.raw_hash),
   );
   const breaches = breaches30.filter((b) => (b.event_date ?? "") >= recentCutoff);
-  const ecrimeTimeline: EcrimeTimelinePoint[] = breaches30
-    .filter((b) => b.event_date)
-    .map((b) => ({
-      id: b.id,
-      actor: deriveEcrimeActor(`${b.org_name} ${b.summary ?? ""}`, ecrimeGroups),
-      date: b.event_date as string,
-      title: b.org_name,
-      summary: b.summary,
-      source: b.source_name,
-      url: b.url,
-    }));
 
   const vulns30 = vulnsRes.data ?? [];
   const vulnerabilities = vulns30.filter(
     (v) => (v.added_at ?? "") >= recentCutoff,
   );
-  const vulnTimeline: VulnTimelinePoint[] = vulns30
-    .filter((v) => v.added_at)
-    .map((v) => ({
-      id: v.id,
-      status: v.status,
-      date: v.added_at as string,
-      cveId: v.cve_id,
-      target: v.target,
-      detail: v.detail,
-      url: v.url,
-    }));
 
   const reports = (reportsRes.data ?? []).filter(keep);
   const breaking = (breakingRes.data ?? []).filter(keep);
+
+  const hacktivismGroups = buildHacktivismGroups();
 
   // Activity-by-actor sections: per-country nation-state cards (built above),
   // and per-actor eCrime and hacktivism cards derived from breaches (and
@@ -310,7 +273,18 @@ export async function loadDashboard(): Promise<DashboardData> {
     breaches,
     reports,
     ecrimeGroups,
-    buildHacktivismGroups(),
+    hacktivismGroups,
+  );
+
+  // Unified timeline: reports + breaches + exploits over 30 days, each on an
+  // adversary stream (nation-state / eCrime / hacktivism), plus an Exploits lane.
+  const timelineIntel = (timelineRes.data ?? []).filter(keep);
+  const timeline = buildTimeline(
+    timelineIntel,
+    breaches30,
+    vulns30,
+    ecrimeGroups,
+    hacktivismGroups,
   );
 
   return {
@@ -319,9 +293,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     nationStateCards,
     ecrimeCards,
     hacktivismCards,
-    timeline: timelineRes.data ?? [],
-    ecrimeTimeline,
-    vulnTimeline,
+    timeline,
     breaking,
     reports,
     vulnerabilities,

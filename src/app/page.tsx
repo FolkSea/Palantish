@@ -4,7 +4,8 @@ import { loadDashboard } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
 import { ImportPostButton } from "@/components/ImportPostButton";
 import { SearchPanel } from "@/components/SearchPanel";
-import TimelineTabs from "@/components/TimelineTabs";
+import ActivityTimeline from "@/components/ActivityTimeline";
+import { DEFAULT_FILTERS, type TimelineFilters } from "@/lib/timeline";
 import { ExecutiveSummaryPanel } from "@/components/ExecutiveSummary";
 import { StaleFeedsPanel } from "@/components/StaleFeedsPanel";
 import { Ticker, Footnote } from "@/components/DashboardSections";
@@ -33,6 +34,10 @@ export default async function DashboardPage() {
   const identityLabel = displayName || user?.email;
   const focus = ((user?.user_metadata?.focus as string | undefined) ??
     "all") as Focus;
+  const savedFilters = user?.user_metadata?.timelineFilters as
+    | Partial<TimelineFilters>
+    | undefined;
+  const timelineFilters: TimelineFilters = { ...DEFAULT_FILTERS, ...savedFilters };
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -125,11 +130,11 @@ export default async function DashboardPage() {
       </div>
 
       <div className="space-y-4">
-        {/* Tabbed activity timeline */}
-        <TimelineTabs
-          timeline={data.timeline}
-          ecrimeTimeline={data.ecrimeTimeline}
-          vulnTimeline={data.vulnTimeline}
+        {/* Unified activity timeline (one lane per adversary) */}
+        <ActivityTimeline
+          events={data.timeline.events}
+          streams={data.timeline.streams}
+          initialFilters={timelineFilters}
         />
 
         {/* Actor cards */}

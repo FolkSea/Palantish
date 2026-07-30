@@ -163,40 +163,6 @@ export function adversaryLabel(
   return `UNID ${UNID_ANIMAL_BY_NEXUS[nexus].toUpperCase()}`;
 }
 
-// Nation-state colours for the timeline scatter + actor accents. Chosen for
-// maximum hue separation so adjacent rows are easy to tell apart (the old red /
-// rose China/Russia pair was nearly indistinguishable). Paired with distinct
-// point shapes below for redundant, colour-blind-friendly encoding.
-export const COUNTRY_COLOR: Record<string, string> = {
-  "North Korea": "#7c3aed", // violet
-  Iran: "#f59e0b", // amber
-  China: "#dc2626", // red
-  Russia: "#2563eb", // blue
-  "Rest of World": "#0d9488", // teal
-};
-
-// Distinct marker shape per country, so each series is identifiable by shape as
-// well as colour (and remains readable in greyscale / for colour-blind users).
-export const COUNTRY_POINT_STYLE: Record<
-  string,
-  "circle" | "triangle" | "rect" | "rectRot" | "star"
-> = {
-  "North Korea": "triangle",
-  Iran: "rectRot", // diamond
-  China: "circle",
-  Russia: "rect", // square
-  "Rest of World": "star",
-};
-
-// Discrete y-axis row order for the timeline (top to bottom).
-export const TIMELINE_COUNTRIES = [
-  "North Korea",
-  "Iran",
-  "China",
-  "Russia",
-  "Rest of World",
-] as const;
-
 export const NEXUS_ACCENT: Record<Nexus, string> = {
   china: "#dc2626",
   russia: "#2563eb",
