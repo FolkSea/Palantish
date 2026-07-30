@@ -9,6 +9,7 @@
     "lint": "eslint",
     "ingest": "NODE_OPTIONS='--conditions=react-server' tsx scripts/ingest.ts",
     "load:adversaries": "NODE_OPTIONS='--conditions=react-server' tsx scripts/load-adversaries.ts",
+    "reclassify": "NODE_OPTIONS='--conditions=react-server' tsx scripts/reclassify.ts",
     "backfill:iocs": "NODE_OPTIONS='--conditions=react-server' tsx scripts/backfill-ioc-domains.ts",
     "summary": "NODE_OPTIONS='--conditions=react-server' tsx scripts/generate-summary.ts",
     "sanitize": "NODE_OPTIONS='--conditions=react-server' tsx scripts/sanitize-existing.ts",

@@ -91,12 +91,14 @@ describe("RulesEnricher classification", () => {
       }),
     );
     expect(large).not.toBeNull();
-    expect(large!.itemType).toBe("breach");
+    // Named-actor activity is the actor's own activity -> the eCrime cards.
+    expect(large!.itemType).toBe("actor_activity");
   });
 
-  it("keeps eCrime research/analysis as a report, even when not large-scale", async () => {
+  it("keeps eCrime research/analysis as actor activity, even when not large-scale", async () => {
     // No large-scale language: the crew drop-gate would drop this, but research
-    // about the crew is intelligence worth keeping.
+    // about the crew is intelligence worth keeping - and it is named-actor
+    // activity, so it belongs in the eCrime cards.
     const out = await enricher.enrich(
       candidate({
         title: "LockBit's new loader dissected: a technical analysis",
@@ -104,7 +106,7 @@ describe("RulesEnricher classification", () => {
       }),
     );
     expect(out).not.toBeNull();
-    expect(out!.itemType).toBe("report");
+    expect(out!.itemType).toBe("actor_activity");
   });
 
   it("drops generic news with no nation-state or vuln signal", async () => {
@@ -220,38 +222,41 @@ describe("deriveAdversaryFromText", () => {
   });
 });
 
-describe("classifyItemType: research vs breach for eCrime / hacktivism crews", () => {
+describe("classifyItemType: named actors are actor activity", () => {
   const crew = (alias: string, cs: string): GroupEntry => ({
     alias,
     nexus: "other",
     cs,
   });
 
-  it("classes a research paper about an eCrime crew as a report", () => {
+  it("classes a research paper about an eCrime crew as actor activity", () => {
     const type = classifyItemType(
       candidate({ title: "Toy Ghouls' new toy: the GenieLocker ransomware" }),
       crew("toy ghouls", "Toy Ghouls"),
     );
-    expect(type).toBe("report");
+    expect(type).toBe("actor_activity");
   });
 
-  it("classes analysis of a hacktivist collective as a report", () => {
-    const type = classifyItemType(
-      candidate({
-        title: "KillNet unpacked: a technical analysis of the DDoS toolkit",
-      }),
-      crew("killnet", "KillNet"),
-    );
-    expect(type).toBe("report");
-  });
-
-  it("still classes an eCrime incident/campaign as a breach", () => {
+  it("classes an eCrime incident/campaign as actor activity, not a breach", () => {
+    // Attributed to a named crew, so it is the crew's activity (the eCrime
+    // cards) - not an unattributed breach disclosure.
     const type = classifyItemType(
       candidate({
         title: "LockBit mass campaign hits hundreds of organizations",
         description: "Widespread ransomware across multiple sectors.",
       }),
       crew("lockbit", "LockBit"),
+    );
+    expect(type).toBe("actor_activity");
+  });
+
+  it("classes an unattributed breach disclosure as a breach", () => {
+    const type = classifyItemType(
+      candidate({
+        title: "Acme Corp discloses a data breach affecting customers",
+        description: "Stolen data included names and emails.",
+      }),
+      null,
     );
     expect(type).toBe("breach");
   });

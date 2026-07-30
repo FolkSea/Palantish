@@ -134,21 +134,12 @@ export function classifyItemType(
 ): ItemType {
   const hay = haystack(c);
   if (CVE_RE.test(hay)) return "vuln";
-  // "other" nexus is eCrime or hacktivism (told apart by the catalogue
-  // motivation on the matched group).
-  if (group?.nexus === "other") {
-    // Hacktivist activity is reporting for the hacktivism cards, not a breach
-    // event - unless the post is explicitly a breach/leak.
-    if (group.motivation === "hacktivism")
-      return BREACH_RE.test(hay) ? "breach" : "report";
-    // Research/analysis about an eCrime crew is a report, not a breach event -
-    // even when it discusses that crew's ransomware or extortion.
-    if (RESEARCH_RE.test(hay)) return "report";
-    // An eCrime incident/campaign is a breach-type event.
-    return "breach";
-  }
-  if (BREACH_RE.test(hay)) return "breach";
+  // Any item attributed to a named catalogue actor is that actor's activity, so
+  // it belongs in the actor cards (research) - nation-state, eCrime and
+  // hacktivism alike, incident or analysis. Only *unattributed* breach/leak
+  // disclosures fall through to the Breaches list.
   if (group) return "actor_activity";
+  if (BREACH_RE.test(hay)) return "breach";
   // News-category, high-signal items become breaking headlines.
   if (c.sourceCategory === "news" && (BREACH_RE.test(hay) || LARGE_SCALE_RE.test(hay)))
     return "breaking";
