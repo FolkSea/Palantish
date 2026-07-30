@@ -6,6 +6,9 @@ import {
   UNID_NATION,
   UNID_ECRIME,
   UNID_HACKTIVISM,
+  POC_COLOR,
+  BREACH_COLOR,
+  UNID_COLOR,
   type TimelineFilters,
 } from "@/lib/timeline";
 import { buildHacktivismGroups } from "@/lib/ingest/enrich/rules";
@@ -154,6 +157,30 @@ describe("buildTimeline", () => {
     ]);
     const colors = streams.map((s) => s.color);
     expect(new Set(colors).size).toBe(colors.length);
+  });
+
+  it("reserves red for exploits, grey for unattributed, and keeps them off actors", () => {
+    const { streams } = run(
+      [
+        intel({ motivation: "nation_state", crowdstrike_adversary: "COZY BEAR" }),
+        intel({ motivation: "nation_state" }), // UNID BAT
+      ],
+      [],
+      [vuln({ status: "poc" })],
+    );
+    const colorOf = (actor: string) =>
+      streams.find((s) => s.actor === actor)?.color;
+    expect(colorOf("Exploits")).toBe(POC_COLOR);
+    expect(colorOf(UNID_NATION)).toBe(UNID_COLOR);
+    // Named actors never use the reserved PoC / breach colours.
+    const named = streams.filter(
+      (s) => s.category !== "exploit" && !s.actor.startsWith("UNID"),
+    );
+    for (const s of named) {
+      expect(s.color).not.toBe(POC_COLOR);
+      expect(s.color).not.toBe(BREACH_COLOR);
+      expect(s.color).not.toBe(UNID_COLOR);
+    }
   });
 });
 

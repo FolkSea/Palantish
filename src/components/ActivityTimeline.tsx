@@ -17,6 +17,8 @@ import {
   eventVisible,
   KIND_LABEL,
   CATEGORY_LABEL,
+  POC_COLOR,
+  BREACH_COLOR,
   type TimelineEvent,
   type TimelineStream,
   type TimelineCategory,
@@ -38,6 +40,13 @@ const KIND_RADIUS: Record<TimelineKind, number> = {
   report: 5,
   breach: 6,
   exploit: 6,
+};
+// Icon colour in the key: reports take the actor's colour (neutral swatch here),
+// breaches are amber and PoC exploits red.
+const KIND_ICON_COLOR: Record<TimelineKind, string> = {
+  report: "#64748b",
+  breach: BREACH_COLOR,
+  exploit: POC_COLOR,
 };
 
 // Filter toggles, in display order. Breaches/Exploits gate marker kinds; the
@@ -106,7 +115,11 @@ export default function ActivityTimeline({
       return {
         label: lane.actor,
         data,
-        backgroundColor: lane.color,
+        // Breaches are always amber and PoC exploits always red (the lane's own
+        // colour is red); report markers take the actor's lane colour.
+        backgroundColor: laneEvents.map((e) =>
+          e.kind === "breach" ? BREACH_COLOR : lane.color,
+        ),
         borderColor: "#ffffff",
         borderWidth: 1,
         pointStyle: laneEvents.map((e) => KIND_STYLE[e.kind]),
@@ -185,8 +198,9 @@ export default function ActivityTimeline({
         Activity timeline (last 30 days)
       </h2>
       <p className="mt-0.5 text-[11px] text-slate-500">
-        One lane per adversary; colour denotes the actor, shape the record type.
-        Click a point to open the source.
+        One lane per adversary; shape denotes the record type. Red marks PoC
+        exploits and amber breaches; reports take the actor colour (grey when
+        unattributed). Click a point to open the source.
       </p>
 
       <div className="mt-3 flex flex-col gap-4 sm:flex-row">
@@ -282,8 +296,8 @@ function KeyPanel({ lanes }: { lanes: TimelineStream[] }) {
       <ul className="space-y-0.5">
         {(["report", "breach", "exploit"] as TimelineKind[]).map((kind) => (
           <li key={kind} className="flex items-center gap-1.5 text-slate-700">
-            <ShapeIcon kind={kind} />
-            {KIND_LABEL[kind]}
+            <ShapeIcon kind={kind} color={KIND_ICON_COLOR[kind]} />
+            {kind === "exploit" ? "Exploit (PoC)" : KIND_LABEL[kind]}
           </li>
         ))}
       </ul>
@@ -291,8 +305,8 @@ function KeyPanel({ lanes }: { lanes: TimelineStream[] }) {
   );
 }
 
-function ShapeIcon({ kind }: { kind: TimelineKind }) {
-  const fill = "#64748b";
+function ShapeIcon({ kind, color }: { kind: TimelineKind; color?: string }) {
+  const fill = color ?? "#64748b";
   if (kind === "report")
     return (
       <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">

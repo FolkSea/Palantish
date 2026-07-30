@@ -60,32 +60,28 @@ export const UNID_HACKTIVISM = "UNID JACKAL";
 
 const EXPLOITS_STREAM = "Exploits";
 
-// Distinct hues for named actors (cycled). UNID/exploit streams use fixed
-// colours below so the "unattributed" lanes read as muted.
+// Reserved colours: red = PoC exploits, amber = breaches, grey = any
+// unattributed lane. Kept out of the actor palette so their meaning is unique.
+export const POC_COLOR = "#dc2626"; // red
+export const BREACH_COLOR = "#d97706"; // amber
+export const UNID_COLOR = "#94a3b8"; // grey
+
+// Distinct hues for named actors (cycled). Reds, ambers and greys are excluded
+// so they stay reserved for PoCs, breaches and unattributed lanes.
 const PALETTE = [
-  "#dc2626", // red
   "#2563eb", // blue
   "#059669", // emerald
-  "#d97706", // amber
   "#7c3aed", // violet
   "#0891b2", // cyan
   "#db2777", // pink
   "#65a30d", // lime
-  "#ea580c", // orange
   "#0d9488", // teal
   "#4f46e5", // indigo
-  "#b45309", // brown
-  "#be123c", // rose
   "#15803d", // green
   "#6d28d9", // purple
   "#0369a1", // sky
+  "#c026d3", // fuchsia
 ];
-const UNID_COLOR: Record<string, string> = {
-  [UNID_NATION]: "#64748b", // slate
-  [UNID_ECRIME]: "#78716c", // stone
-  [UNID_HACKTIVISM]: "#a8a29e", // warm grey
-};
-const EXPLOIT_COLOR = "#94a3b8"; // slate 400
 
 const CATEGORY_ORDER: TimelineCategory[] = [
   "nation_state",
@@ -256,8 +252,8 @@ function buildStreams(events: TimelineEvent[]): TimelineStream[] {
   let hue = 0;
   return actors.map(({ actor, category }) => {
     let color: string;
-    if (category === "exploit") color = EXPLOIT_COLOR;
-    else if (isUnid(actor)) color = UNID_COLOR[actor] ?? "#94a3b8";
+    if (category === "exploit") color = POC_COLOR;
+    else if (isUnid(actor)) color = UNID_COLOR;
     else color = PALETTE[hue++ % PALETTE.length];
     return { actor, category, color };
   });
