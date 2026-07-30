@@ -22,7 +22,6 @@ export const MOTIVATION_LABEL: Record<Motivation, string> = {
 
 export type ActorInput = {
   name: string;
-  animalClassifier: string;
   motivation: string; // one of Motivation
   country: string; // free text; only meaningful for nation_state
   aliases: string; // comma-separated
@@ -32,7 +31,6 @@ export type ActorInput = {
 export type ActorRecord = {
   id: string;
   name: string;
-  animal_classifier: string | null;
   motivation: string[] | null;
   country: string | null;
   community_identifiers: string[] | null;

@@ -24,9 +24,7 @@ async function main() {
     await Promise.all([
       db
         .from("adversaries")
-        .select(
-          "name, animal_classifier, description, short_description, motivation, community_identifiers, internal_alternative_names",
-        ),
+        .select("name, nexus, community_identifiers, internal_alternative_names"),
       db.from("actors").select("id, nexus"),
       db.from("intel_items").select("id, title, description, item_type, actor_id, crowdstrike_adversary"),
     ]);

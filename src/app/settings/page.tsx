@@ -26,9 +26,7 @@ export default async function SettingsPage() {
 
   const { data: actors } = await supabase
     .from("adversaries")
-    .select(
-      "id, name, animal_classifier, motivation, country, community_identifiers, description",
-    )
+    .select("id, name, motivation, country, community_identifiers, description")
     .order("name");
 
   const displayName =

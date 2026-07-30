@@ -72,7 +72,6 @@ export type Database = {
       }
       adversaries: {
         Row: {
-          animal_classifier: string | null
           community_identifiers: string[] | null
           country: string | null
           created_at: string
@@ -92,7 +91,6 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          animal_classifier?: string | null
           community_identifiers?: string[] | null
           country?: string | null
           created_at?: string
@@ -112,7 +110,6 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          animal_classifier?: string | null
           community_identifiers?: string[] | null
           country?: string | null
           created_at?: string

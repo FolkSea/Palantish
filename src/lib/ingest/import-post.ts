@@ -132,9 +132,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
   // Classify with the shared enricher (LLM when configured, else rules).
   const { data: adversaries } = await db
     .from("adversaries")
-    .select(
-      "name, animal_classifier, description, short_description, motivation, community_identifiers, internal_alternative_names",
-    );
+    .select("name, nexus, community_identifiers, internal_alternative_names");
   const enricher = selectEnricher(buildGroupsFromAdversaries(adversaries ?? []));
   const candidate: RawCandidate = {
     title: article.title,

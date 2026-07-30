@@ -66,9 +66,9 @@ async function main() {
     .map((a) => ({
       cs_id: a.ID ?? null,
       name: a.name!,
-      animal_classifier: a.animal_classifier ?? null,
+      // nexus/motivation/country are derived from the JSON animal cryptonym at
+      // load time; the animal itself is no longer stored on the actor.
       nexus: deriveNexus(a),
-      // Classification stored directly on the actor (was actor_families).
       motivation: [deriveMotivation(a)],
       country: deriveCountry(a),
       status: a.status ?? null,

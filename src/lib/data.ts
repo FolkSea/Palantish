@@ -170,9 +170,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     // eCrime adversary aliases (CrowdStrike cryptonyms) for attribution.
     supabase
       .from("adversaries")
-      .select(
-        "name, animal_classifier, description, short_description, motivation, community_identifiers, internal_alternative_names",
-      )
+      .select("name, nexus, community_identifiers, internal_alternative_names")
       .eq("nexus", "other"),
     supabase
       .from("executive_summaries")

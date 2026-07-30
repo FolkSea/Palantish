@@ -106,20 +106,29 @@ export function deriveNexus(a: AdversaryRecord): Nexus {
 // Aliases shorter than this are too generic to match safely.
 const MIN_ALIAS_LEN = 4;
 
+/** The stored adversary shape used to build the alias matcher (nexus comes
+ * straight from the row - it was derived from the animal at load time). */
+export type AdversaryGroupInput = {
+  name?: string | null;
+  nexus?: Nexus | null;
+  community_identifiers?: string[] | null;
+  internal_alternative_names?: string[] | null;
+};
+
 /**
  * Build alias -> {nexus, crowdstrike name} matcher entries from adversary
  * records. Each adversary contributes its CrowdStrike name plus its community
  * and internal aliases, all pointing at that adversary's cryptonym + nexus.
  */
 export function buildGroupsFromAdversaries(
-  records: AdversaryRecord[],
+  records: AdversaryGroupInput[],
 ): GroupEntry[] {
   const entries: GroupEntry[] = [];
   const seen = new Set<string>();
 
   for (const a of records) {
     if (!a.name) continue;
-    const nexus = deriveNexus(a);
+    const nexus = (a.nexus ?? "other") as Nexus;
     const aliases = [
       a.name,
       ...(a.community_identifiers ?? []),

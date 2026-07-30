@@ -48,12 +48,12 @@ describe("buildGroupsFromAdversaries + matchGroup", () => {
     buildGroupsFromAdversaries([
       {
         name: "FANCY BEAR",
-        animal_classifier: "BEAR",
+        nexus: "russia",
         community_identifiers: ["APT28", "Sofacy"],
       },
       {
         name: "WICKED PANDA",
-        animal_classifier: "PANDA",
+        nexus: "china",
         community_identifiers: ["APT41"],
       },
     ]),
@@ -76,7 +76,7 @@ describe("buildGroupsFromAdversaries + matchGroup", () => {
 
   it("drops aliases shorter than the minimum length", () => {
     const g = buildGroupsFromAdversaries([
-      { name: "X", animal_classifier: "BEAR", community_identifiers: ["ab"] },
+      { name: "X", nexus: "russia", community_identifiers: ["ab"] },
     ]);
     expect(g).toHaveLength(0);
   });

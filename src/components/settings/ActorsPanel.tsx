@@ -145,7 +145,6 @@ export function ActorsPanel({
           <thead>
             <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
               <th className="py-1.5 pr-3 font-medium">Name</th>
-              <th className="py-1.5 pr-3 font-medium">Family</th>
               <th className="py-1.5 pr-3 font-medium">Motivation</th>
               <th className="py-1.5 pr-3 font-medium">Country</th>
               <th className="py-1.5 pr-3 font-medium">Aliases</th>
@@ -157,7 +156,7 @@ export function ActorsPanel({
             {filtered.map((a) =>
               editing === a.id ? (
                 <tr key={a.id}>
-                  <td colSpan={7} className="py-2">
+                  <td colSpan={6} className="py-2">
                     <ActorForm
                       actor={a}
                       onCancel={() => setEditing(null)}
@@ -172,9 +171,6 @@ export function ActorsPanel({
                 <tr key={a.id} className="border-t border-slate-100 align-top">
                   <td className="py-2 pr-3 font-medium text-slate-900">
                     {a.name}
-                  </td>
-                  <td className="py-2 pr-3 whitespace-nowrap text-slate-600">
-                    {a.animal_classifier ?? "-"}
                   </td>
                   <td className="py-2 pr-3 whitespace-nowrap text-slate-600">
                     {motivationLabel(a.motivation)}
@@ -228,7 +224,6 @@ function ActorForm({
   onCancel: () => void;
 }) {
   const [name, setName] = useState(actor?.name ?? "");
-  const [animal, setAnimal] = useState(actor?.animal_classifier ?? "");
   const [motivation, setMotivation] = useState<string>(
     actor?.motivation?.[0] ?? "nation_state",
   );
@@ -244,7 +239,6 @@ function ActorForm({
     setError(null);
     const input: ActorInput = {
       name,
-      animalClassifier: animal,
       motivation,
       country,
       aliases,
@@ -276,17 +270,6 @@ function ActorForm({
           onChange={(e) => setName(e.target.value)}
           placeholder="Wicked Panda"
           required
-        />
-      </label>
-      <label className="block">
-        <span className="mb-1 block text-[11px] font-medium text-slate-600">
-          Family
-        </span>
-        <input
-          className={inputCls}
-          value={animal}
-          onChange={(e) => setAnimal(e.target.value)}
-          placeholder="Panda"
         />
       </label>
       <label className="block">

@@ -103,7 +103,7 @@ export async function runIngest(
         db
           .from("adversaries")
           .select(
-            "name, animal_classifier, description, short_description, motivation, community_identifiers, internal_alternative_names",
+            "name, nexus, community_identifiers, internal_alternative_names",
           ),
       ]);
 
