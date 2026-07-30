@@ -543,6 +543,9 @@ export type UpdateAdversaryResult =
       matched: boolean;
       country: string | null;
       regrouped: boolean;
+      // false when the entered text is neither a catalogue adversary/alias nor a
+      // UNID <family> - the UI prompts to add it and nothing is written yet.
+      recognised: boolean;
     }
   | { ok: false; error: string };
 
@@ -628,8 +631,15 @@ export async function updateReportAdversaryAction(
       motivation: family.motivation,
     };
   } else {
-    // Unrecognised free text: keep it as the label, leave grouping unchanged.
-    update = { adversary_label: raw, crowdstrike_adversary: null };
+    // Unrecognised: don't write - the UI prompts to add it to the catalogue.
+    return {
+      ok: true,
+      label: raw,
+      matched: false,
+      country: null,
+      regrouped: false,
+      recognised: false,
+    };
   }
 
   const { error } = await db
@@ -644,6 +654,7 @@ export async function updateReportAdversaryAction(
     matched: !!matched,
     country,
     regrouped: !!matched || !!family,
+    recognised: true,
   };
 }
 

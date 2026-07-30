@@ -23,6 +23,13 @@ import {
 import { EditableIocList } from "./EditableIocList";
 import { AdversaryBadge } from "./Badges";
 import { countryFlag } from "@/lib/flags";
+import { addActor } from "@/app/settings/catalogue-actions";
+import {
+  MOTIVATIONS,
+  MOTIVATION_LABEL,
+  type ActorInput,
+  type Motivation,
+} from "@/lib/actor-catalogue";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 import { techniqueInfo } from "@/lib/mitre/techniques";
 import { formatDate } from "@/lib/format";
@@ -169,20 +176,53 @@ export function ReportModal({
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   }
 
-  async function saveAdversary(
-    value: string,
-  ): Promise<{ ok: boolean; error?: string; label: string; matched: boolean }> {
+  async function saveAdversary(value: string): Promise<{
+    ok: boolean;
+    error?: string;
+    label: string;
+    matched: boolean;
+    recognised: boolean;
+  }> {
     if (!rawHash)
-      return { ok: false, error: "This report cannot be edited.", label: "", matched: false };
+      return {
+        ok: false,
+        error: "This report cannot be edited.",
+        label: "",
+        matched: false,
+        recognised: false,
+      };
     const res = await updateReportAdversaryAction(rawHash, value);
     if (res.ok) {
-      setAdversary(res.label || null);
-      // A resolved/known label also moves the country - keep the two in sync.
-      if (res.regrouped) setCountry(res.country);
+      // Unrecognised names are not written - the UI prompts to add them first.
+      if (res.recognised) {
+        setAdversary(res.label || null);
+        if (res.regrouped) setCountry(res.country);
+      }
+      return {
+        ok: true,
+        label: res.label,
+        matched: res.matched,
+        recognised: res.recognised,
+      };
     }
-    return res.ok
-      ? { ok: true, label: res.label, matched: res.matched }
-      : { ok: false, error: res.error, label: "", matched: false };
+    return {
+      ok: false,
+      error: res.error,
+      label: "",
+      matched: false,
+      recognised: false,
+    };
+  }
+
+  // Add an unrecognised name to the catalogue, then attribute this report to it.
+  async function addActorAndAttribute(
+    input: ActorInput,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const r = await addActor(input);
+    if (!r.ok) return { ok: false, error: r.error };
+    getAttributionOptionsAction().then(setOptions); // refresh autocomplete
+    const a = await saveAdversary(input.name);
+    return a.ok ? { ok: true } : { ok: false, error: a.error };
   }
 
   async function saveCountry(
@@ -358,6 +398,7 @@ export function ReportModal({
                 value={adversary}
                 editable={iocsEditable}
                 onSave={saveAdversary}
+                onAddActor={addActorAndAttribute}
                 suggestions={options.adversaries}
               />
               <EditableCountry
@@ -669,13 +710,19 @@ function EditableAttribution({
   value,
   editable,
   onSave,
+  onAddActor,
   suggestions = [],
 }: {
   value: string | null;
   editable: boolean;
-  onSave: (
-    value: string,
-  ) => Promise<{ ok: boolean; error?: string; label: string; matched: boolean }>;
+  onSave: (value: string) => Promise<{
+    ok: boolean;
+    error?: string;
+    label: string;
+    matched: boolean;
+    recognised: boolean;
+  }>;
+  onAddActor: (input: ActorInput) => Promise<{ ok: boolean; error?: string }>;
   suggestions?: string[];
 }) {
   const [editing, setEditing] = useState(false);
@@ -683,6 +730,7 @@ function EditableAttribution({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  const [pendingAdd, setPendingAdd] = useState<string | null>(null);
 
   async function save() {
     const v = draft.trim();
@@ -692,6 +740,11 @@ function EditableAttribution({
     setBusy(false);
     if (!res.ok) {
       setError(res.error ?? "Update failed.");
+      return;
+    }
+    if (!res.recognised) {
+      // Unrecognised name: prompt to add it to the catalogue (nothing written).
+      setPendingAdd(v);
       return;
     }
     setHint(
@@ -718,55 +771,51 @@ function EditableAttribution({
     );
   }
 
-  if (editing) {
-    return (
-      <span className="inline-flex items-center gap-1">
-        <span className="font-medium text-slate-400">Attribution:</span>
-        <input
-          autoFocus
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            setError(null);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              save();
-            } else if (e.key === "Escape") {
-              cancel();
-            }
-          }}
-          placeholder="Adversary or alias"
-          list="attribution-suggestions"
-          className="w-40 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-800 outline-none focus:border-slate-400"
-        />
-        <datalist id="attribution-suggestions">
-          {suggestions.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-        <button
-          type="button"
-          onClick={save}
-          disabled={busy}
-          className="rounded px-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={cancel}
-          className="rounded px-1 text-[11px] text-slate-500 hover:bg-slate-100"
-        >
-          Cancel
-        </button>
-        {error ? <span className="text-[10px] text-red-600">{error}</span> : null}
-      </span>
-    );
-  }
-
-  return (
+  const field = editing ? (
+    <span className="inline-flex items-center gap-1">
+      <span className="font-medium text-slate-400">Attribution:</span>
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setError(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            save();
+          } else if (e.key === "Escape") {
+            cancel();
+          }
+        }}
+        placeholder="Adversary or alias"
+        list="attribution-suggestions"
+        className="w-40 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-800 outline-none focus:border-slate-400"
+      />
+      <datalist id="attribution-suggestions">
+        {suggestions.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
+      <button
+        type="button"
+        onClick={save}
+        disabled={busy}
+        className="rounded px-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+      >
+        Save
+      </button>
+      <button
+        type="button"
+        onClick={cancel}
+        className="rounded px-1 text-[11px] text-slate-500 hover:bg-slate-100"
+      >
+        Cancel
+      </button>
+      {error ? <span className="text-[10px] text-red-600">{error}</span> : null}
+    </span>
+  ) : (
     <span className="inline-flex items-center gap-1">
       <span className="font-medium text-slate-400">Attribution:</span>
       {value ? (
@@ -804,6 +853,152 @@ function EditableAttribution({
         <span className="text-[10px] text-emerald-600">({hint})</span>
       ) : null}
     </span>
+  );
+
+  return (
+    <>
+      {field}
+      {pendingAdd !== null ? (
+        <AddActorDialog
+          name={pendingAdd}
+          onAdd={async (input) => {
+            const r = await onAddActor(input);
+            if (r.ok) {
+              setPendingAdd(null);
+              setEditing(false);
+              setHint(null);
+            }
+            return r;
+          }}
+          onCancel={() => {
+            // Nothing was written; just restore the original value.
+            setPendingAdd(null);
+            cancel();
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** Prompt to add an unrecognised actor name to the catalogue. */
+function AddActorDialog({
+  name,
+  onAdd,
+  onCancel,
+}: {
+  name: string;
+  onAdd: (input: ActorInput) => Promise<{ ok: boolean; error?: string }>;
+  onCancel: () => void;
+}) {
+  const [actorName, setActorName] = useState(name);
+  const [motivation, setMotivation] = useState<string>("nation_state");
+  const [country, setCountry] = useState("");
+  const [aliases, setAliases] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    if (!actorName.trim()) return;
+    setBusy(true);
+    setError(null);
+    const res = await onAdd({
+      name: actorName,
+      motivation,
+      country,
+      aliases,
+      description: "",
+    });
+    setBusy(false);
+    if (!res.ok) setError(res.error ?? "Failed to add actor.");
+  }
+
+  const labelCls = "block text-[11px] font-medium text-slate-600";
+  const inputCls =
+    "mt-0.5 w-full rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] text-slate-900 outline-none focus:border-slate-400";
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-lg border border-[#e5e7eb] bg-white p-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-[13px] font-semibold text-slate-900">
+          Add new actor
+        </h3>
+        <p className="mt-1 text-[11px] text-slate-500">
+          &ldquo;{name}&rdquo; isn&rsquo;t in the actor list. Add it so it is
+          recognised from now on.
+        </p>
+        <div className="mt-3 space-y-2">
+          <label className={labelCls}>
+            Name
+            <input
+              className={inputCls}
+              value={actorName}
+              onChange={(e) => setActorName(e.target.value)}
+            />
+          </label>
+          <label className={labelCls}>
+            Motivation
+            <select
+              className={inputCls}
+              value={motivation}
+              onChange={(e) => setMotivation(e.target.value)}
+            >
+              {MOTIVATIONS.map((m) => (
+                <option key={m} value={m}>
+                  {MOTIVATION_LABEL[m as Motivation]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {motivation === "nation_state" ? (
+            <label className={labelCls}>
+              Country
+              <input
+                className={inputCls}
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                placeholder="e.g. China"
+              />
+            </label>
+          ) : null}
+          <label className={labelCls}>
+            Aliases (comma-separated)
+            <input
+              className={inputCls}
+              value={aliases}
+              onChange={(e) => setAliases(e.target.value)}
+              placeholder="APT41, Barium"
+            />
+          </label>
+        </div>
+        {error ? (
+          <p className="mt-2 text-[11px] text-red-600">{error}</p>
+        ) : null}
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={add}
+            disabled={busy || !actorName.trim()}
+            className="rounded-md bg-slate-900 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-slate-700 disabled:opacity-60"
+          >
+            {busy ? "Adding..." : "Add actor"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-md border border-[#e5e7eb] bg-white px-3 py-1.5 text-[12px] font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

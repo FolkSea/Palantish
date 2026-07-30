@@ -38,5 +38,5 @@ export type ActorRecord = {
 };
 
 export type ActorResult =
-  | { ok: true; actor: ActorRecord; attributed?: number }
+  | { ok: true; actor: ActorRecord }
   | { ok: false; error: string };

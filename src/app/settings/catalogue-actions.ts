@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailAllowed } from "@/lib/env";
@@ -138,10 +139,10 @@ export async function addActor(input: ActorInput): Promise<ActorResult> {
     .select(ACTOR_SELECT)
     .single();
   if (error) return { ok: false, error: error.message };
-  const attributed = await rescanUnattributed(db, data.id);
+  // Rescan unattributed reports in the background so the save returns promptly.
+  after(() => rescanUnattributed(db, data.id).catch(() => {}));
   revalidatePath("/settings");
-  if (attributed > 0) revalidatePath("/");
-  return { ok: true, actor: data as ActorRecord, attributed };
+  return { ok: true, actor: data as ActorRecord };
 }
 
 export async function updateActor(
@@ -161,10 +162,9 @@ export async function updateActor(
     .select(ACTOR_SELECT)
     .single();
   if (error) return { ok: false, error: error.message };
-  const attributed = await rescanUnattributed(db, data.id);
+  after(() => rescanUnattributed(db, data.id).catch(() => {}));
   revalidatePath("/settings");
-  if (attributed > 0) revalidatePath("/");
-  return { ok: true, actor: data as ActorRecord, attributed };
+  return { ok: true, actor: data as ActorRecord };
 }
 
 export async function deleteActor(

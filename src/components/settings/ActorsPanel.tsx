@@ -39,13 +39,11 @@ export function ActorsPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  function afterSave(a: ActorRecord, attributed: number) {
+  function afterSave(a: ActorRecord) {
     upsertLocal(a);
     setEditing(null);
     setNotice(
-      attributed > 0
-        ? `Re-attributed ${attributed} previously unattributed report${attributed === 1 ? "" : "s"} to "${a.name}".`
-        : null,
+      `Saved "${a.name}". Unattributed reports are being rescanned for matches in the background.`,
     );
   }
 
@@ -228,7 +226,7 @@ function ActorForm({
   onCancel,
 }: {
   actor?: ActorRecord;
-  onSaved: (a: ActorRecord, attributed: number) => void;
+  onSaved: (a: ActorRecord) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(actor?.name ?? "");
@@ -260,7 +258,7 @@ function ActorForm({
       setError(res.error ?? "Save failed.");
       return;
     }
-    onSaved(res.actor, res.attributed ?? 0);
+    onSaved(res.actor);
   }
 
   return (
