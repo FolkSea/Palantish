@@ -484,6 +484,83 @@ export async function updateReportIocAction(
   return { ok: true, value: normalized };
 }
 
+/* --- Report attribution (adversary) --------------------------------------- */
+
+export type UpdateAdversaryResult =
+  | { ok: true; label: string; matched: boolean; country: string | null }
+  | { ok: false; error: string };
+
+/**
+ * Set a report's attributed adversary. If the entered text matches a catalogue
+ * adversary's name or one of its aliases, it is resolved to the preferred
+ * (CrowdStrike) name and the report's country + motivation are updated to that
+ * adversary's - so the item regroups under the correct country card. Free text
+ * that matches nothing is kept as the label as-is.
+ */
+export async function updateReportAdversaryAction(
+  rawHash: string,
+  input: string,
+): Promise<UpdateAdversaryResult> {
+  if (!rawHash) return { ok: false, error: "Missing report." };
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+  const raw = input.trim();
+
+  const db = createAdminClient();
+  const item = await db
+    .from("intel_items")
+    .select("id")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (!item.data) return { ok: false, error: "Report not found." };
+
+  // Resolve the entered name/alias to a catalogue adversary (preferred name).
+  const needle = raw.toLowerCase();
+  let matched: {
+    name: string;
+    country: string | null;
+    motivation: string[] | null;
+  } | null = null;
+  if (raw) {
+    const { data: advs } = await db
+      .from("adversaries")
+      .select("name, country, motivation, community_identifiers, internal_alternative_names");
+    matched =
+      (advs ?? []).find((a) => {
+        if ((a.name ?? "").toLowerCase() === needle) return true;
+        const aliases = [
+          ...(a.community_identifiers ?? []),
+          ...(a.internal_alternative_names ?? []),
+        ];
+        return aliases.some((x) => (x ?? "").toLowerCase() === needle);
+      }) ?? null;
+  }
+
+  const update = raw
+    ? matched
+      ? {
+          adversary_label: matched.name,
+          crowdstrike_adversary: matched.name,
+          country: matched.country,
+          motivation: matched.motivation?.[0] ?? null,
+        }
+      : { adversary_label: raw, crowdstrike_adversary: null }
+    : { adversary_label: null, crowdstrike_adversary: null };
+
+  const { error } = await db
+    .from("intel_items")
+    .update(update)
+    .eq("id", item.data.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/");
+  return {
+    ok: true,
+    label: matched ? matched.name : raw,
+    matched: !!matched,
+    country: matched ? (matched.country ?? null) : null,
+  };
+}
+
 /* --- MITRE ATT&CK discovery ------------------------------------------------ */
 
 export type DiscoverTechniquesResult =
