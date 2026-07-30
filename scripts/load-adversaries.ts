@@ -5,7 +5,18 @@
  */
 import { config } from "dotenv";
 import { readFileSync } from "node:fs";
-config({ path: ".env.local" });
+
+// Only fall back to .env.local when the Supabase target isn't already provided
+// by the real environment. This lets
+//   NEXT_PUBLIC_SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... pnpm load:adversaries
+// target a remote (e.g. production) project without a local .env.local
+// shadowing the values passed on the command line.
+if (
+  !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  !process.env.SUPABASE_SERVICE_ROLE_KEY
+) {
+  config({ path: ".env.local" });
+}
 
 type RawAdversary = {
   ID?: string;

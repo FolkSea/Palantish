@@ -9,16 +9,25 @@ function required(name: string, value: string | undefined): string {
   return value;
 }
 
-/** Public Supabase config (safe for the browser). */
+/**
+ * Public Supabase config (safe for the browser). Lazy getters so that reading
+ * one value never requires the other - e.g. the service-role admin client only
+ * needs the URL and must not fail when the anon key is absent (as when a CLI
+ * script targets a remote project with just the URL + service-role key).
+ */
 export const publicEnv = {
-  supabaseUrl: required(
-    "NEXT_PUBLIC_SUPABASE_URL",
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-  ),
-  supabaseAnonKey: required(
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  ),
+  get supabaseUrl(): string {
+    return required(
+      "NEXT_PUBLIC_SUPABASE_URL",
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+    );
+  },
+  get supabaseAnonKey(): string {
+    return required(
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    );
+  },
 };
 
 /** Comma-separated allow-list of permitted emails, lower-cased. */
