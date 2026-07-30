@@ -12,6 +12,7 @@ import {
 import { ItemActions } from "@/components/ItemActions";
 import { ReportTitle } from "@/components/ReportModal";
 import { NEXUS_ACCENT, type Nexus } from "@/lib/badges";
+import { countryFlag } from "@/lib/flags";
 import { formatDate } from "@/lib/format";
 
 const ECRIME_ACCENT = NEXUS_ACCENT.other; // slate
@@ -170,6 +171,7 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 function CountryCard({ card }: { card: NationStateCard }) {
   const accent = NEXUS_ACCENT[card.nexus as Nexus] ?? "#475569";
+  const flag = countryFlag(card.label);
   return (
     <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
       <div
@@ -180,8 +182,13 @@ function CountryCard({ card }: { card: NationStateCard }) {
           <h3 className="text-[13px] font-semibold text-slate-900">
             {card.label}
           </h3>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-            {card.items.length}
+          <span className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+              {card.items.length}
+            </span>
+            {flag ? (
+              <span className="text-[18px] leading-none">{flag}</span>
+            ) : null}
           </span>
         </div>
       </div>

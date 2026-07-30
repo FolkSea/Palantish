@@ -22,6 +22,7 @@ import {
 } from "@/app/actions";
 import { EditableIocList } from "./EditableIocList";
 import { AdversaryBadge } from "./Badges";
+import { countryFlag } from "@/lib/flags";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 import { techniqueInfo } from "@/lib/mitre/techniques";
 import { formatDate } from "@/lib/format";
@@ -841,11 +842,15 @@ function EditableCountry({
     setError(null);
   }
 
+  const flag = countryFlag(value);
+
   if (!editable) {
     if (!value) return null;
     return (
-      <span>
-        <span className="font-medium text-slate-400">Country:</span> {value}
+      <span className="inline-flex items-center gap-1">
+        <span className="font-medium text-slate-400">Country:</span>
+        {flag ? <span className="leading-none">{flag}</span> : null}
+        {value}
       </span>
     );
   }
@@ -901,6 +906,7 @@ function EditableCountry({
   return (
     <span className="inline-flex items-center gap-1">
       <span className="font-medium text-slate-400">Country:</span>
+      {flag ? <span className="leading-none">{flag}</span> : null}
       <span>
         {value ?? <span className="italic text-slate-400">unattributed</span>}
       </span>
