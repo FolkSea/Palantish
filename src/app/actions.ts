@@ -305,12 +305,17 @@ async function linkReportIocs(
  * grouped by type. Empty arrays when the report has none yet, so the modal can
  * fall back to on-the-fly extraction. MITRE codes are returned in `mitre`.
  */
+export type ReportNotes = {
+  analystComments: string | null;
+  visibilityGaps: string | null;
+};
+
 export async function getReportIndicatorsAction(
   rawHash: string,
 ): Promise<
   // `kind` is "intel" when the rawHash resolves to a report (all reports are
   // intel_items rows now, and every one is editable), null when it does not.
-  | { ok: true; indicators: Indicators; kind: "intel" | null }
+  | { ok: true; indicators: Indicators; kind: "intel" | null; notes: ReportNotes }
   | { ok: false; error: string }
 > {
   const empty: Indicators = {
@@ -321,7 +326,9 @@ export async function getReportIndicatorsAction(
     cves: [],
     mitre: [],
   };
-  if (!rawHash) return { ok: true, indicators: empty, kind: null };
+  const noNotes: ReportNotes = { analystComments: null, visibilityGaps: null };
+  if (!rawHash)
+    return { ok: true, indicators: empty, kind: null, notes: noNotes };
 
   const supabase = await createClient();
   const {
@@ -333,10 +340,15 @@ export async function getReportIndicatorsAction(
 
   const item = await supabase
     .from("intel_items")
-    .select("id")
+    .select("id, analyst_comments, visibility_gaps")
     .eq("raw_hash", rawHash)
     .maybeSingle();
-  if (!item.data) return { ok: true, indicators: empty, kind: null };
+  if (!item.data)
+    return { ok: true, indicators: empty, kind: null, notes: noNotes };
+  const notes: ReportNotes = {
+    analystComments: item.data.analyst_comments,
+    visibilityGaps: item.data.visibility_gaps,
+  };
 
   const links = await supabase
     .from("intel_item_iocs")
@@ -344,7 +356,7 @@ export async function getReportIndicatorsAction(
     .eq("intel_item_id", item.data.id);
   const iocIds = (links.data ?? []).map((r) => r.ioc_id);
   if (iocIds.length === 0)
-    return { ok: true, indicators: empty, kind: "intel" };
+    return { ok: true, indicators: empty, kind: "intel", notes };
 
   const iocsRes = await supabase
     .from("iocs")
@@ -368,7 +380,7 @@ export async function getReportIndicatorsAction(
     else if (ioc.ioc_type === "cve") grouped.cves.push(ioc.value);
     else if (ioc.ioc_type === "mitre") grouped.mitre.push(ioc.value);
   }
-  return { ok: true, indicators: grouped, kind: "intel" };
+  return { ok: true, indicators: grouped, kind: "intel", notes };
 }
 
 /** Delete an ioc's link to a report (and the ioc row if it becomes orphaned),
@@ -752,6 +764,36 @@ export async function updateReportConfidenceAction(
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
   return { ok: true, confidence: c || null, moved: false };
+}
+
+/** Save a report's analyst commentary or visibility-gaps note (markdown). */
+export async function updateReportNoteAction(
+  rawHash: string,
+  field: "analyst_comments" | "visibility_gaps",
+  value: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!rawHash) return { ok: false, error: "Missing report." };
+  if (field !== "analyst_comments" && field !== "visibility_gaps")
+    return { ok: false, error: "Invalid field." };
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+
+  const db = createAdminClient();
+  const item = await resolveReport(db, rawHash);
+  if (!item) return { ok: false, error: "Report not found." };
+
+  const v = value.trim() || null;
+  const update =
+    field === "analyst_comments"
+      ? { analyst_comments: v }
+      : { visibility_gaps: v };
+  const { error } = await db
+    .from("intel_items")
+    .update(update)
+    .eq("id", item.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/");
+  return { ok: true };
 }
 
 /* --- MITRE ATT&CK discovery ------------------------------------------------ */

@@ -223,6 +223,7 @@ export type Database = {
       intel_items: {
         Row: {
           adversary_label: string | null
+          analyst_comments: string | null
           confidence: string | null
           country: string | null
           created_at: string
@@ -243,9 +244,11 @@ export type Database = {
           title: string
           updated_at: string
           url: string | null
+          visibility_gaps: string | null
         }
         Insert: {
           adversary_label?: string | null
+          analyst_comments?: string | null
           confidence?: string | null
           country?: string | null
           created_at?: string
@@ -266,9 +269,11 @@ export type Database = {
           title: string
           updated_at?: string
           url?: string | null
+          visibility_gaps?: string | null
         }
         Update: {
           adversary_label?: string | null
+          analyst_comments?: string | null
           confidence?: string | null
           country?: string | null
           created_at?: string
@@ -289,6 +294,7 @@ export type Database = {
           title?: string
           updated_at?: string
           url?: string | null
+          visibility_gaps?: string | null
         }
         Relationships: [
           {

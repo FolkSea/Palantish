@@ -18,9 +18,11 @@ import {
   updateReportAdversaryAction,
   updateReportCountryAction,
   updateReportConfidenceAction,
+  updateReportNoteAction,
   getAttributionOptionsAction,
 } from "@/app/actions";
 import { EditableIocList } from "./EditableIocList";
+import { Markdown } from "./Markdown";
 import { AdversaryBadge } from "./Badges";
 import {
   REPORT_CONFIDENCES,
@@ -246,6 +248,27 @@ export function ReportModal({
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   }
 
+  // Analyst notes (markdown), loaded with the indicators below.
+  const [analystComments, setAnalystComments] = useState<string | null>(null);
+  const [visibilityGaps, setVisibilityGaps] = useState<string | null>(null);
+
+  async function saveAnalystComments(
+    value: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!rawHash) return { ok: false, error: "This report cannot be edited." };
+    const res = await updateReportNoteAction(rawHash, "analyst_comments", value);
+    if (res.ok) setAnalystComments(value.trim() || null);
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
+  }
+  async function saveVisibilityGaps(
+    value: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!rawHash) return { ok: false, error: "This report cannot be edited." };
+    const res = await updateReportNoteAction(rawHash, "visibility_gaps", value);
+    if (res.ok) setVisibilityGaps(value.trim() || null);
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
+  }
+
   // Prefer indicators already stored (and curated) in the DB; extraction is only
   // a fallback for reports that have none stored yet. `stored` is null until the
   // lookup resolves.
@@ -256,6 +279,8 @@ export function ReportModal({
     if (!rawHash) {
       setStored(null);
       setKind(null);
+      setAnalystComments(null);
+      setVisibilityGaps(null);
       return;
     }
     let active = true;
@@ -265,6 +290,8 @@ export function ReportModal({
       if (active && r.ok) {
         setStored(r.indicators);
         setKind(r.kind);
+        setAnalystComments(r.notes.analystComments);
+        setVisibilityGaps(r.notes.visibilityGaps);
       }
     });
     return () => {
@@ -495,6 +522,24 @@ export function ReportModal({
               )}
             </CollapsibleCard>
 
+            <CollapsibleCard title="Analyst Comments">
+              <EditableMarkdown
+                value={analystComments}
+                editable={iocsEditable}
+                placeholder="No analyst comments yet."
+                onSave={saveAnalystComments}
+              />
+            </CollapsibleCard>
+
+            <CollapsibleCard title="Visibility Gaps">
+              <EditableMarkdown
+                value={visibilityGaps}
+                editable={iocsEditable}
+                placeholder="No visibility gaps recorded yet."
+                onSave={saveVisibilityGaps}
+              />
+            </CollapsibleCard>
+
             <CollapsibleCard title="IP Addresses" count={indicators.ips.length}>
               <EditableIocList
                 items={indicators.ips}
@@ -576,10 +621,6 @@ export function ReportModal({
                   emptyLabel="Use Discover to infer techniques from the report."
                 />
               )}
-            </CollapsibleCard>
-
-            <CollapsibleCard title="Visibility Gaps">
-              <Empty>Not yet available - to be generated.</Empty>
             </CollapsibleCard>
           </div>
         </div>
@@ -1212,4 +1253,115 @@ function EditableConfidence({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-[12px] italic text-slate-400">{children}</p>;
+}
+
+/**
+ * A multiline markdown note: renders the stored markdown, and (when editable)
+ * offers an Edit affordance that swaps in a textarea. Saves on demand.
+ */
+function EditableMarkdown({
+  value,
+  editable,
+  placeholder,
+  onSave,
+}: {
+  value: string | null;
+  editable: boolean;
+  placeholder: string;
+  onSave: (value: string) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Keep the draft in sync when the value loads/changes while not editing.
+  useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const res = await onSave(draft);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error ?? "Save failed.");
+      return;
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div>
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setEditing(false);
+              setDraft(value ?? "");
+              setError(null);
+            }
+          }}
+          rows={6}
+          placeholder={`${placeholder} Markdown supported.`}
+          className="w-full resize-y rounded border border-slate-300 px-2 py-1.5 font-mono text-[12px] text-slate-800 outline-none focus:border-slate-400"
+        />
+        <div className="mt-1 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy}
+            className="rounded px-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(false);
+              setDraft(value ?? "");
+              setError(null);
+            }}
+            className="rounded px-1 text-[11px] text-slate-500 hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          {error ? (
+            <span className="text-[10px] text-red-600">{error}</span>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {value ? (
+        <div className="text-[12px]">
+          <Markdown text={value} />
+        </div>
+      ) : (
+        <Empty>{placeholder}</Empty>
+      )}
+      {editable ? (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(value ?? "");
+            setEditing(true);
+          }}
+          className="mt-1 rounded px-1 text-[11px] font-medium text-[#1d4ed8] hover:bg-slate-100"
+        >
+          {value ? "Edit" : "Add"}
+        </button>
+      ) : null}
+    </div>
+  );
 }
