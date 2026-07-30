@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { NationStateCard, ActorItem } from "@/lib/data";
-import type { ActorGroupCard, ActorReport } from "@/lib/actor-sections";
+import type { ActorCard, ActorItem } from "@/lib/data";
 import type { Focus } from "@/components/settings/AccountPanel";
 import {
   AdversaryBadge,
@@ -11,12 +10,7 @@ import {
 } from "@/components/Badges";
 import { ItemActions } from "@/components/ItemActions";
 import { ReportTitle } from "@/components/ReportModal";
-import { NEXUS_ACCENT, type Nexus } from "@/lib/badges";
-import { countryFlag } from "@/lib/flags";
 import { formatDate } from "@/lib/format";
-
-const ECRIME_ACCENT = NEXUS_ACCENT.other; // slate
-const HACKTIVISM_ACCENT = "#7e22ce"; // purple
 
 /** Event dates are ISO; breach labels ("27 Jul") pass through unformatted. */
 function displayDate(d: string | null): string {
@@ -30,9 +24,9 @@ export function ActivityByActor({
   hacktivismCards,
   focus,
 }: {
-  nationStateCards: NationStateCard[];
-  ecrimeCards: ActorGroupCard[];
-  hacktivismCards: ActorGroupCard[];
+  nationStateCards: ActorCard[];
+  ecrimeCards: ActorCard[];
+  hacktivismCards: ActorCard[];
   focus: Focus;
 }) {
   const nsCount = nationStateCards.reduce((n, c) => n + c.items.length, 0);
@@ -56,7 +50,7 @@ export function ActivityByActor({
           {nationStateCards.length ? (
             <CardGrid>
               {nationStateCards.map((c) => (
-                <CountryCard key={c.key} card={c} />
+                <ActorCardView key={c.key} card={c} />
               ))}
             </CardGrid>
           ) : (
@@ -72,12 +66,7 @@ export function ActivityByActor({
           {ecrimeCards.length ? (
             <CardGrid>
               {ecrimeCards.map((c) => (
-                <GroupCard
-                  key={c.name}
-                  card={c}
-                  accent={ECRIME_ACCENT}
-                  unattributedLabel="UNID SPIDER"
-                />
+                <ActorCardView key={c.key} card={c} />
               ))}
             </CardGrid>
           ) : (
@@ -93,7 +82,7 @@ export function ActivityByActor({
           {hacktivismCards.length ? (
             <CardGrid>
               {hacktivismCards.map((c) => (
-                <GroupCard key={c.name} card={c} accent={HACKTIVISM_ACCENT} />
+                <ActorCardView key={c.key} card={c} />
               ))}
             </CardGrid>
           ) : (
@@ -169,14 +158,12 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CountryCard({ card }: { card: NationStateCard }) {
-  const accent = NEXUS_ACCENT[card.nexus as Nexus] ?? "#475569";
-  const flag = countryFlag(card.label);
+function ActorCardView({ card }: { card: ActorCard }) {
   return (
     <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
       <div
         className="rounded-t-[10px] border-b border-[#e5e7eb] px-4 py-2.5"
-        style={{ borderTop: `3px solid ${accent}` }}
+        style={{ borderTop: `3px solid ${card.accent}` }}
       >
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-[13px] font-semibold text-slate-900">
@@ -186,8 +173,8 @@ function CountryCard({ card }: { card: NationStateCard }) {
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
               {card.items.length}
             </span>
-            {flag ? (
-              <span className="text-[18px] leading-none">{flag}</span>
+            {card.flag ? (
+              <span className="text-[18px] leading-none">{card.flag}</span>
             ) : null}
           </span>
         </div>
@@ -229,89 +216,11 @@ function ActorEntry({ item }: { item: ActorItem }) {
         <SourceBadge name={item.source_name} />
         {item.published_at ? (
           <span className="text-[10px] text-slate-400">
-            {formatDate(item.published_at)}
+            {displayDate(item.published_at)}
           </span>
         ) : null}
         <span className="ml-auto">
           <ItemActions rawHash={item.raw_hash} />
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function GroupCard({
-  card,
-  accent,
-  unattributedLabel = null,
-}: {
-  card: ActorGroupCard;
-  accent: string;
-  unattributedLabel?: string | null;
-}) {
-  // Named cards label items with the crew/collective; the Unattributed card
-  // uses the section fallback (e.g. UNID SPIDER for eCrime) when provided.
-  const actorLabel = card.name === "Unattributed" ? unattributedLabel : card.name;
-  return (
-    <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
-      <div
-        className="rounded-t-[10px] border-b border-[#e5e7eb] px-4 py-2.5"
-        style={{ borderTop: `3px solid ${accent}` }}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-[13px] font-semibold text-slate-900">
-            {card.name}
-          </h3>
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-            {card.items.length}
-          </span>
-        </div>
-      </div>
-      <div className="flex-1 space-y-3 px-4 py-3">
-        {card.items.map((r) => (
-          <GroupItem key={r.id} report={r} actor={actorLabel} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function GroupItem({
-  report,
-  actor,
-}: {
-  report: ActorReport;
-  actor: string | null;
-}) {
-  return (
-    <div className="border-b border-slate-100 pb-3 last:border-none last:pb-0">
-      <ReportTitle
-        report={{
-          title: report.title,
-          url: report.url,
-          description: report.description,
-          sourceName: report.sourceName,
-          date: report.date,
-          adversary: actor,
-          rawHash: report.rawHash,
-        }}
-      />
-      {report.description ? (
-        <p className="mt-1 text-[12px] leading-snug text-slate-600">
-          {report.description}
-        </p>
-      ) : null}
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {/* Attributed items carry the actor as a red label. */}
-        <AdversaryBadge name={actor} />
-        <SourceBadge name={report.sourceName} />
-        {report.date ? (
-          <span className="text-[10px] text-slate-400">
-            {displayDate(report.date)}
-          </span>
-        ) : null}
-        <span className="ml-auto">
-          <ItemActions rawHash={report.rawHash} />
         </span>
       </div>
     </div>

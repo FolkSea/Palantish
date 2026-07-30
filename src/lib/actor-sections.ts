@@ -5,6 +5,7 @@ import {
   buildHacktivismGroups,
   hasHacktivismKeyword,
 } from "@/lib/ingest/enrich/rules";
+import { NEXUS_ACCENT } from "@/lib/badges";
 
 // Re-exported so existing importers (lib/data) keep a single import site.
 export { buildHacktivismGroups };
@@ -12,98 +13,141 @@ export { buildHacktivismGroups };
 type BreachRow = Database["public"]["Tables"]["breaches"]["Row"];
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
 
-/** A single report shown inside an eCrime / hacktivism actor card. */
-export type ActorReport = {
+const ECRIME_ACCENT = NEXUS_ACCENT.other; // slate
+const HACKTIVISM_ACCENT = "#7e22ce"; // purple
+const NON_ATTRIBUTED = "Non Attributed";
+const ECRIME_UNID = "UNID SPIDER"; // fallback label for unattributed eCrime
+
+/**
+ * One report inside an actor card. The same shape is used for nation-state,
+ * eCrime and hacktivism items so all three sections render through a single
+ * card component. Breaches map onto it with a null confidence/country.
+ */
+export type ActorItem = {
   id: string;
-  rawHash: string;
+  raw_hash: string;
   title: string;
   url: string | null;
   description: string | null;
-  sourceName: string | null;
-  date: string | null;
+  source_name: string | null;
+  published_at: string | null;
+  confidence: string | null;
+  country: string | null;
+  adversary: string | null;
 };
 
-/** One actor's card: the actor name (or "Unattributed") and its reports. */
-export type ActorGroupCard = {
-  name: string;
-  items: ActorReport[];
+/** One actor's card: the actor (or "Non Attributed"), accent/flag and items. */
+export type ActorCard = {
+  key: string;
+  label: string;
+  accent: string; // top-border colour
+  flag: string | null; // country flag (nation-state only)
+  items: ActorItem[];
 };
 
-function breachToReport(b: BreachRow): ActorReport {
+function breachToItem(b: BreachRow): ActorItem {
   return {
     id: b.id,
-    rawHash: b.raw_hash,
+    raw_hash: b.raw_hash,
     title: b.org_name,
     url: b.url,
     description: b.summary,
-    sourceName: b.source_name,
-    date: b.event_date_label ?? b.event_date,
+    source_name: b.source_name,
+    published_at: b.event_date_label ?? b.event_date,
+    confidence: null,
+    country: null,
+    adversary: null,
   };
 }
 
-function intelToReport(i: IntelItemRow): ActorReport {
+function intelToItem(i: IntelItemRow): ActorItem {
   return {
     id: i.id,
-    rawHash: i.raw_hash,
+    raw_hash: i.raw_hash,
     title: i.title,
     url: i.url,
     description: i.description,
-    sourceName: i.source_name,
-    date: i.published_at,
+    source_name: i.source_name,
+    published_at: i.published_at,
+    confidence: i.confidence,
+    country: null,
+    adversary: null,
   };
 }
 
-function push(map: Map<string, ActorReport[]>, key: string, item: ActorReport) {
+function push(map: Map<string, ActorItem[]>, key: string, item: ActorItem) {
   const arr = map.get(key);
   if (arr) arr.push(item);
   else map.set(key, [item]);
 }
 
-/** Named actors first (most reports first), "Unattributed" always last. */
-function toCards(map: Map<string, ActorReport[]>): ActorGroupCard[] {
+/**
+ * Turn the crew -> items map into cards. Every item in a card is labelled with
+ * the card's actor (the crew name, or a section UNID fallback for the
+ * "Non Attributed" card). Named actors first (most reports first), and the
+ * "Non Attributed" card always sorts last - exactly like the nation-state cards.
+ */
+function toCards(
+  map: Map<string, ActorItem[]>,
+  accent: string,
+  unidFallback: string | null,
+): ActorCard[] {
   return [...map.entries()]
-    .map(([name, items]) => ({ name, items }))
+    .map(([label, items]) => {
+      const adversary = label === NON_ATTRIBUTED ? unidFallback : label;
+      return {
+        key: label,
+        label,
+        accent,
+        flag: null,
+        items: items.map((it) => ({ ...it, adversary })),
+      };
+    })
     .sort((a, b) => {
-      if (a.name === "Unattributed") return 1;
-      if (b.name === "Unattributed") return -1;
-      return b.items.length - a.items.length || a.name.localeCompare(b.name);
+      if (a.label === NON_ATTRIBUTED) return 1;
+      if (b.label === NON_ATTRIBUTED) return -1;
+      return b.items.length - a.items.length || a.label.localeCompare(b.label);
     });
 }
 
 /**
- * Split eCrime and hacktivism activity into per-actor cards. Breaches are eCrime
- * by nature and are attributed to a crew (or "Unattributed"); a breach or report
- * that names a hacktivist collective is routed to hacktivism instead. Reports
- * that read as hacktivism without a named group go to hacktivism "Unattributed".
+ * Split eCrime and hacktivism activity into per-actor cards (plus a
+ * "Non Attributed" card each), mirroring the nation-state layout. Breaches are
+ * eCrime by nature and are attributed to a crew (or "Non Attributed"); a breach
+ * or report that names a hacktivist collective is routed to hacktivism instead.
+ * Reports that read as hacktivism without a named group go to hacktivism
+ * "Non Attributed". A manually-stored attribution overrides the derived crew.
  */
 export function buildActorSectionCards(
   breaches: BreachRow[],
   reports: IntelItemRow[],
   ecrimeGroups: GroupEntry[],
   hacktivismGroups: GroupEntry[],
-): { ecrimeCards: ActorGroupCard[]; hacktivismCards: ActorGroupCard[] } {
-  const ecrime = new Map<string, ActorReport[]>();
-  const hack = new Map<string, ActorReport[]>();
+): { ecrimeCards: ActorCard[]; hacktivismCards: ActorCard[] } {
+  const ecrime = new Map<string, ActorItem[]>();
+  const hack = new Map<string, ActorItem[]>();
 
   for (const b of breaches) {
-    // A manually-stored attribution overrides the crew derived from the text.
     const stored = b.adversary_label?.trim() || null;
     const text = `${b.org_name} ${b.summary ?? ""}`.toLowerCase();
     const h = matchGroup(text, hacktivismGroups)?.cs;
     if (h) {
-      push(hack, stored ?? h, breachToReport(b));
+      push(hack, stored ?? h, breachToItem(b));
     } else {
-      const crew = stored ?? matchGroup(text, ecrimeGroups)?.cs ?? "Unattributed";
-      push(ecrime, crew, breachToReport(b));
+      const crew = stored ?? matchGroup(text, ecrimeGroups)?.cs ?? NON_ATTRIBUTED;
+      push(ecrime, crew, breachToItem(b));
     }
   }
 
   for (const r of reports) {
     const text = `${r.title} ${r.description ?? ""}`;
     const h = matchGroup(text.toLowerCase(), hacktivismGroups)?.cs;
-    if (h) push(hack, h, intelToReport(r));
-    else if (hasHacktivismKeyword(text)) push(hack, "Unattributed", intelToReport(r));
+    if (h) push(hack, h, intelToItem(r));
+    else if (hasHacktivismKeyword(text)) push(hack, NON_ATTRIBUTED, intelToItem(r));
   }
 
-  return { ecrimeCards: toCards(ecrime), hacktivismCards: toCards(hack) };
+  return {
+    ecrimeCards: toCards(ecrime, ECRIME_ACCENT, ECRIME_UNID),
+    hacktivismCards: toCards(hack, HACKTIVISM_ACCENT, null),
+  };
 }

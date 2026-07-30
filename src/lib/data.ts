@@ -3,8 +3,9 @@ import type { Database } from "@/lib/supabase/database.types";
 import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
 import { buildEcrimeActorGroups, deriveEcrimeActor } from "@/lib/ecrime";
 import { isThreatIntel } from "@/lib/relevance";
-import { adversaryLabel, type Nexus } from "@/lib/badges";
+import { adversaryLabel, NEXUS_ACCENT, type Nexus } from "@/lib/badges";
 import { nexusForCountry } from "@/lib/actor-classify";
+import { countryFlag } from "@/lib/flags";
 import {
   GROUP_TABLE,
   sortGroups,
@@ -13,8 +14,12 @@ import {
 import {
   buildActorSectionCards,
   buildHacktivismGroups,
-  type ActorGroupCard,
+  type ActorItem,
+  type ActorCard,
 } from "@/lib/actor-sections";
+
+// A single card/item shape drives all three activity-by-actor sections.
+export type { ActorItem, ActorCard };
 
 type Tables = Database["public"]["Tables"];
 type Views = Database["public"]["Views"];
@@ -23,18 +28,6 @@ export type IntelItemRow = Tables["intel_items"]["Row"];
 export type VulnerabilityRow = Tables["vulnerabilities"]["Row"];
 export type BreachRow = Tables["breaches"]["Row"];
 export type TimelineRow = Views["timeline_events"]["Row"];
-
-// An actor-card item, with a display adversary name (CS cryptonym when set,
-// otherwise a specific name derived from the item text).
-export type ActorItem = IntelItemRow & { adversary: string | null };
-
-// A nation-state card: one country (or "Non Attributed") and its items.
-export type NationStateCard = {
-  key: string;
-  label: string;
-  nexus: Nexus; // accent colour bucket
-  items: ActorItem[];
-};
 
 export type EcrimeTimelinePoint = {
   id: string;
@@ -84,11 +77,10 @@ export type StaleFeed = {
 export type DashboardData = {
   compiledAt: string | null;
   executiveSummary: ExecutiveSummary | null;
-  // Nation-state actor cards (China, Russia, North Korea, Iran, Rest of World).
-  nationStateCards: NationStateCard[];
-  // Per-actor eCrime and hacktivism cards (each with an "Unattributed" card).
-  ecrimeCards: ActorGroupCard[];
-  hacktivismCards: ActorGroupCard[];
+  // Per-actor cards for each section, each with a trailing "Non Attributed" card.
+  nationStateCards: ActorCard[];
+  ecrimeCards: ActorCard[];
+  hacktivismCards: ActorCard[];
   timeline: TimelineRow[];
   ecrimeTimeline: EcrimeTimelinePoint[];
   vulnTimeline: VulnTimelinePoint[];
@@ -237,13 +229,17 @@ export async function loadDashboard(): Promise<DashboardData> {
     else nsByCountry.set(key, [item]);
   }
   // Most-active country first; the "Non Attributed" card always sorts last.
-  const nationStateCards: NationStateCard[] = [...nsByCountry.entries()]
-    .map(([key, items]) => ({
-      key: key || "__none__",
-      label: key || "Non Attributed",
-      nexus: key ? nexusForCountry(key) : ("other" as Nexus),
-      items,
-    }))
+  const nationStateCards: ActorCard[] = [...nsByCountry.entries()]
+    .map(([key, items]) => {
+      const nexus: Nexus = key ? nexusForCountry(key) : "other";
+      return {
+        key: key || "__none__",
+        label: key || "Non Attributed",
+        accent: NEXUS_ACCENT[nexus] ?? "#475569",
+        flag: key ? countryFlag(key) : null,
+        items,
+      };
+    })
     .sort((a, b) => {
       if (a.key === "__none__") return 1;
       if (b.key === "__none__") return -1;

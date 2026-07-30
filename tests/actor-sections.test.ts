@@ -49,13 +49,17 @@ function run(breaches: BreachRow[], reports: IntelItemRow[] = []) {
 describe("buildActorSectionCards", () => {
   it("attributes a breach to a named eCrime crew", () => {
     const { ecrimeCards } = run([breach("Acme Corp", "LockBit ransomware hit Acme")]);
-    expect(ecrimeCards[0].name).toBe("LockBit");
+    expect(ecrimeCards[0].label).toBe("LockBit");
     expect(ecrimeCards[0].items).toHaveLength(1);
+    // Named cards label their items with the crew (the red adversary badge).
+    expect(ecrimeCards[0].items[0].adversary).toBe("LockBit");
   });
 
-  it("puts an unattributed breach in the eCrime Unattributed card", () => {
+  it("puts an unattributed breach in the eCrime Non Attributed card", () => {
     const { ecrimeCards } = run([breach("Beta Ltd", "data theft, no crew named")]);
-    expect(ecrimeCards.map((c) => c.name)).toEqual(["Unattributed"]);
+    expect(ecrimeCards.map((c) => c.label)).toEqual(["Non Attributed"]);
+    // Non Attributed eCrime items fall back to the UNID SPIDER label.
+    expect(ecrimeCards[0].items[0].adversary).toBe("UNID SPIDER");
   });
 
   it("routes a hacktivist-named breach to hacktivism, not eCrime", () => {
@@ -63,7 +67,7 @@ describe("buildActorSectionCards", () => {
       breach("Gov Portal", "KillNet claimed a DDoS against the portal"),
     ]);
     expect(ecrimeCards).toHaveLength(0);
-    expect(hacktivismCards[0].name).toBe("KillNet");
+    expect(hacktivismCards[0].label).toBe("KillNet");
   });
 
   it("puts a generic hacktivism report in hacktivism Unattributed", () => {
@@ -71,7 +75,7 @@ describe("buildActorSectionCards", () => {
       [],
       [report("Hacktivists deface ministry site", "A hacktivist group claimed it")],
     );
-    expect(hacktivismCards.map((c) => c.name)).toEqual(["Unattributed"]);
+    expect(hacktivismCards.map((c) => c.label)).toEqual(["Non Attributed"]);
   });
 
   it("orders named actors before Unattributed, by report count", () => {
@@ -81,10 +85,10 @@ describe("buildActorSectionCards", () => {
       breach("C", "LockBit again"),
       breach("D", "no attribution"),
     ]);
-    expect(ecrimeCards.map((c) => c.name)).toEqual([
+    expect(ecrimeCards.map((c) => c.label)).toEqual([
       "LockBit",
       "Qilin",
-      "Unattributed",
+      "Non Attributed",
     ]);
   });
 
