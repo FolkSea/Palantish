@@ -206,6 +206,7 @@ function ActorEntry({ item }: { item: ActorItem }) {
           sourceName: item.source_name,
           date: item.published_at,
           adversary: item.adversary,
+          country: item.country,
           confidence: item.confidence,
           rawHash: item.raw_hash,
         }}

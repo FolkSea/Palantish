@@ -488,7 +488,13 @@ export async function updateReportIocAction(
 /* --- Report attribution (adversary) --------------------------------------- */
 
 export type UpdateAdversaryResult =
-  | { ok: true; label: string; matched: boolean; country: string | null }
+  | {
+      ok: true;
+      label: string;
+      matched: boolean;
+      country: string | null;
+      regrouped: boolean;
+    }
   | { ok: false; error: string };
 
 /**
@@ -583,7 +589,82 @@ export async function updateReportAdversaryAction(
     .eq("id", item.data.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
-  return { ok: true, label, matched: !!matched, country };
+  return {
+    ok: true,
+    label,
+    matched: !!matched,
+    country,
+    regrouped: !!matched || !!family,
+  };
+}
+
+/**
+ * Manually set a report's country (for cases with no family mapping, e.g. a
+ * researcher's own actor name). A non-empty country also marks the item as
+ * nation-state so it groups under that country's card; clearing it moves the
+ * item to Non Attributed.
+ */
+export async function updateReportCountryAction(
+  rawHash: string,
+  country: string,
+): Promise<{ ok: true; country: string | null } | { ok: false; error: string }> {
+  if (!rawHash) return { ok: false, error: "Missing report." };
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+  const c = country.trim();
+
+  const db = createAdminClient();
+  const item = await db
+    .from("intel_items")
+    .select("id")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (!item.data) return { ok: false, error: "Report not found." };
+
+  const update = c
+    ? { country: c, motivation: "nation_state" }
+    : { country: null };
+  const { error } = await db
+    .from("intel_items")
+    .update(update)
+    .eq("id", item.data.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/");
+  return { ok: true, country: c || null };
+}
+
+const CONFIDENCE_VALUES = ["confirmed", "suspected", "poc"];
+
+/** Set a report's confidence level (confirmed / suspected / poc, or clear it). */
+export async function updateReportConfidenceAction(
+  rawHash: string,
+  confidence: string,
+): Promise<
+  { ok: true; confidence: string | null } | { ok: false; error: string }
+> {
+  if (!rawHash) return { ok: false, error: "Missing report." };
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+  const c = confidence.trim().toLowerCase();
+  if (c && !CONFIDENCE_VALUES.includes(c))
+    return { ok: false, error: "Invalid confidence." };
+
+  const db = createAdminClient();
+  const item = await db
+    .from("intel_items")
+    .select("id")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (!item.data) return { ok: false, error: "Report not found." };
+
+  const confidenceValue = (c || null) as "confirmed" | "suspected" | "poc" | null;
+  const { error } = await db
+    .from("intel_items")
+    .update({ confidence: confidenceValue })
+    .eq("id", item.data.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/");
+  return { ok: true, confidence: c || null };
 }
 
 /* --- MITRE ATT&CK discovery ------------------------------------------------ */

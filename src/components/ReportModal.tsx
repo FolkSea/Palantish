@@ -16,6 +16,8 @@ import {
   deleteReportIocAction,
   updateReportIocAction,
   updateReportAdversaryAction,
+  updateReportCountryAction,
+  updateReportConfidenceAction,
 } from "@/app/actions";
 import { EditableIocList } from "./EditableIocList";
 import { AdversaryBadge } from "./Badges";
@@ -30,6 +32,7 @@ export type ReportModalData = {
   sourceName: string | null;
   date: string | null;
   adversary?: string | null;
+  country?: string | null;
   confidence?: string | null;
   rawHash?: string | null;
 };
@@ -136,10 +139,23 @@ export function ReportModal({
 
   const rawHash = report.rawHash;
 
-  // Locally-tracked attribution so an edit reflects immediately in the header.
+  // Locally-tracked attribution + country so edits reflect immediately.
   const [adversary, setAdversary] = useState<string | null>(
     report.adversary ?? null,
   );
+  const [country, setCountry] = useState<string | null>(report.country ?? null);
+  const [confidence, setConfidence] = useState<string | null>(
+    report.confidence ?? null,
+  );
+
+  async function saveConfidence(
+    value: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!rawHash) return { ok: false, error: "This report cannot be edited." };
+    const res = await updateReportConfidenceAction(rawHash, value);
+    if (res.ok) setConfidence(res.confidence);
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
+  }
 
   async function saveAdversary(
     value: string,
@@ -147,10 +163,23 @@ export function ReportModal({
     if (!rawHash)
       return { ok: false, error: "This report cannot be edited.", label: "", matched: false };
     const res = await updateReportAdversaryAction(rawHash, value);
-    if (res.ok) setAdversary(res.label || null);
+    if (res.ok) {
+      setAdversary(res.label || null);
+      // A resolved/known label also moves the country - keep the two in sync.
+      if (res.regrouped) setCountry(res.country);
+    }
     return res.ok
       ? { ok: true, label: res.label, matched: res.matched }
       : { ok: false, error: res.error, label: "", matched: false };
+  }
+
+  async function saveCountry(
+    value: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!rawHash) return { ok: false, error: "This report cannot be edited." };
+    const res = await updateReportCountryAction(rawHash, value);
+    if (res.ok) setCountry(res.country);
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
   }
 
   // Prefer indicators already stored (and curated) in the DB; extraction is only
@@ -318,7 +347,16 @@ export function ReportModal({
                 editable={iocsEditable}
                 onSave={saveAdversary}
               />
-              <Meta label="Confidence" value={report.confidence ?? null} />
+              <EditableCountry
+                value={country}
+                editable={iocsEditable}
+                onSave={saveCountry}
+              />
+              <EditableConfidence
+                value={confidence}
+                editable={iocsEditable}
+                onSave={saveConfidence}
+              />
               {report.url ? (
                 <span>
                   <span className="font-medium text-slate-400">Link:</span>{" "}
@@ -743,6 +781,174 @@ function EditableAttribution({
       {hint ? (
         <span className="text-[10px] text-emerald-600">({hint})</span>
       ) : null}
+    </span>
+  );
+}
+
+/** Editable country - a plain manual override for the report's grouping. */
+function EditableCountry({
+  value,
+  editable,
+  onSave,
+}: {
+  value: string | null;
+  editable: boolean;
+  onSave: (value: string) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const res = await onSave(draft.trim());
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error ?? "Update failed.");
+      return;
+    }
+    setEditing(false);
+  }
+
+  function cancel() {
+    setEditing(false);
+    setDraft(value ?? "");
+    setError(null);
+  }
+
+  if (!editable) {
+    if (!value) return null;
+    return (
+      <span>
+        <span className="font-medium text-slate-400">Country:</span> {value}
+      </span>
+    );
+  }
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <span className="font-medium text-slate-400">Country:</span>
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            } else if (e.key === "Escape") {
+              cancel();
+            }
+          }}
+          placeholder="Country"
+          className="w-32 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-800 outline-none focus:border-slate-400"
+        />
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          className="rounded px-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={cancel}
+          className="rounded px-1 text-[11px] text-slate-500 hover:bg-slate-100"
+        >
+          Cancel
+        </button>
+        {error ? <span className="text-[10px] text-red-600">{error}</span> : null}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="font-medium text-slate-400">Country:</span>
+      <span>
+        {value ?? <span className="italic text-slate-400">unattributed</span>}
+      </span>
+      <button
+        type="button"
+        title="Edit country"
+        aria-label="Edit country"
+        onClick={() => {
+          setDraft(value ?? "");
+          setEditing(true);
+        }}
+        className="text-slate-400 hover:text-slate-700"
+      >
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </svg>
+      </button>
+    </span>
+  );
+}
+
+/** Editable confidence presented as a dropdown; saves on change. */
+function EditableConfidence({
+  value,
+  editable,
+  onSave,
+}: {
+  value: string | null;
+  editable: boolean;
+  onSave: (value: string) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!editable) {
+    if (!value) return null;
+    return (
+      <span>
+        <span className="font-medium text-slate-400">Confidence:</span> {value}
+      </span>
+    );
+  }
+
+  async function onChange(v: string) {
+    setBusy(true);
+    setError(null);
+    const res = await onSave(v);
+    setBusy(false);
+    if (!res.ok) setError(res.error ?? "Update failed.");
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="font-medium text-slate-400">Confidence:</span>
+      <select
+        value={value ?? ""}
+        disabled={busy}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-slate-800 outline-none focus:border-slate-400 disabled:opacity-50"
+      >
+        <option value="">-</option>
+        <option value="confirmed">Confirmed</option>
+        <option value="suspected">Suspected</option>
+        <option value="poc">PoC</option>
+      </select>
+      {error ? <span className="text-[10px] text-red-600">{error}</span> : null}
     </span>
   );
 }

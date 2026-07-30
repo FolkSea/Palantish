@@ -182,6 +182,7 @@ export function ReportsList({ items }: { items: IntelItemRow[] }) {
                           description: r.description,
                           sourceName: r.source_name,
                           date: r.published_at,
+                          country: r.country,
                           confidence: r.confidence,
                           rawHash: r.raw_hash,
                         }}
