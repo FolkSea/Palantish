@@ -280,7 +280,7 @@ export type Database = {
       intel_items: {
         Row: {
           adversary_label: string | null
-          confidence: Database["public"]["Enums"]["confidence_level"] | null
+          confidence: string | null
           country: string | null
           created_at: string
           crowdstrike_adversary: string | null
@@ -298,7 +298,7 @@ export type Database = {
         }
         Insert: {
           adversary_label?: string | null
-          confidence?: Database["public"]["Enums"]["confidence_level"] | null
+          confidence?: string | null
           country?: string | null
           created_at?: string
           crowdstrike_adversary?: string | null
@@ -316,7 +316,7 @@ export type Database = {
         }
         Update: {
           adversary_label?: string | null
-          confidence?: Database["public"]["Enums"]["confidence_level"] | null
+          confidence?: string | null
           country?: string | null
           created_at?: string
           crowdstrike_adversary?: string | null

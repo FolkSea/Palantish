@@ -1,19 +1,25 @@
 import {
   ADVERSARY_BADGE_CLASS,
-  CONFIDENCE_STYLE,
   PRIORITY_STYLE,
+  REPORT_CONFIDENCE_STYLE,
   VULN_STATUS_STYLE,
-  type Confidence,
+  type ReportConfidence,
   type VulnPriority,
 } from "@/lib/badges";
 
 const base =
   "inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none";
 
-export function ConfidenceBadge({ value }: { value: Confidence | null }) {
+/** Report attribution confidence: HIGH / MEDIUM / LOW. */
+export function ConfidenceBadge({ value }: { value: string | null }) {
   if (!value) return null;
-  const s = CONFIDENCE_STYLE[value];
-  return <span className={`${base} ${s.className}`}>{s.label}</span>;
+  const s = REPORT_CONFIDENCE_STYLE[value as ReportConfidence];
+  if (!s) return null;
+  return (
+    <span className={`${base} ${s.className}`} title="Attribution confidence">
+      {s.label}
+    </span>
+  );
 }
 
 export function VulnStatusBadge({

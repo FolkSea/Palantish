@@ -22,6 +22,11 @@ import {
 } from "@/app/actions";
 import { EditableIocList } from "./EditableIocList";
 import { AdversaryBadge } from "./Badges";
+import {
+  REPORT_CONFIDENCES,
+  REPORT_CONFIDENCE_LABEL,
+  type ReportConfidence,
+} from "@/lib/badges";
 import { countryFlag } from "@/lib/flags";
 import { addActor } from "@/app/settings/catalogue-actions";
 import {
@@ -1151,7 +1156,8 @@ function EditableConfidence({
     if (!value) return null;
     return (
       <span>
-        <span className="font-medium text-slate-400">Confidence:</span> {value}
+        <span className="font-medium text-slate-400">Confidence:</span>{" "}
+        {REPORT_CONFIDENCE_LABEL[value as ReportConfidence] ?? value}
       </span>
     );
   }
@@ -1168,15 +1174,16 @@ function EditableConfidence({
     <span className="inline-flex items-center gap-1">
       <span className="font-medium text-slate-400">Confidence:</span>
       <select
-        value={value ?? ""}
+        value={value ?? "medium"}
         disabled={busy}
         onChange={(e) => onChange(e.target.value)}
         className="rounded border border-slate-300 bg-white px-1 py-0.5 text-[11px] text-slate-800 outline-none focus:border-slate-400 disabled:opacity-50"
       >
-        <option value="">-</option>
-        <option value="confirmed">Confirmed</option>
-        <option value="suspected">Suspected</option>
-        <option value="poc">PoC</option>
+        {REPORT_CONFIDENCES.map((c) => (
+          <option key={c} value={c}>
+            {REPORT_CONFIDENCE_LABEL[c]}
+          </option>
+        ))}
       </select>
       {error ? <span className="text-[10px] text-red-600">{error}</span> : null}
     </span>

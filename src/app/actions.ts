@@ -693,9 +693,9 @@ export async function updateReportCountryAction(
   return { ok: true, country: c || null };
 }
 
-const CONFIDENCE_VALUES = ["confirmed", "suspected", "poc"];
+const CONFIDENCE_VALUES = ["high", "medium", "low"];
 
-/** Set a report's confidence level (confirmed / suspected / poc, or clear it). */
+/** Set a report's attribution confidence (high / medium / low). */
 export async function updateReportConfidenceAction(
   rawHash: string,
   confidence: string,
@@ -717,10 +717,9 @@ export async function updateReportConfidenceAction(
     .maybeSingle();
   if (!item.data) return { ok: false, error: "Report not found." };
 
-  const confidenceValue = (c || null) as "confirmed" | "suspected" | "poc" | null;
   const { error } = await db
     .from("intel_items")
-    .update({ confidence: confidenceValue })
+    .update({ confidence: c || null })
     .eq("id", item.data.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");

@@ -24,6 +24,36 @@ export const CONFIDENCE_STYLE: Record<
 // Vulnerability status uses the same vocabulary as confidence.
 export const VULN_STATUS_STYLE = CONFIDENCE_STYLE;
 
+// Reports carry an attribution confidence (how sure the attribution is) on a
+// separate High / Medium / Low scale, defaulting to Medium.
+export type ReportConfidence = "high" | "medium" | "low";
+
+export const REPORT_CONFIDENCES: ReportConfidence[] = ["high", "medium", "low"];
+
+export const REPORT_CONFIDENCE_LABEL: Record<ReportConfidence, string> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+};
+
+export const REPORT_CONFIDENCE_STYLE: Record<
+  ReportConfidence,
+  { label: string; className: string }
+> = {
+  high: {
+    label: "HIGH",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  },
+  medium: {
+    label: "MEDIUM",
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+  },
+  low: {
+    label: "LOW",
+    className: "bg-slate-100 text-slate-600 border-slate-300",
+  },
+};
+
 // Derived priority for the exploits/vulnerabilities table (see lib/vuln-priority).
 export type VulnPriority = "critical" | "high" | "medium";
 

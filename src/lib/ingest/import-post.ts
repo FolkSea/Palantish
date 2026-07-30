@@ -231,7 +231,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
       description: enriched.description,
       url: enriched.url,
       published_at: publishedDate,
-      confidence: enriched.confidence,
+      confidence: "medium",
       crowdstrike_adversary: enriched.crowdstrikeAdversary,
       adversary_label: adversaryLabel,
       source_name: source.name,
@@ -250,7 +250,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
       sourceName: source.name,
       date: publishedDate,
       adversary: adversaryLabel,
-      confidence: enriched.confidence ?? null,
+      confidence: "medium",
       rawHash,
     };
   }

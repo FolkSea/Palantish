@@ -259,7 +259,8 @@ export async function runIngest(
           description: item.description,
           url: item.url,
           published_at: publishedDate,
-          confidence: item.confidence,
+          // Reports carry an attribution confidence, defaulting to Medium.
+          confidence: "medium",
           crowdstrike_adversary: item.crowdstrikeAdversary,
           // Store the derived adversary label so it can be edited later.
           adversary_label: computeAdversaryLabel(
