@@ -88,6 +88,12 @@ const BREACH_RE =
 const LARGE_SCALE_RE =
   /\b(mass|widespread|hundreds|thousands|dozens of (victims|organi[sz]ations)|supply.chain|global campaign|multiple (victims|sectors|organi[sz]ations)|critical infrastructure|zero.day)\b/i;
 
+// Research / analysis about a threat actor or its tooling. Such a post names a
+// crew but is not itself a breach event, so it is classified as a report rather
+// than routed to the breaches table.
+const RESEARCH_RE =
+  /\b(analysis|analy[sz]ing|analy[sz]ed|deep.?dive|write-?ups?|unpacking|dissect(ing|s|ed)?|reverse.?engineer(ing|ed)?|teardown|anatomy of|a look at|profile of|explained|technical report|malware report|threat (report|research|spotlight)|research (report|paper)|new (tool|toy|malware|variant|loader|backdoor|implant|rootkit|stealer|dropper|framework))\b/i;
+
 const CONFIRMED_RE =
   /\b(confirmed|disclosed|acknowledged|patched|actively exploited|exploited in the wild|advisory)\b/i;
 
@@ -228,9 +234,12 @@ export function classifyItemType(
 ): ItemType {
   const hay = haystack(c);
   if (CVE_RE.test(hay)) return "vuln";
+  // Research/analysis about a named eCrime or hacktivist crew is a report, not a
+  // breach event - even when it discusses that crew's ransomware or extortion.
+  if (group?.nexus === "other" && RESEARCH_RE.test(hay)) return "report";
   if (BREACH_RE.test(hay)) return "breach";
-  // Large-scale eCrime that reaches this point (small-scale is dropped earlier)
-  // is a breach-type event, not an actor-activity card.
+  // Large-scale eCrime/hacktivism that reaches this point (small-scale is dropped
+  // earlier) is a breach-type event, not an actor-activity card.
   if (group?.nexus === "other") return "breach";
   if (group) return "actor_activity";
   // News-category, high-signal items become breaking headlines.

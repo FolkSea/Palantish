@@ -5,6 +5,8 @@ import {
   sortGroups,
   deriveAdversaryFromText,
   computeAdversaryLabel,
+  classifyItemType,
+  type GroupEntry,
 } from "@/lib/ingest/enrich/rules";
 import type { RawCandidate } from "@/lib/ingest/types";
 
@@ -81,6 +83,17 @@ describe("RulesEnricher classification", () => {
     );
     expect(large).not.toBeNull();
     expect(large!.itemType).toBe("breach");
+  });
+
+  it("keeps eCrime research/analysis as a report, not a breach", async () => {
+    const out = await enricher.enrich(
+      candidate({
+        title: "LockBit's new loader dissected: a technical analysis",
+        description: "The tooling has been seen across multiple sectors.",
+      }),
+    );
+    expect(out).not.toBeNull();
+    expect(out!.itemType).toBe("report");
   });
 
   it("drops generic news with no nation-state or vuln signal", async () => {
@@ -163,5 +176,42 @@ describe("deriveAdversaryFromText", () => {
 
   it("returns null when nothing matches", () => {
     expect(deriveAdversaryFromText("Ordinary security update", null, groups)).toBeNull();
+  });
+});
+
+describe("classifyItemType: research vs breach for eCrime / hacktivism crews", () => {
+  const crew = (alias: string, cs: string): GroupEntry => ({
+    alias,
+    nexus: "other",
+    cs,
+  });
+
+  it("classes a research paper about an eCrime crew as a report", () => {
+    const type = classifyItemType(
+      candidate({ title: "Toy Ghouls' new toy: the GenieLocker ransomware" }),
+      crew("toy ghouls", "Toy Ghouls"),
+    );
+    expect(type).toBe("report");
+  });
+
+  it("classes analysis of a hacktivist collective as a report", () => {
+    const type = classifyItemType(
+      candidate({
+        title: "KillNet unpacked: a technical analysis of the DDoS toolkit",
+      }),
+      crew("killnet", "KillNet"),
+    );
+    expect(type).toBe("report");
+  });
+
+  it("still classes an eCrime incident/campaign as a breach", () => {
+    const type = classifyItemType(
+      candidate({
+        title: "LockBit mass campaign hits hundreds of organizations",
+        description: "Widespread ransomware across multiple sectors.",
+      }),
+      crew("lockbit", "LockBit"),
+    );
+    expect(type).toBe("breach");
   });
 });
