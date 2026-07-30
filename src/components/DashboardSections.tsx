@@ -11,7 +11,12 @@ export function Ticker({ items }: { items: TickerItem[] }) {
   const row = items.map((i) => (
     <span key={i.id} className="mx-5 inline-flex items-center gap-1.5">
       <span className="text-slate-400">{formatDate(i.date)}</span>
-      <ExtLink href={i.url}>{i.title}</ExtLink>
+      <ExtLink
+        href={i.url}
+        className={i.kind === "exploit" ? "!text-red-600" : undefined}
+      >
+        {i.title}
+      </ExtLink>
     </span>
   ));
 

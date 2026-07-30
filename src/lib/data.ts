@@ -53,6 +53,7 @@ export type ExecutiveSummary = {
 // A single breaking-ticker entry (a PoC exploit or a breach).
 export type TickerItem = {
   id: string;
+  kind: "exploit" | "breach";
   date: string | null;
   title: string;
   url: string | null;
@@ -271,6 +272,7 @@ export async function loadDashboard(): Promise<DashboardData> {
       .filter((v) => v.status === "poc" && (v.added_at ?? "") >= breakingCutoff)
       .map((v) => ({
         id: `vuln-${v.id}`,
+        kind: "exploit" as const,
         date: v.added_at,
         title: v.target ? `${v.cve_id} - ${v.target}` : v.cve_id,
         url: v.url,
@@ -279,6 +281,7 @@ export async function loadDashboard(): Promise<DashboardData> {
       .filter((b) => (b.event_date ?? "") >= breakingCutoff)
       .map((b) => ({
         id: `breach-${b.id}`,
+        kind: "breach" as const,
         date: b.event_date,
         title: b.org_name,
         url: b.url,
