@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailAllowed } from "@/lib/env";
@@ -486,6 +486,55 @@ export async function updateReportIocAction(
 }
 
 /* --- Report attribution (adversary) --------------------------------------- */
+
+const UNID_FAMILY_OPTIONS = [
+  "PANDA",
+  "BEAR",
+  "CHOLLIMA",
+  "KITTEN",
+  "TIGER",
+  "WOLF",
+  "BUFFALO",
+  "LEOPARD",
+  "BAT",
+  "SPIDER",
+  "JACKAL",
+].map((a) => `UNID ${a}`);
+
+const FAMILY_COUNTRIES = [
+  "China",
+  "Russia",
+  "North Korea",
+  "Iran",
+  "India",
+  "Turkey",
+  "Vietnam",
+  "Pakistan",
+];
+
+/** Autocomplete options for the modal's Attribution + Country inputs. */
+export async function getAttributionOptionsAction(): Promise<{
+  adversaries: string[];
+  countries: string[];
+}> {
+  // Never cache: suggestions must reflect the current actors table, so edits in
+  // Settings show up the next time the modal is opened.
+  noStore();
+  const unauth = await ensureAllowed();
+  if (unauth) return { adversaries: [], countries: [] };
+  const db = createAdminClient();
+  const { data } = await db.from("adversaries").select("name, country");
+  const names = [
+    ...new Set((data ?? []).map((a) => a.name).filter(Boolean) as string[]),
+  ].sort((a, b) => a.localeCompare(b));
+  const countries = [
+    ...new Set([
+      ...FAMILY_COUNTRIES,
+      ...((data ?? []).map((a) => a.country).filter(Boolean) as string[]),
+    ]),
+  ].sort((a, b) => a.localeCompare(b));
+  return { adversaries: [...UNID_FAMILY_OPTIONS, ...names], countries };
+}
 
 export type UpdateAdversaryResult =
   | {

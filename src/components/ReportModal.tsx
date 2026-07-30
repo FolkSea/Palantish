@@ -18,6 +18,7 @@ import {
   updateReportAdversaryAction,
   updateReportCountryAction,
   updateReportConfidenceAction,
+  getAttributionOptionsAction,
 } from "@/app/actions";
 import { EditableIocList } from "./EditableIocList";
 import { AdversaryBadge } from "./Badges";
@@ -147,6 +148,16 @@ export function ReportModal({
   const [confidence, setConfidence] = useState<string | null>(
     report.confidence ?? null,
   );
+
+  // Autocomplete options for the Attribution + Country inputs.
+  const [options, setOptions] = useState<{
+    adversaries: string[];
+    countries: string[];
+  }>({ adversaries: [], countries: [] });
+  useEffect(() => {
+    if (!rawHash) return;
+    getAttributionOptionsAction().then(setOptions);
+  }, [rawHash]);
 
   async function saveConfidence(
     value: string,
@@ -346,11 +357,13 @@ export function ReportModal({
                 value={adversary}
                 editable={iocsEditable}
                 onSave={saveAdversary}
+                suggestions={options.adversaries}
               />
               <EditableCountry
                 value={country}
                 editable={iocsEditable}
                 onSave={saveCountry}
+                suggestions={options.countries}
               />
               <EditableConfidence
                 value={confidence}
@@ -655,12 +668,14 @@ function EditableAttribution({
   value,
   editable,
   onSave,
+  suggestions = [],
 }: {
   value: string | null;
   editable: boolean;
   onSave: (
     value: string,
   ) => Promise<{ ok: boolean; error?: string; label: string; matched: boolean }>;
+  suggestions?: string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
@@ -722,8 +737,14 @@ function EditableAttribution({
             }
           }}
           placeholder="Adversary or alias"
+          list="attribution-suggestions"
           className="w-40 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-800 outline-none focus:border-slate-400"
         />
+        <datalist id="attribution-suggestions">
+          {suggestions.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
         <button
           type="button"
           onClick={save}
@@ -790,10 +811,12 @@ function EditableCountry({
   value,
   editable,
   onSave,
+  suggestions = [],
 }: {
   value: string | null;
   editable: boolean;
   onSave: (value: string) => Promise<{ ok: boolean; error?: string }>;
+  suggestions?: string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? "");
@@ -847,8 +870,14 @@ function EditableCountry({
             }
           }}
           placeholder="Country"
+          list="country-suggestions"
           className="w-32 rounded border border-slate-300 px-1.5 py-0.5 text-[11px] text-slate-800 outline-none focus:border-slate-400"
         />
+        <datalist id="country-suggestions">
+          {suggestions.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
         <button
           type="button"
           onClick={save}
