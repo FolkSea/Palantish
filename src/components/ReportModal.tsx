@@ -18,6 +18,7 @@ import {
   updateReportAdversaryAction,
 } from "@/app/actions";
 import { EditableIocList } from "./EditableIocList";
+import { AdversaryBadge } from "./Badges";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 import { techniqueInfo } from "@/lib/mitre/techniques";
 import { formatDate } from "@/lib/format";
@@ -656,8 +657,9 @@ function EditableAttribution({
   if (!editable) {
     if (!value) return null;
     return (
-      <span>
-        <span className="font-medium text-slate-400">Attribution:</span> {value}
+      <span className="inline-flex items-center gap-1">
+        <span className="font-medium text-slate-400">Attribution:</span>
+        <AdversaryBadge name={value} />
       </span>
     );
   }
@@ -707,9 +709,11 @@ function EditableAttribution({
   return (
     <span className="inline-flex items-center gap-1">
       <span className="font-medium text-slate-400">Attribution:</span>
-      <span>
-        {value ?? <span className="italic text-slate-400">unattributed</span>}
-      </span>
+      {value ? (
+        <AdversaryBadge name={value} />
+      ) : (
+        <span className="italic text-slate-400">unattributed</span>
+      )}
       <button
         type="button"
         title="Edit attribution"
