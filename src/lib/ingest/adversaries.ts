@@ -45,6 +45,13 @@ const ANIMAL_FAMILY: Record<string, { motivation: Motivation; country: string | 
   JACKAL: { motivation: "hacktivism", country: null },
 };
 
+/** Classify a CrowdStrike animal (family), e.g. "BAT" -> nation_state / null. */
+export function familyForAnimal(
+  animal: string,
+): { motivation: Motivation; country: string | null } | null {
+  return ANIMAL_FAMILY[animal.trim().toUpperCase()] ?? null;
+}
+
 // Country name for the four tracked nexuses (fallback when the animal is not in
 // the family table above).
 const NEXUS_COUNTRY: Partial<Record<Nexus, string>> = {

@@ -23,6 +23,7 @@ import {
   type Indicators,
 } from "@/lib/report-indicators";
 import { indicatorRows, linkIocsToItem, type IocRow } from "@/lib/ingest/iocs";
+import { familyForAnimal } from "@/lib/ingest/adversaries";
 import { discoverTechniques } from "@/lib/mitre/discover";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 
@@ -536,16 +537,45 @@ export async function updateReportAdversaryAction(
       }) ?? null;
   }
 
-  const update = raw
-    ? matched
-      ? {
-          adversary_label: matched.name,
-          crowdstrike_adversary: matched.name,
-          country: matched.country,
-          motivation: matched.motivation?.[0] ?? null,
-        }
-      : { adversary_label: raw, crowdstrike_adversary: null }
-    : { adversary_label: null, crowdstrike_adversary: null };
+  // A generic "UNID <FAMILY>" (or a bare family) carries its own classification,
+  // so re-derive country + motivation from it - otherwise the item would keep
+  // the previous country and not move (e.g. back to Non Attributed for BAT).
+  const family = matched
+    ? null
+    : familyForAnimal(/^(?:unid\s+)?([a-z]+)$/i.exec(raw)?.[1] ?? "");
+
+  let update: {
+    adversary_label: string | null;
+    crowdstrike_adversary: string | null;
+    country?: string | null;
+    motivation?: string | null;
+  };
+  let label = raw;
+  let country: string | null = null;
+  if (!raw) {
+    update = { adversary_label: null, crowdstrike_adversary: null };
+  } else if (matched) {
+    label = matched.name;
+    country = matched.country ?? null;
+    update = {
+      adversary_label: matched.name,
+      crowdstrike_adversary: matched.name,
+      country: matched.country,
+      motivation: matched.motivation?.[0] ?? null,
+    };
+  } else if (family) {
+    label = raw.toUpperCase();
+    country = family.country;
+    update = {
+      adversary_label: label,
+      crowdstrike_adversary: null,
+      country: family.country,
+      motivation: family.motivation,
+    };
+  } else {
+    // Unrecognised free text: keep it as the label, leave grouping unchanged.
+    update = { adversary_label: raw, crowdstrike_adversary: null };
+  }
 
   const { error } = await db
     .from("intel_items")
@@ -553,12 +583,7 @@ export async function updateReportAdversaryAction(
     .eq("id", item.data.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
-  return {
-    ok: true,
-    label: matched ? matched.name : raw,
-    matched: !!matched,
-    country: matched ? (matched.country ?? null) : null,
-  };
+  return { ok: true, label, matched: !!matched, country };
 }
 
 /* --- MITRE ATT&CK discovery ------------------------------------------------ */
