@@ -183,6 +183,23 @@ describe("deriveAdversaryFromText", () => {
     expect(deriveAdversaryFromText("A panda in the zoo", null, groups)).toBeNull();
   });
 
+  it("never returns a country name as an adversary", () => {
+    // "north korea" is a nexus keyword, not an actor - the label is UNID CHOLLIMA.
+    expect(
+      deriveAdversaryFromText("North Korean hackers hit a firm", null, groups),
+    ).toBeNull();
+  });
+
+  it("matches Lazarus to Stardust Chollima even when the country is named", () => {
+    expect(
+      deriveAdversaryFromText(
+        "North Korea's Lazarus Group shares tools with a crew",
+        null,
+        groups,
+      ),
+    ).toBe("Stardust Chollima");
+  });
+
   it("returns null when nothing matches", () => {
     expect(deriveAdversaryFromText("Ordinary security update", null, groups)).toBeNull();
   });

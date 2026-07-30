@@ -12,7 +12,7 @@ export type GroupEntry = { alias: string; nexus: Nexus; cs?: string };
 
 export const GROUP_TABLE: GroupEntry[] = [
   // North Korea (Chollima)
-  { alias: "lazarus", nexus: "north_korea", cs: "Labyrinth Chollima" },
+  { alias: "lazarus", nexus: "north_korea", cs: "Stardust Chollima" },
   { alias: "apt38", nexus: "north_korea", cs: "Stardust Chollima" },
   { alias: "bluenoroff", nexus: "north_korea", cs: "Stardust Chollima" },
   { alias: "kimsuky", nexus: "north_korea", cs: "Velvet Chollima" },
@@ -145,13 +145,34 @@ export function classifyGroup(c: RawCandidate): GroupEntry | null {
  * no CrowdStrike cryptonym applies - e.g. "Salt Typhoon". Generic single-word
  * aliases (panda/bear/...) are ignored so only real names are shown.
  */
+// Generic country / family keywords that exist only for nexus detection. They
+// must never become an adversary *name* (a "North Korea" post is UNID CHOLLIMA,
+// not "North Korea"), and must not shadow a specific actor named in the same
+// text (e.g. Lazarus), so they are excluded when deriving a name.
+const NEXUS_KEYWORDS = new Set([
+  "north korea",
+  "dprk",
+  "chollima",
+  "china",
+  "chinese",
+  "prc",
+  "panda",
+  "russia",
+  "russian",
+  "bear",
+  "iran",
+  "iranian",
+  "kitten",
+]);
+
 export function deriveAdversaryFromText(
   title: string,
   description: string | null | undefined,
   groups: GroupEntry[],
 ): string | null {
   const text = `${title} ${description ?? ""}`;
-  const group = matchGroup(text.toLowerCase(), groups);
+  const named = groups.filter((g) => g.cs || !NEXUS_KEYWORDS.has(g.alias));
+  const group = matchGroup(text.toLowerCase(), named);
   if (!group) return null;
   if (group.cs) return group.cs;
   if (!group.alias.includes(" ")) return null;
