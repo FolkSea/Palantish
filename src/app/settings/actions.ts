@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toAscii } from "@/lib/text";
 import { runIngest } from "@/lib/ingest/pipeline";
+import { generateAndStoreSummary } from "@/lib/summary/generate";
 
 export type SourceCategory = "vendor" | "research" | "news" | "government";
 const CATEGORIES: SourceCategory[] = ["vendor", "research", "news", "government"];
@@ -167,4 +168,20 @@ export async function ingestAllSources(): Promise<IngestActionResult> {
 /** Ingest a single feed on demand (the row "Update" action). */
 export async function ingestSource(id: string): Promise<IngestActionResult> {
   return triggerIngest({ sourceIds: [id] });
+}
+
+/** Regenerate the executive summary from current data (no ingest). */
+export async function refreshSummaryAction(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  const unauth = await requireAllowed();
+  if (unauth) return { ok: false, error: unauth };
+  try {
+    await generateAndStoreSummary(createAdminClient());
+    revalidatePath("/");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

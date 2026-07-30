@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   importPostAction,
@@ -16,7 +16,20 @@ function truncate(s: string, n = 70): string {
 
 type Toast = { kind: "ok" | "err"; text: string };
 
-export function ImportPostButton() {
+/**
+ * The single-report import flow (URL entry + scrape-failure recovery + result
+ * modal). By default it renders its own "Import post" button; pass `trigger` to
+ * render a custom control (e.g. a menu item) that opens the flow instead.
+ */
+export function ImportPostButton({
+  trigger,
+  openSignal,
+}: {
+  trigger?: (open: () => void, pending: boolean) => React.ReactNode;
+  // Increment to open the flow from an external control (e.g. a menu item),
+  // keeping this component mounted so its modal survives the trigger unmounting.
+  openSignal?: number;
+} = {}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [toast, setToast] = useState<Toast | null>(null);
@@ -110,17 +123,27 @@ export function ImportPostButton() {
     setPasteBody("");
   }
 
+  // Open the flow when an external control bumps openSignal.
+  useEffect(() => {
+    if (openSignal) openImport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal]);
+
   return (
     <>
-      <button
-        type="button"
-        onClick={openImport}
-        disabled={pending && panel === null}
-        title="Import a blog post by URL"
-        className="rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
-      >
-        {pending && panel === null ? "Importing..." : "Import post"}
-      </button>
+      {trigger ? (
+        trigger(openImport, pending && panel === null)
+      ) : (
+        <button
+          type="button"
+          onClick={openImport}
+          disabled={pending && panel === null}
+          title="Import a blog post by URL"
+          className="rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-60"
+        >
+          {pending && panel === null ? "Importing..." : "Import post"}
+        </button>
+      )}
 
       {/* URL entry modal */}
       {panel === "url" ? (
