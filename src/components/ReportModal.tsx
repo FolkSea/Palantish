@@ -177,7 +177,10 @@ export function ReportModal({
   ): Promise<{ ok: boolean; error?: string }> {
     if (!rawHash) return { ok: false, error: "This report cannot be edited." };
     const res = await updateReportConfidenceAction(rawHash, value);
-    if (res.ok) setConfidence(res.confidence);
+    if (res.ok) {
+      setConfidence(res.confidence);
+      if (res.moved) setKind("intel");
+    }
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   }
 
@@ -202,6 +205,7 @@ export function ReportModal({
       if (res.recognised) {
         setAdversary(res.label || null);
         if (res.regrouped) setCountry(res.country);
+        if (res.moved) setKind("intel");
       }
       return {
         ok: true,
@@ -235,7 +239,10 @@ export function ReportModal({
   ): Promise<{ ok: boolean; error?: string }> {
     if (!rawHash) return { ok: false, error: "This report cannot be edited." };
     const res = await updateReportCountryAction(rawHash, value);
-    if (res.ok) setCountry(res.country);
+    if (res.ok) {
+      setCountry(res.country);
+      if (res.moved) setKind("intel");
+    }
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   }
 
@@ -290,10 +297,11 @@ export function ReportModal({
   // Local edits (delete/replace) overlay the base set until the modal reopens.
   const [iocEdits, setIocEdits] = useState<Indicators | null>(null);
   const indicators = iocEdits ?? baseIndicators;
-  // IOCs, country and confidence only apply to intel reports; attribution can
-  // also be edited on breaches (the eCrime / hacktivism cards).
-  const iocsEditable = kind === "intel";
+  // The breach modal behaves exactly like a report modal: every editor is live,
+  // and the first attribution edit reclassifies the breach into a report (the
+  // edit actions convert it and return moved:true, which flips kind here).
   const attributable = kind === "intel" || kind === "breach";
+  const iocsEditable = attributable;
 
   function removeIoc(key: keyof Indicators, value: string) {
     setIocEdits((cur) => {
@@ -324,11 +332,14 @@ export function ReportModal({
   // reuses stored data instead of re-extracting and re-writing it every time.
   const extractedCount = indicatorCount(extracted);
   useEffect(() => {
+    // Only reports own stored IOCs; a breach has none until it is attributed and
+    // converted, at which point kind flips to "intel" and this re-runs.
+    if (kind !== "intel") return;
     if (!rawHash || !detailsText || stored === null || hasStoredIocs) return;
     if (extractedCount === 0) return;
     persistReportIndicatorsAction(rawHash, extracted).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rawHash, detailsText, stored, hasStoredIocs, extractedCount]);
+  }, [rawHash, detailsText, stored, hasStoredIocs, extractedCount, kind]);
 
   // MITRE ATT&CK discovery (LLM). Only runs when the user clicks Discover.
   const [techniques, setTechniques] = useState<DiscoveredTechnique[] | null>(

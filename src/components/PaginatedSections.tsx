@@ -119,6 +119,10 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
                           description: b.summary,
                           sourceName: b.source_name,
                           date: b.event_date,
+                          // Editable in the modal; attributing moves it to reports.
+                          adversary: b.crowdstrike_adversary ?? b.adversary_label,
+                          confidence: "medium",
+                          rawHash: b.raw_hash,
                         }}
                       />
                     </td>

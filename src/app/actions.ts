@@ -465,13 +465,10 @@ export async function updateReportIocAction(
   const normalized = normalizeIndicatorValue(newValue, iocType);
 
   const db = createAdminClient();
-  const item = await db
-    .from("intel_items")
-    .select("id")
-    .eq("raw_hash", rawHash)
-    .maybeSingle();
-  if (!item.data) return { ok: false, error: "Report not found." };
-  const intelItemId = item.data.id;
+  // Editing an indicator on a breach reclassifies it into a report first.
+  const ensured = await ensureReportItem(db, rawHash);
+  if ("error" in ensured) return { ok: false, error: ensured.error };
+  const intelItemId = ensured.id;
 
   if (normalized !== oldValue) {
     const oldIoc = await db
@@ -562,8 +559,61 @@ export type UpdateAdversaryResult =
       // false when the entered text is neither a catalogue adversary/alias nor a
       // UNID <family> - the UI prompts to add it and nothing is written yet.
       recognised: boolean;
+      // true when this edit reclassified a breach into a report.
+      moved: boolean;
     }
   | { ok: false; error: string };
+
+type AdminDb = ReturnType<typeof createAdminClient>;
+
+/**
+ * Resolve a rawHash to an intel_items report id. When it is currently a breach,
+ * convert it into a report (carrying its fields + any stored attribution) and
+ * delete the breach row - attributing a breach moves it into the reports table
+ * so it can be edited exactly like any other report. `moved` reports whether a
+ * conversion happened.
+ */
+async function ensureReportItem(
+  db: AdminDb,
+  rawHash: string,
+): Promise<{ id: string; moved: boolean } | { error: string }> {
+  const item = await db
+    .from("intel_items")
+    .select("id")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (item.data) return { id: item.data.id, moved: false };
+
+  const { data: b } = await db
+    .from("breaches")
+    .select("*")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (!b) return { error: "Report not found." };
+
+  const { data: inserted, error } = await db
+    .from("intel_items")
+    .insert({
+      raw_hash: b.raw_hash,
+      title: b.org_name,
+      description: b.summary,
+      url: b.url,
+      published_at: b.event_date ?? new Date().toISOString().slice(0, 10),
+      item_type: "report",
+      source_name: b.source_name,
+      source_id: b.source_id,
+      confidence: "medium",
+      adversary_label: b.adversary_label,
+      crowdstrike_adversary: b.crowdstrike_adversary,
+    })
+    .select("id")
+    .single();
+  if (error || !inserted) {
+    return { error: error?.message ?? "Could not move the breach to reports." };
+  }
+  await db.from("breaches").delete().eq("id", b.id);
+  return { id: inserted.id, moved: true };
+}
 
 /**
  * Set a report's attributed adversary. If the entered text matches a catalogue
@@ -582,23 +632,6 @@ export async function updateReportAdversaryAction(
   const raw = input.trim();
 
   const db = createAdminClient();
-  const item = await db
-    .from("intel_items")
-    .select("id")
-    .eq("raw_hash", rawHash)
-    .maybeSingle();
-  // Breaches are attributable too (eCrime/hacktivism cards), storing just the
-  // label - they have no country/motivation grouping.
-  const breach = item.data
-    ? null
-    : (
-        await db
-          .from("breaches")
-          .select("id")
-          .eq("raw_hash", rawHash)
-          .maybeSingle()
-      ).data;
-  if (!item.data && !breach) return { ok: false, error: "Report not found." };
 
   // Resolve the entered name/alias to a catalogue adversary (preferred name).
   const needle = raw.toLowerCase();
@@ -629,52 +662,73 @@ export async function updateReportAdversaryAction(
     ? null
     : familyForAnimal(/^(?:unid\s+)?([a-z]+)$/i.exec(raw)?.[1] ?? "");
 
-  // Breach: store the label only (no country/motivation grouping).
-  if (breach) {
-    if (raw && !matched && !family) {
-      return {
-        ok: true,
-        label: raw,
-        matched: false,
-        country: null,
-        regrouped: false,
-        recognised: false,
-      };
-    }
-    const bUpdate = !raw
-      ? { adversary_label: null, crowdstrike_adversary: null }
-      : matched
-        ? { adversary_label: matched.name, crowdstrike_adversary: matched.name }
-        : { adversary_label: raw.toUpperCase(), crowdstrike_adversary: null };
-    const { error } = await db
-      .from("breaches")
-      .update(bUpdate)
-      .eq("id", breach.id);
-    if (error) return { ok: false, error: error.message };
-    revalidatePath("/");
+  // Unrecognised free text: prompt to add it to the catalogue; write nothing
+  // and do not reclassify a breach yet.
+  if (raw && !matched && !family) {
     return {
       ok: true,
-      label: matched ? matched.name : family ? raw.toUpperCase() : raw,
-      matched: !!matched,
+      label: raw,
+      matched: false,
       country: null,
       regrouped: false,
-      recognised: true,
+      recognised: false,
+      moved: false,
     };
   }
 
-  if (!item.data) return { ok: false, error: "Report not found." };
+  // Clearing the attribution is an un-attribution, not a reclassification: leave
+  // a breach as a breach (just drop its stored label).
+  if (!raw) {
+    const intel = await db
+      .from("intel_items")
+      .select("id")
+      .eq("raw_hash", rawHash)
+      .maybeSingle();
+    if (intel.data) {
+      const { error } = await db
+        .from("intel_items")
+        .update({ adversary_label: null, crowdstrike_adversary: null })
+        .eq("id", intel.data.id);
+      if (error) return { ok: false, error: error.message };
+    } else {
+      const br = await db
+        .from("breaches")
+        .select("id")
+        .eq("raw_hash", rawHash)
+        .maybeSingle();
+      if (!br.data) return { ok: false, error: "Report not found." };
+      const { error } = await db
+        .from("breaches")
+        .update({ adversary_label: null, crowdstrike_adversary: null })
+        .eq("id", br.data.id);
+      if (error) return { ok: false, error: error.message };
+    }
+    revalidatePath("/");
+    return {
+      ok: true,
+      label: "",
+      matched: false,
+      country: null,
+      regrouped: false,
+      recognised: true,
+      moved: false,
+    };
+  }
 
+  // Recognised attribution: ensure a report row (converting a breach), then set
+  // the actor + its country/motivation so it groups under the right card.
+  const ensured = await ensureReportItem(db, rawHash);
+  if ("error" in ensured) return { ok: false, error: ensured.error };
+
+  let label: string;
+  let country: string | null;
   let update: {
     adversary_label: string | null;
     crowdstrike_adversary: string | null;
-    country?: string | null;
-    motivation?: string | null;
+    country: string | null;
+    motivation: string | null;
   };
-  let label = raw;
-  let country: string | null = null;
-  if (!raw) {
-    update = { adversary_label: null, crowdstrike_adversary: null };
-  } else if (matched) {
+  if (matched) {
     label = matched.name;
     country = matched.country ?? null;
     update = {
@@ -683,31 +737,21 @@ export async function updateReportAdversaryAction(
       country: matched.country,
       motivation: matched.motivation?.[0] ?? null,
     };
-  } else if (family) {
+  } else {
     label = raw.toUpperCase();
-    country = family.country;
+    country = family!.country;
     update = {
       adversary_label: label,
       crowdstrike_adversary: null,
-      country: family.country,
-      motivation: family.motivation,
-    };
-  } else {
-    // Unrecognised: don't write - the UI prompts to add it to the catalogue.
-    return {
-      ok: true,
-      label: raw,
-      matched: false,
-      country: null,
-      regrouped: false,
-      recognised: false,
+      country: family!.country,
+      motivation: family!.motivation,
     };
   }
 
   const { error } = await db
     .from("intel_items")
     .update(update)
-    .eq("id", item.data.id);
+    .eq("id", ensured.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
   return {
@@ -715,8 +759,9 @@ export async function updateReportAdversaryAction(
     label,
     matched: !!matched,
     country,
-    regrouped: !!matched || !!family,
+    regrouped: true,
     recognised: true,
+    moved: ensured.moved,
   };
 }
 
@@ -729,30 +774,47 @@ export async function updateReportAdversaryAction(
 export async function updateReportCountryAction(
   rawHash: string,
   country: string,
-): Promise<{ ok: true; country: string | null } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; country: string | null; moved: boolean }
+  | { ok: false; error: string }
+> {
   if (!rawHash) return { ok: false, error: "Missing report." };
   const unauth = await ensureAllowed();
   if (unauth) return { ok: false, error: unauth };
   const c = country.trim();
 
   const db = createAdminClient();
-  const item = await db
-    .from("intel_items")
-    .select("id")
-    .eq("raw_hash", rawHash)
-    .maybeSingle();
-  if (!item.data) return { ok: false, error: "Report not found." };
 
-  const update = c
-    ? { country: c, motivation: "nation_state" }
-    : { country: null };
+  // Clearing the country is only meaningful on an existing report; a breach has
+  // no country, so leave it as a breach.
+  if (!c) {
+    const intel = await db
+      .from("intel_items")
+      .select("id")
+      .eq("raw_hash", rawHash)
+      .maybeSingle();
+    if (intel.data) {
+      const { error } = await db
+        .from("intel_items")
+        .update({ country: null })
+        .eq("id", intel.data.id);
+      if (error) return { ok: false, error: error.message };
+      revalidatePath("/");
+    }
+    return { ok: true, country: null, moved: false };
+  }
+
+  // Setting a country is a nation-state attribution: ensure a report row
+  // (converting a breach) and group it under that country.
+  const ensured = await ensureReportItem(db, rawHash);
+  if ("error" in ensured) return { ok: false, error: ensured.error };
   const { error } = await db
     .from("intel_items")
-    .update(update)
-    .eq("id", item.data.id);
+    .update({ country: c, motivation: "nation_state" })
+    .eq("id", ensured.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
-  return { ok: true, country: c || null };
+  return { ok: true, country: c, moved: ensured.moved };
 }
 
 const CONFIDENCE_VALUES = ["high", "medium", "low"];
@@ -762,7 +824,8 @@ export async function updateReportConfidenceAction(
   rawHash: string,
   confidence: string,
 ): Promise<
-  { ok: true; confidence: string | null } | { ok: false; error: string }
+  | { ok: true; confidence: string | null; moved: boolean }
+  | { ok: false; error: string }
 > {
   if (!rawHash) return { ok: false, error: "Missing report." };
   const unauth = await ensureAllowed();
@@ -772,20 +835,16 @@ export async function updateReportConfidenceAction(
     return { ok: false, error: "Invalid confidence." };
 
   const db = createAdminClient();
-  const item = await db
-    .from("intel_items")
-    .select("id")
-    .eq("raw_hash", rawHash)
-    .maybeSingle();
-  if (!item.data) return { ok: false, error: "Report not found." };
+  const ensured = await ensureReportItem(db, rawHash);
+  if ("error" in ensured) return { ok: false, error: ensured.error };
 
   const { error } = await db
     .from("intel_items")
     .update({ confidence: c || null })
-    .eq("id", item.data.id);
+    .eq("id", ensured.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
-  return { ok: true, confidence: c || null };
+  return { ok: true, confidence: c || null, moved: ensured.moved };
 }
 
 /* --- MITRE ATT&CK discovery ------------------------------------------------ */
