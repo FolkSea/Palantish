@@ -42,8 +42,14 @@ function LoginForm() {
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#2855D9] shadow-sm">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <circle cx="12" cy="12" r="9" stroke="#ffffff" strokeWidth="2" />
-              <circle cx="12" cy="12" r="3.5" fill="#ffffff" />
+              <path
+                d="M8 20.5 V3.5 H13 a5 5 0 0 1 0 10 H8"
+                stroke="#ffffff"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="12.5" cy="8.5" r="1.8" fill="#ffffff" />
             </svg>
           </span>
           <div>

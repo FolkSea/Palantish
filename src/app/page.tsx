@@ -40,7 +40,7 @@ export default async function DashboardPage() {
       <header className="mb-4 rounded-lg bg-[#2855D9] px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            {/* All-seeing stone */}
+            {/* Stylised P with a dot in the loop (the all-seeing stone) */}
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
               <svg
                 width="22"
@@ -49,14 +49,14 @@ export default async function DashboardPage() {
                 fill="none"
                 aria-hidden="true"
               >
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="9"
+                <path
+                  d="M8 20.5 V3.5 H13 a5 5 0 0 1 0 10 H8"
                   stroke="#2855D9"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
-                <circle cx="12" cy="12" r="3.5" fill="#2855D9" />
+                <circle cx="12.5" cy="8.5" r="1.8" fill="#2855D9" />
               </svg>
             </span>
             <div>
