@@ -114,7 +114,9 @@ export type Database = {
       }
       breaches: {
         Row: {
+          adversary_label: string | null
           created_at: string
+          crowdstrike_adversary: string | null
           event_date: string | null
           event_date_label: string | null
           id: string
@@ -127,7 +129,9 @@ export type Database = {
           url: string | null
         }
         Insert: {
+          adversary_label?: string | null
           created_at?: string
+          crowdstrike_adversary?: string | null
           event_date?: string | null
           event_date_label?: string | null
           id?: string
@@ -140,7 +144,9 @@ export type Database = {
           url?: string | null
         }
         Update: {
+          adversary_label?: string | null
           created_at?: string
+          crowdstrike_adversary?: string | null
           event_date?: string | null
           event_date_label?: string | null
           id?: string

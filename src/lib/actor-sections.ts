@@ -86,12 +86,14 @@ export function buildActorSectionCards(
   const hack = new Map<string, ActorReport[]>();
 
   for (const b of breaches) {
+    // A manually-stored attribution overrides the crew derived from the text.
+    const stored = b.adversary_label?.trim() || null;
     const text = `${b.org_name} ${b.summary ?? ""}`.toLowerCase();
     const h = matchGroup(text, hacktivismGroups)?.cs;
     if (h) {
-      push(hack, h, breachToReport(b));
+      push(hack, stored ?? h, breachToReport(b));
     } else {
-      const crew = matchGroup(text, ecrimeGroups)?.cs ?? "Unattributed";
+      const crew = stored ?? matchGroup(text, ecrimeGroups)?.cs ?? "Unattributed";
       push(ecrime, crew, breachToReport(b));
     }
   }

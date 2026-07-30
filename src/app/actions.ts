@@ -336,7 +336,12 @@ async function linkReportIocs(
  */
 export async function getReportIndicatorsAction(
   rawHash: string,
-): Promise<{ ok: true; indicators: Indicators } | { ok: false; error: string }> {
+): Promise<
+  // `kind` says whether the rawHash is an intel report or a breach - both are
+  // attributable, but IOCs/country/confidence only apply to intel reports.
+  | { ok: true; indicators: Indicators; kind: "intel" | "breach" | null }
+  | { ok: false; error: string }
+> {
   const empty: Indicators = {
     ips: [],
     domains: [],
@@ -345,7 +350,7 @@ export async function getReportIndicatorsAction(
     cves: [],
     mitre: [],
   };
-  if (!rawHash) return { ok: true, indicators: empty };
+  if (!rawHash) return { ok: true, indicators: empty, kind: null };
 
   const supabase = await createClient();
   const {
@@ -360,14 +365,26 @@ export async function getReportIndicatorsAction(
     .select("id")
     .eq("raw_hash", rawHash)
     .maybeSingle();
-  if (!item.data) return { ok: true, indicators: empty };
+  if (!item.data) {
+    const breach = await supabase
+      .from("breaches")
+      .select("id")
+      .eq("raw_hash", rawHash)
+      .maybeSingle();
+    return {
+      ok: true,
+      indicators: empty,
+      kind: breach.data ? "breach" : null,
+    };
+  }
 
   const links = await supabase
     .from("intel_item_iocs")
     .select("ioc_id")
     .eq("intel_item_id", item.data.id);
   const iocIds = (links.data ?? []).map((r) => r.ioc_id);
-  if (iocIds.length === 0) return { ok: true, indicators: empty };
+  if (iocIds.length === 0)
+    return { ok: true, indicators: empty, kind: "intel" };
 
   const iocsRes = await supabase
     .from("iocs")
@@ -391,7 +408,7 @@ export async function getReportIndicatorsAction(
     else if (ioc.ioc_type === "cve") grouped.cves.push(ioc.value);
     else if (ioc.ioc_type === "mitre") grouped.mitre.push(ioc.value);
   }
-  return { ok: true, indicators: grouped };
+  return { ok: true, indicators: grouped, kind: "intel" };
 }
 
 /** Delete an ioc's link to a report (and the ioc row if it becomes orphaned),
@@ -571,7 +588,18 @@ export async function updateReportAdversaryAction(
     .select("id")
     .eq("raw_hash", rawHash)
     .maybeSingle();
-  if (!item.data) return { ok: false, error: "Report not found." };
+  // Breaches are attributable too (eCrime/hacktivism cards), storing just the
+  // label - they have no country/motivation grouping.
+  const breach = item.data
+    ? null
+    : (
+        await db
+          .from("breaches")
+          .select("id")
+          .eq("raw_hash", rawHash)
+          .maybeSingle()
+      ).data;
+  if (!item.data && !breach) return { ok: false, error: "Report not found." };
 
   // Resolve the entered name/alias to a catalogue adversary (preferred name).
   const needle = raw.toLowerCase();
@@ -601,6 +629,41 @@ export async function updateReportAdversaryAction(
   const family = matched
     ? null
     : familyForAnimal(/^(?:unid\s+)?([a-z]+)$/i.exec(raw)?.[1] ?? "");
+
+  // Breach: store the label only (no country/motivation grouping).
+  if (breach) {
+    if (raw && !matched && !family) {
+      return {
+        ok: true,
+        label: raw,
+        matched: false,
+        country: null,
+        regrouped: false,
+        recognised: false,
+      };
+    }
+    const bUpdate = !raw
+      ? { adversary_label: null, crowdstrike_adversary: null }
+      : matched
+        ? { adversary_label: matched.name, crowdstrike_adversary: matched.name }
+        : { adversary_label: raw.toUpperCase(), crowdstrike_adversary: null };
+    const { error } = await db
+      .from("breaches")
+      .update(bUpdate)
+      .eq("id", breach.id);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/");
+    return {
+      ok: true,
+      label: matched ? matched.name : family ? raw.toUpperCase() : raw,
+      matched: !!matched,
+      country: null,
+      regrouped: false,
+      recognised: true,
+    };
+  }
+
+  if (!item.data) return { ok: false, error: "Report not found." };
 
   let update: {
     adversary_label: string | null;

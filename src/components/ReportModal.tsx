@@ -243,15 +243,22 @@ export function ReportModal({
   // a fallback for reports that have none stored yet. `stored` is null until the
   // lookup resolves.
   const [stored, setStored] = useState<Indicators | null>(null);
+  // What the rawHash resolves to: an intel report, a breach, or neither.
+  const [kind, setKind] = useState<"intel" | "breach" | null>(null);
   useEffect(() => {
     if (!rawHash) {
       setStored(null);
+      setKind(null);
       return;
     }
     let active = true;
     setStored(null);
+    setKind(null);
     getReportIndicatorsAction(rawHash).then((r) => {
-      if (active && r.ok) setStored(r.indicators);
+      if (active && r.ok) {
+        setStored(r.indicators);
+        setKind(r.kind);
+      }
     });
     return () => {
       active = false;
@@ -283,8 +290,10 @@ export function ReportModal({
   // Local edits (delete/replace) overlay the base set until the modal reopens.
   const [iocEdits, setIocEdits] = useState<Indicators | null>(null);
   const indicators = iocEdits ?? baseIndicators;
-  // Editing persists to the DB, so it needs the report's raw_hash.
-  const iocsEditable = !!rawHash;
+  // IOCs, country and confidence only apply to intel reports; attribution can
+  // also be edited on breaches (the eCrime / hacktivism cards).
+  const iocsEditable = kind === "intel";
+  const attributable = kind === "intel" || kind === "breach";
 
   function removeIoc(key: keyof Indicators, value: string) {
     setIocEdits((cur) => {
@@ -401,7 +410,7 @@ export function ReportModal({
               />
               <EditableAttribution
                 value={adversary}
-                editable={iocsEditable}
+                editable={attributable}
                 onSave={saveAdversary}
                 onAddActor={addActorAndAttribute}
                 suggestions={options.adversaries}
