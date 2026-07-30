@@ -88,6 +88,13 @@ const BREACH_RE =
 const LARGE_SCALE_RE =
   /\b(mass|widespread|hundreds|thousands|dozens of (victims|organi[sz]ations)|supply.chain|global campaign|multiple (victims|sectors|organi[sz]ations)|critical infrastructure|zero.day)\b/i;
 
+// eCrime substance: a crew-named post describing actual activity - a breach,
+// leak, extortion, ransomware incident, attack, intrusion or campaign (kept even
+// when it targets a single victim), so ransomware-group activity is never
+// dropped as "small-scale". Only a bare mention with none of this is dropped.
+const ECRIME_INCIDENT_RE =
+  /\b(ransom(ware)?|extort(ion|ed|ing)?|leak(ed|s| site)?|dedicated leak site|\bdls\b|data (leak|dump|breach|for sale|theft)|breach(ed)?|hack(ed|er|ers)?|stole|stolen|exfiltrat|encrypt(ed|ion)?|victim|claim(ed|s|ing)?|listed|posted|initial access|access broker|attack(ed|s|ing)?|target(ed|s|ing)?|compromis(e|ed|es|ing)|hits?\b|deploy(ed|s|ing)?|affiliate|intrusion|campaign)\b/i;
+
 // Research / analysis about a threat actor or its tooling. Such a post names a
 // crew but is not itself a breach event, so it is classified as a report rather
 // than routed to the breaches table.
@@ -291,27 +298,29 @@ export function buildReport(c: RawCandidate): EnrichedItem {
  */
 export type RulesVerdict =
   | { kind: "keep"; item: EnrichedItem }
-  | { kind: "drop" }
+  | { kind: "drop"; reason: string }
   | { kind: "unsure" };
 
 export function rulesClassify(
   c: RawCandidate,
   groups: GroupEntry[],
 ): RulesVerdict {
-  if (!c.title || !c.url) return { kind: "drop" };
-  if (isMarketing(c)) return { kind: "drop" };
+  if (!c.title || !c.url) return { kind: "drop", reason: "missing title or URL" };
+  if (isMarketing(c)) return { kind: "drop", reason: "marketing / product" };
 
   const hay = haystack(c);
   const group = matchGroup(hay, groups);
-  // eCrime / "other" nexus only qualifies when clearly large-scale - EXCEPT
-  // research/analysis about the crew, which is intelligence worth keeping even
-  // when it describes a single tool or campaign.
+  // A post naming an eCrime / hacktivist crew is kept whenever it carries any
+  // substance - a breach/leak/ransomware incident, a large-scale campaign, or
+  // analysis. Only a bare crew mention with none of those signals is dropped, so
+  // we never drop actual ransomware-group activity.
   if (
     group?.nexus === "other" &&
     !isLargeScaleEcrime(c) &&
-    !RESEARCH_RE.test(hay)
+    !RESEARCH_RE.test(hay) &&
+    !ECRIME_INCIDENT_RE.test(hay)
   )
-    return { kind: "drop" };
+    return { kind: "drop", reason: "low-signal crew mention" };
 
   const itemType = classifyItemType(c, group);
   // Hacktivist activity (named collective or explicit hacktivism) is genuine

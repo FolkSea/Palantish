@@ -29,6 +29,25 @@ export default async function SettingsPage() {
     .select("id, name, motivation, country, community_identifiers, description")
     .order("name");
 
+  // Recently dropped candidates (last 30 days) for the audit view.
+  const droppedCutoff = new Date(
+    Date.now() - 30 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const { data: droppedRows } = await supabase
+    .from("dropped_items")
+    .select("raw_hash, title, url, source_name, reason, created_at")
+    .gte("created_at", droppedCutoff)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  const dropped = (droppedRows ?? []).map((d) => ({
+    rawHash: d.raw_hash,
+    title: d.title,
+    url: d.url,
+    sourceName: d.source_name,
+    reason: d.reason,
+    droppedAt: d.created_at,
+  }));
+
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ?? "";
   const focus = ((user?.user_metadata?.focus as string | undefined) ??
@@ -101,6 +120,7 @@ export default async function SettingsPage() {
         sources={(sources ?? []) as SettingsSource[]}
         actors={(actors ?? []) as ActorRecord[]}
         hidden={hidden}
+        dropped={dropped}
       />
     </div>
   );

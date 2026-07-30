@@ -136,6 +136,36 @@ export type Database = {
         }
         Relationships: []
       }
+      dropped_items: {
+        Row: {
+          created_at: string
+          id: string
+          raw_hash: string
+          reason: string | null
+          source_name: string | null
+          title: string
+          url: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          raw_hash: string
+          reason?: string | null
+          source_name?: string | null
+          title: string
+          url?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          raw_hash?: string
+          reason?: string | null
+          source_name?: string | null
+          title?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       executive_summaries: {
         Row: {
           citations: Json | null

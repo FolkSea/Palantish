@@ -2,7 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { pullAllFeeds, type FeedSource } from "./feeds";
-import { selectNewCandidates } from "./dedup";
+import { selectNewCandidates, computeHash } from "./dedup";
 import { selectEnricher } from "./enrich/select";
 import { selectSearchProvider } from "./search";
 import { buildGroupsFromAdversaries } from "./adversaries";
@@ -193,9 +193,24 @@ export async function runIngest(
     // Per-item logging: which items the rules classify locally vs escalate to
     // the LLM, and whether each is kept or dropped.
     const tally = { rulesKeep: 0, rulesDrop: 0, llmKeep: 0, llmDrop: 0 };
+    // Dropped candidates are recorded for the audit view (Settings).
+    const dropped: {
+      title: string;
+      url: string | null;
+      source_name: string | null;
+      reason: string | null;
+    }[] = [];
     const report: EnrichReport = (r) => {
       if (r.via === "rules") r.outcome === "keep" ? tally.rulesKeep++ : tally.rulesDrop++;
       else r.outcome === "keep" ? tally.llmKeep++ : tally.llmDrop++;
+      if (r.outcome === "drop") {
+        dropped.push({
+          title: r.title,
+          url: r.url,
+          source_name: r.sourceName ?? null,
+          reason: r.reason ?? null,
+        });
+      }
       ilog(
         `  ${r.via === "llm" ? "LLM " : "rules"} ${r.outcome === "keep" ? "keep" : "drop"}` +
           `${r.itemType ? ` [${r.itemType}]` : ""}: ${r.title.slice(0, 90)}`,
@@ -291,6 +306,25 @@ export async function runIngest(
     }
 
     ilog(`inserted ${added} new items`);
+
+    // Record dropped candidates for the audit view (deduped by content hash).
+    if (dropped.length > 0) {
+      const seen = new Set<string>();
+      const droppedRows = dropped
+        .map((d) => ({
+          raw_hash: computeHash(d.title, d.url ?? ""),
+          title: d.title.slice(0, 500),
+          url: d.url,
+          source_name: d.source_name,
+          reason: d.reason,
+        }))
+        .filter((r) => (seen.has(r.raw_hash) ? false : seen.add(r.raw_hash)));
+      const { error } = await db
+        .from("dropped_items")
+        .upsert(droppedRows, { onConflict: "raw_hash", ignoreDuplicates: true });
+      if (error) errors.push(`dropped_items insert: ${error.message}`);
+      else ilog(`recorded ${droppedRows.length} dropped candidates`);
+    }
 
     // Populate IOCs for the new reports: fetch each article body, extract
     // indicators (IP / domain / URI / file hash), and link them so they are

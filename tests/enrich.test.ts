@@ -69,11 +69,18 @@ describe("RulesEnricher classification", () => {
     expect(out).toBeNull();
   });
 
-  it("drops small-scale eCrime but keeps large-scale campaigns", async () => {
-    const small = await enricher.enrich(
+  it("keeps single-victim ransomware activity but drops a bare crew mention", async () => {
+    // A crew hitting even a single victim is real activity - keep it.
+    const incident = await enricher.enrich(
       candidate({ title: "LockBit affiliate hits a small firm" }),
     );
-    expect(small).toBeNull();
+    expect(incident).not.toBeNull();
+
+    // A crew name with no incident/analysis signal is a bare mention - drop it.
+    const mention = await enricher.enrich(
+      candidate({ title: "LockBit tops this quarter's threat rankings" }),
+    );
+    expect(mention).toBeNull();
 
     const large = await enricher.enrich(
       candidate({

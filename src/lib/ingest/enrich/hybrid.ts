@@ -18,7 +18,11 @@ export type EnrichReport = (r: {
   via: "rules" | "llm";
   outcome: "keep" | "drop";
   title: string;
+  url: string | null;
   itemType: string | null;
+  // Source + reason for the dropped-items audit; null/omitted on keep.
+  sourceName?: string | null;
+  reason?: string | null;
 }) => void;
 
 /**
@@ -46,11 +50,11 @@ export class HybridEnricher implements Enricher {
   async enrich(c: RawCandidate): Promise<EnrichedItem | null> {
     const verdict = rulesClassify(c, this.groups);
     if (verdict.kind === "keep") {
-      this.report?.({ via: "rules", outcome: "keep", title: c.title, itemType: verdict.item.itemType });
+      this.report?.({ via: "rules", outcome: "keep", title: c.title, url: c.url, itemType: verdict.item.itemType });
       return verdict.item;
     }
     if (verdict.kind === "drop") {
-      this.report?.({ via: "rules", outcome: "drop", title: c.title, itemType: null });
+      this.report?.({ via: "rules", outcome: "drop", title: c.title, url: c.url, itemType: null, sourceName: c.sourceName, reason: verdict.reason });
       return null;
     }
 
@@ -58,21 +62,21 @@ export class HybridEnricher implements Enricher {
     if (this.llm) {
       const r = await this.llm.classify(c);
       if (r === "drop") {
-        this.report?.({ via: "llm", outcome: "drop", title: c.title, itemType: null });
+        this.report?.({ via: "llm", outcome: "drop", title: c.title, url: c.url, itemType: null, sourceName: c.sourceName, reason: "LLM: not intelligence" });
         return null;
       }
       if (r !== "unavailable") {
-        this.report?.({ via: "llm", outcome: "keep", title: c.title, itemType: r.itemType });
+        this.report?.({ via: "llm", outcome: "keep", title: c.title, url: c.url, itemType: r.itemType });
         return r;
       }
       // LLM was consulted but unavailable: keep-by-default as a report.
       const item = buildReport(c);
-      this.report?.({ via: "llm", outcome: "keep", title: c.title, itemType: item.itemType });
+      this.report?.({ via: "llm", outcome: "keep", title: c.title, url: c.url, itemType: item.itemType });
       return item;
     }
     // No LLM configured: keep the ambiguous item locally as a report.
     const item = buildReport(c);
-    this.report?.({ via: "rules", outcome: "keep", title: c.title, itemType: item.itemType });
+    this.report?.({ via: "rules", outcome: "keep", title: c.title, url: c.url, itemType: item.itemType });
     return item;
   }
 }

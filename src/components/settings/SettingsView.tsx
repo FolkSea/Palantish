@@ -5,6 +5,7 @@ import { AccountPanel, type Focus } from "./AccountPanel";
 import { SourcesPanel } from "./SourcesPanel";
 import { HiddenPanel, type HiddenPost } from "./HiddenPanel";
 import { ActorsPanel } from "./ActorsPanel";
+import { DroppedPanel, type DroppedItem } from "./DroppedPanel";
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
 import type { ActorRecord } from "@/lib/actor-catalogue";
 
@@ -18,13 +19,14 @@ export type SettingsSource = {
   active: boolean;
 };
 
-type Tab = "account" | "sources" | "actors" | "hidden";
+type Tab = "account" | "sources" | "actors" | "hidden" | "dropped";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "account", label: "Account", hint: "Display name and password" },
   { id: "sources", label: "Sources", hint: "Add, edit, or delete feeds" },
   { id: "actors", label: "Actors", hint: "Threat actor catalogue" },
   { id: "hidden", label: "Hidden posts", hint: "Unhide posts you hid" },
+  { id: "dropped", label: "Dropped", hint: "Review filtered-out candidates" },
 ];
 
 export function SettingsView({
@@ -34,6 +36,7 @@ export function SettingsView({
   sources,
   actors,
   hidden,
+  dropped,
 }: {
   email: string;
   displayName: string;
@@ -41,6 +44,7 @@ export function SettingsView({
   sources: SettingsSource[];
   actors: ActorRecord[];
   hidden: HiddenPost[];
+  dropped: DroppedItem[];
 }) {
   const [tab, setTab] = useState<Tab>("account");
 
@@ -82,8 +86,10 @@ export function SettingsView({
           <SourcesPanel initialSources={sources} />
         ) : tab === "actors" ? (
           <ActorsPanel initialActors={actors} />
-        ) : (
+        ) : tab === "hidden" ? (
           <HiddenPanel initialHidden={hidden} />
+        ) : (
+          <DroppedPanel initial={dropped} />
         )}
       </div>
     </div>
