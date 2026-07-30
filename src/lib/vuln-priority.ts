@@ -6,6 +6,8 @@ export type VulnStatus = "confirmed" | "suspected" | "poc";
 /** One CVE, aggregated across all of its reports, with a derived priority. */
 export type PrioritisedVuln = {
   cve_id: string;
+  raw_hash: string; // representative report, so the modal can open/attribute it
+  adversary: string | null;
   target: string | null;
   detail: string | null;
   url: string | null;
@@ -76,7 +78,7 @@ export function prioritiseVulns(rows: VulnerabilityRow[]): PrioritisedVuln[] {
 
   const result: PrioritisedVuln[] = [];
   for (const group of groups.values()) {
-    const present = new Set(group.map((g) => g.status));
+    const present = new Set(group.map((g) => g.exploit_status));
     const hasPoc = present.has("poc");
     const hasConfirmed = present.has("confirmed");
 
@@ -88,7 +90,9 @@ export function prioritiseVulns(rows: VulnerabilityRow[]): PrioritisedVuln[] {
 
     // Representative display fields come from the most recent report, falling
     // back to any non-null value elsewhere in the group.
-    const byRecent = [...group].sort((a, b) => cmpDateDesc(a.added_at, b.added_at));
+    const byRecent = [...group].sort((a, b) =>
+      cmpDateDesc(a.published_at, b.published_at),
+    );
     const rep = byRecent[0];
     const statuses = (["poc", "confirmed", "suspected"] as VulnStatus[]).filter(
       (s) => present.has(s),
@@ -101,12 +105,14 @@ export function prioritiseVulns(rows: VulnerabilityRow[]): PrioritisedVuln[] {
     );
 
     result.push({
-      cve_id: rep.cve_id,
+      cve_id: rep.cve_id ?? "",
+      raw_hash: rep.raw_hash,
+      adversary: rep.adversary_label ?? firstNonNull(byRecent, (r) => r.adversary_label),
       target: rep.target ?? firstNonNull(byRecent, (r) => r.target),
-      detail: rep.detail ?? firstNonNull(byRecent, (r) => r.detail),
+      detail: rep.description ?? firstNonNull(byRecent, (r) => r.description),
       url: rep.url ?? firstNonNull(byRecent, (r) => r.url),
       source_name: rep.source_name ?? firstNonNull(byRecent, (r) => r.source_name),
-      added_at: rep.added_at,
+      added_at: rep.published_at,
       created_at: latestCreated,
       statuses,
       reportCount: group.length,

@@ -8,6 +8,7 @@ import { selectSearchProvider } from "./search";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import {
   computeAdversaryLabel,
+  hasHacktivismKeyword,
   sortGroups,
   GROUP_TABLE,
 } from "./enrich/rules";
@@ -23,16 +24,33 @@ import type { EnrichedItem } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 
 type IntelInsert = Database["public"]["Tables"]["intel_items"]["Insert"];
-type VulnInsert = Database["public"]["Tables"]["vulnerabilities"]["Insert"];
-type BreachInsert = Database["public"]["Tables"]["breaches"]["Insert"];
 
 const CVE_RE = /\bCVE-\d{4}-\d{3,7}\b/i;
 
-/** Map an enriched item to its DB target. Pure, exported for testability. */
-export function routeEnriched(item: EnrichedItem): "intel" | "vuln" | "breach" {
-  if (item.itemType === "vuln") return "vuln";
+/** Report kind: which dashboard section an item belongs to. */
+export type ReportKind = "research" | "breach" | "exploit" | "other";
+
+/**
+ * Classify an enriched item into its `kind`. Exploits need a CVE id; breaches
+ * come from the classifier; anything attributed to (or reading as) a threat
+ * actor is research; the rest is other reporting. Pure, exported for testing.
+ */
+export function kindFor(
+  item: EnrichedItem,
+  attributed: boolean,
+  hasCve: boolean,
+): ReportKind {
+  if (item.itemType === "vuln" && hasCve) return "exploit";
   if (item.itemType === "breach") return "breach";
-  return "intel";
+  const text = `${item.title} ${item.description ?? ""}`;
+  if (
+    attributed ||
+    item.crowdstrikeAdversary ||
+    item.itemType === "actor_activity" ||
+    hasHacktivismKeyword(text)
+  )
+    return "research";
+  return "other";
 }
 
 async function mapWithConcurrency<T, R>(
@@ -126,19 +144,14 @@ export async function runIngest(
       .map((s) => ({ name: s.name, feed_url: s.feed_url, category: s.category }));
     ilog(`pulling ${feedSources.length} active feeds...`);
 
-    // Existing dedup hashes across all target tables ------------------------
-    const [intelHashes, vulnHashes, breachHashes, deletedHashes] =
-      await Promise.all([
-        db.from("intel_items").select("raw_hash"),
-        db.from("vulnerabilities").select("raw_hash"),
-        db.from("breaches").select("raw_hash"),
-        // Blocklist: items an operator permanently deleted must not return.
-        db.from("deleted_items").select("raw_hash"),
-      ]);
+    // Existing dedup hashes (all reports live in intel_items now) ------------
+    const [intelHashes, deletedHashes] = await Promise.all([
+      db.from("intel_items").select("raw_hash"),
+      // Blocklist: items an operator permanently deleted must not return.
+      db.from("deleted_items").select("raw_hash"),
+    ]);
     const existing = new Set<string>([
       ...(intelHashes.data ?? []).map((r) => r.raw_hash),
-      ...(vulnHashes.data ?? []).map((r) => r.raw_hash),
-      ...(breachHashes.data ?? []).map((r) => r.raw_hash),
       ...(deletedHashes.data ?? []).map((r) => r.raw_hash),
     ]);
 
@@ -200,87 +213,63 @@ export async function runIngest(
         `LLM kept ${tally.llmKeep}, LLM dropped ${tally.llmDrop}`,
     );
 
-    // Partition + insert -----------------------------------------------------
+    // Build rows -------------------------------------------------------------
+    // Every report is an intel_items row, discriminated by `kind`.
     const intelRows: IntelInsert[] = [];
-    const vulnRows: VulnInsert[] = [];
-    const breachRows: BreachInsert[] = [];
 
     for (const item of enriched) {
       const publishedDate = item.publishedAt.toISOString().slice(0, 10);
       const sourceId = sourceIdByName.get(item.sourceName) ?? null;
-      let route = routeEnriched(item);
 
-      // A "vuln" without a CVE id is really a report.
-      const cveMatch = `${item.title} ${item.description ?? ""}`.match(CVE_RE);
-      if (route === "vuln" && !cveMatch) route = "intel";
-
-      if (route === "vuln") {
-        vulnRows.push({
-          cve_id: cveMatch![0].toUpperCase(),
-          target: item.title.slice(0, 200),
-          status: item.confidence ?? "suspected",
-          detail: item.description,
-          url: item.url,
-          source_name: item.sourceName,
-          source_id: sourceId,
-          raw_hash: item.rawHash,
-          added_at: publishedDate,
-        });
-      } else if (route === "breach") {
-        breachRows.push({
-          org_name: item.title.slice(0, 200),
-          event_date_label: publishedDate,
-          event_date: publishedDate,
-          summary: item.description,
-          source_name: item.sourceName,
-          source_id: sourceId,
-          url: item.url,
-          raw_hash: item.rawHash,
-        });
-      } else {
-        // Attribute the item: prefer the matched adversary's own classification,
-        // otherwise derive it from the enriched nexus.
-        const adv = item.crowdstrikeAdversary
-          ? advByName.get(item.crowdstrikeAdversary.toLowerCase())
-          : undefined;
-        let motivation: string | null = null;
-        let country: string | null = null;
-        if (adv?.motivation) {
-          motivation = adv.motivation;
-          country = adv.country;
-        } else if (item.nexus && item.nexus !== "other") {
-          motivation = "nation_state";
-          country = NEXUS_COUNTRY[item.nexus] ?? null;
-        }
-        intelRows.push({
-          motivation,
-          country,
-          title: item.title,
-          description: item.description,
-          url: item.url,
-          published_at: publishedDate,
-          // Reports carry an attribution confidence, defaulting to Medium.
-          confidence: "medium",
-          crowdstrike_adversary: item.crowdstrikeAdversary,
-          // Store the derived adversary label so it can be edited later.
-          adversary_label: computeAdversaryLabel(
-            item.crowdstrikeAdversary,
-            item.nexus,
-            item.title,
-            item.description,
-            labelGroups,
-          ),
-          source_name: item.sourceName,
-          source_id: sourceId,
-          item_type: item.itemType,
-          raw_hash: item.rawHash,
-        });
+      // Attribute: prefer the matched adversary's classification, else the nexus.
+      const adv = item.crowdstrikeAdversary
+        ? advByName.get(item.crowdstrikeAdversary.toLowerCase())
+        : undefined;
+      let motivation: string | null = null;
+      let country: string | null = null;
+      if (adv?.motivation) {
+        motivation = adv.motivation;
+        country = adv.country;
+      } else if (item.nexus && item.nexus !== "other") {
+        motivation = "nation_state";
+        country = NEXUS_COUNTRY[item.nexus] ?? null;
       }
+
+      const cveMatch = `${item.title} ${item.description ?? ""}`.match(CVE_RE);
+      const kind = kindFor(item, motivation !== null, !!cveMatch);
+      const isExploit = kind === "exploit";
+
+      intelRows.push({
+        kind,
+        motivation,
+        country,
+        title: isExploit ? cveMatch![0].toUpperCase() : item.title,
+        description: item.description,
+        url: item.url,
+        published_at: publishedDate,
+        // Reports carry an attribution confidence (Medium default); exploits use
+        // exploit_status (poc/confirmed/suspected) instead.
+        confidence: isExploit ? null : "medium",
+        crowdstrike_adversary: item.crowdstrikeAdversary,
+        // Store the derived adversary label so it can be edited later.
+        adversary_label: computeAdversaryLabel(
+          item.crowdstrikeAdversary,
+          item.nexus,
+          item.title,
+          item.description,
+          labelGroups,
+        ),
+        cve_id: isExploit ? cveMatch![0].toUpperCase() : null,
+        target: isExploit ? item.title.slice(0, 200) : null,
+        exploit_status: isExploit ? item.confidence ?? "suspected" : null,
+        source_name: item.sourceName,
+        source_id: sourceId,
+        item_type: item.itemType,
+        raw_hash: item.rawHash,
+      });
     }
 
-    ilog(
-      `inserting: ${intelRows.length} intel, ${vulnRows.length} vuln, ${breachRows.length} breach`,
-    );
+    ilog(`inserting: ${intelRows.length} reports`);
     let added = 0;
     // Newly-inserted reports, for IOC extraction below.
     let insertedIntel: {
@@ -299,22 +288,6 @@ export async function runIngest(
         insertedIntel = data ?? [];
         added += insertedIntel.length;
       }
-    }
-    if (vulnRows.length > 0) {
-      const { data, error } = await db
-        .from("vulnerabilities")
-        .upsert(vulnRows, { onConflict: "raw_hash", ignoreDuplicates: true })
-        .select("id");
-      if (error) errors.push(`vulnerabilities insert: ${error.message}`);
-      else added += data?.length ?? 0;
-    }
-    if (breachRows.length > 0) {
-      const { data, error } = await db
-        .from("breaches")
-        .upsert(breachRows, { onConflict: "raw_hash", ignoreDuplicates: true })
-        .select("id");
-      if (error) errors.push(`breaches insert: ${error.message}`);
-      else added += data?.length ?? 0;
     }
 
     ilog(`inserted ${added} new items`);

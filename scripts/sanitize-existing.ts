@@ -12,9 +12,9 @@ async function main() {
   const { computeHash } = await import("@/lib/ingest/dedup");
 
   const db = createAdminClient();
-  const changed = { intel_items: 0, breaches: 0, vulnerabilities: 0, summaries: 0 };
+  const changed = { intel_items: 0, summaries: 0 };
 
-  // intel_items: title + description; raw_hash from sanitized title + url.
+  // intel_items (all reports): title + description; raw_hash from title + url.
   const { data: intel } = await db
     .from("intel_items")
     .select("id, title, description, url, raw_hash");
@@ -30,42 +30,6 @@ async function main() {
       .eq("id", r.id);
     if (!error) changed.intel_items++;
     else console.error("intel_items", r.id, error.message);
-  }
-
-  // breaches: org_name + summary; raw_hash from sanitized org_name + url.
-  const { data: breaches } = await db
-    .from("breaches")
-    .select("id, org_name, summary, url, raw_hash");
-  for (const r of breaches ?? []) {
-    const org_name = toAscii(r.org_name);
-    const summary = r.summary ? toAscii(r.summary) : r.summary;
-    const raw_hash = computeHash(org_name, r.url ?? "");
-    if (org_name === r.org_name && summary === r.summary && raw_hash === r.raw_hash)
-      continue;
-    const { error } = await db
-      .from("breaches")
-      .update({ org_name, summary, raw_hash })
-      .eq("id", r.id);
-    if (!error) changed.breaches++;
-    else console.error("breaches", r.id, error.message);
-  }
-
-  // vulnerabilities: target + detail; raw_hash from sanitized target + url.
-  const { data: vulns } = await db
-    .from("vulnerabilities")
-    .select("id, target, detail, url, raw_hash");
-  for (const r of vulns ?? []) {
-    const target = r.target ? toAscii(r.target) : r.target;
-    const detail = r.detail ? toAscii(r.detail) : r.detail;
-    const raw_hash = computeHash(target ?? "", r.url ?? "");
-    if (target === r.target && detail === r.detail && raw_hash === r.raw_hash)
-      continue;
-    const { error } = await db
-      .from("vulnerabilities")
-      .update({ target, detail, raw_hash })
-      .eq("id", r.id);
-    if (!error) changed.vulnerabilities++;
-    else console.error("vulnerabilities", r.id, error.message);
   }
 
   // executive_summaries: preserve paragraph breaks.

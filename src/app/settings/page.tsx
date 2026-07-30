@@ -52,43 +52,18 @@ export default async function SettingsPage() {
     }
   >();
   if (hashes.length) {
-    const [intelRows, breachRows, vulnRows] = await Promise.all([
-      supabase
-        .from("intel_items")
-        .select("raw_hash, title, url, source_name, published_at")
-        .in("raw_hash", hashes),
-      supabase
-        .from("breaches")
-        .select("raw_hash, org_name, url, source_name, event_date")
-        .in("raw_hash", hashes),
-      supabase
-        .from("vulnerabilities")
-        .select("raw_hash, cve_id, url, source_name, added_at")
-        .in("raw_hash", hashes),
-    ]);
-    for (const r of intelRows.data ?? [])
+    // All reports live in intel_items now.
+    const { data: intelRows } = await supabase
+      .from("intel_items")
+      .select("raw_hash, title, url, source_name, published_at")
+      .in("raw_hash", hashes);
+    for (const r of intelRows ?? [])
       byHash.set(r.raw_hash, {
         title: r.title,
         url: r.url,
         sourceName: r.source_name,
         publishedAt: r.published_at,
       });
-    for (const r of breachRows.data ?? [])
-      if (!byHash.has(r.raw_hash))
-        byHash.set(r.raw_hash, {
-          title: r.org_name,
-          url: r.url,
-          sourceName: r.source_name,
-          publishedAt: r.event_date,
-        });
-    for (const r of vulnRows.data ?? [])
-      if (!byHash.has(r.raw_hash))
-        byHash.set(r.raw_hash, {
-          title: r.cve_id,
-          url: r.url,
-          sourceName: r.source_name,
-          publishedAt: r.added_at,
-        });
   }
   const hidden: HiddenPost[] = (hiddenRows ?? []).map((h) => {
     const it = byHash.get(h.raw_hash);

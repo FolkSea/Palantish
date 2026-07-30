@@ -56,6 +56,10 @@ export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
                           description: v.detail,
                           sourceName: v.source_name,
                           date: v.added_at,
+                          // Editable in the modal; attributing moves it to research.
+                          adversary: v.adversary,
+                          confidence: "medium",
+                          rawHash: v.raw_hash,
                         }}
                       />
                     </td>
@@ -114,12 +118,12 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
                     <td className="py-2 pr-3">
                       <ReportTitle
                         report={{
-                          title: b.org_name,
+                          title: b.title,
                           url: b.url,
-                          description: b.summary,
+                          description: b.description,
                           sourceName: b.source_name,
-                          date: b.event_date,
-                          // Editable in the modal; attributing moves it to reports.
+                          date: b.published_at,
+                          // Editable in the modal; attributing moves it to research.
                           adversary: b.crowdstrike_adversary ?? b.adversary_label,
                           confidence: "medium",
                           rawHash: b.raw_hash,
@@ -127,10 +131,10 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
                       />
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap text-slate-500">
-                      {b.event_date_label ?? formatDate(b.event_date)}
+                      {b.date_label ?? formatDate(b.published_at)}
                     </td>
                     <td className="py-2 text-slate-600">
-                      {b.summary}{" "}
+                      {b.description}{" "}
                       <span className="ml-1 inline-block align-middle">
                         {b.url ? (
                           <a

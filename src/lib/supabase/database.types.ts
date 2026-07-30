@@ -112,62 +112,6 @@ export type Database = {
         }
         Relationships: []
       }
-      breaches: {
-        Row: {
-          adversary_label: string | null
-          created_at: string
-          crowdstrike_adversary: string | null
-          event_date: string | null
-          event_date_label: string | null
-          id: string
-          org_name: string
-          raw_hash: string
-          source_id: string | null
-          source_name: string | null
-          summary: string | null
-          updated_at: string
-          url: string | null
-        }
-        Insert: {
-          adversary_label?: string | null
-          created_at?: string
-          crowdstrike_adversary?: string | null
-          event_date?: string | null
-          event_date_label?: string | null
-          id?: string
-          org_name: string
-          raw_hash: string
-          source_id?: string | null
-          source_name?: string | null
-          summary?: string | null
-          updated_at?: string
-          url?: string | null
-        }
-        Update: {
-          adversary_label?: string | null
-          created_at?: string
-          crowdstrike_adversary?: string | null
-          event_date?: string | null
-          event_date_label?: string | null
-          id?: string
-          org_name?: string
-          raw_hash?: string
-          source_id?: string | null
-          source_name?: string | null
-          summary?: string | null
-          updated_at?: string
-          url?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "breaches_source_id_fkey"
-            columns: ["source_id"]
-            isOneToOne: false
-            referencedRelation: "sources"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       deleted_items: {
         Row: {
           deleted_at: string
@@ -268,13 +212,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "intel_item_iocs_intel_item_id_fkey"
-            columns: ["intel_item_id"]
-            isOneToOne: false
-            referencedRelation: "timeline_events"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "intel_item_iocs_ioc_id_fkey"
             columns: ["ioc_id"]
             isOneToOne: false
@@ -290,14 +227,19 @@ export type Database = {
           country: string | null
           created_at: string
           crowdstrike_adversary: string | null
+          cve_id: string | null
+          date_label: string | null
           description: string | null
+          exploit_status: string | null
           id: string
-          item_type: Database["public"]["Enums"]["item_type"]
+          item_type: Database["public"]["Enums"]["item_type"] | null
+          kind: string
           motivation: string | null
           published_at: string
           raw_hash: string
           source_id: string | null
           source_name: string | null
+          target: string | null
           title: string
           updated_at: string
           url: string | null
@@ -308,14 +250,19 @@ export type Database = {
           country?: string | null
           created_at?: string
           crowdstrike_adversary?: string | null
+          cve_id?: string | null
+          date_label?: string | null
           description?: string | null
+          exploit_status?: string | null
           id?: string
-          item_type: Database["public"]["Enums"]["item_type"]
+          item_type?: Database["public"]["Enums"]["item_type"] | null
+          kind?: string
           motivation?: string | null
           published_at: string
           raw_hash: string
           source_id?: string | null
           source_name?: string | null
+          target?: string | null
           title: string
           updated_at?: string
           url?: string | null
@@ -326,14 +273,19 @@ export type Database = {
           country?: string | null
           created_at?: string
           crowdstrike_adversary?: string | null
+          cve_id?: string | null
+          date_label?: string | null
           description?: string | null
+          exploit_status?: string | null
           id?: string
-          item_type?: Database["public"]["Enums"]["item_type"]
+          item_type?: Database["public"]["Enums"]["item_type"] | null
+          kind?: string
           motivation?: string | null
           published_at?: string
           raw_hash?: string
           source_id?: string | null
           source_name?: string | null
+          target?: string | null
           title?: string
           updated_at?: string
           url?: string | null
@@ -450,91 +402,9 @@ export type Database = {
         }
         Relationships: []
       }
-      vulnerabilities: {
-        Row: {
-          added_at: string
-          created_at: string
-          cve_id: string
-          detail: string | null
-          id: string
-          raw_hash: string
-          source_id: string | null
-          source_name: string | null
-          status: Database["public"]["Enums"]["vuln_status"]
-          target: string | null
-          updated_at: string
-          url: string | null
-        }
-        Insert: {
-          added_at?: string
-          created_at?: string
-          cve_id: string
-          detail?: string | null
-          id?: string
-          raw_hash: string
-          source_id?: string | null
-          source_name?: string | null
-          status: Database["public"]["Enums"]["vuln_status"]
-          target?: string | null
-          updated_at?: string
-          url?: string | null
-        }
-        Update: {
-          added_at?: string
-          created_at?: string
-          cve_id?: string
-          detail?: string | null
-          id?: string
-          raw_hash?: string
-          source_id?: string | null
-          source_name?: string | null
-          status?: Database["public"]["Enums"]["vuln_status"]
-          target?: string | null
-          updated_at?: string
-          url?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "vulnerabilities_source_id_fkey"
-            columns: ["source_id"]
-            isOneToOne: false
-            referencedRelation: "sources"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
-      timeline_events: {
-        Row: {
-          country: string | null
-          description: string | null
-          id: string | null
-          published_at: string | null
-          source_name: string | null
-          title: string | null
-          url: string | null
-        }
-        Insert: {
-          country?: never
-          description?: string | null
-          id?: string | null
-          published_at?: string | null
-          source_name?: string | null
-          title?: string | null
-          url?: string | null
-        }
-        Update: {
-          country?: never
-          description?: string | null
-          id?: string | null
-          published_at?: string | null
-          source_name?: string | null
-          title?: string | null
-          url?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       is_allowed_user: { Args: never; Returns: boolean }

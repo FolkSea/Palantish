@@ -48,17 +48,14 @@ export async function updateFeedHealth(db: Db, health: FeedHealth[]): Promise<vo
 
 /**
  * Seed last_item_at from already-ingested content (max published date per
- * source across intel_items / breaches / vulnerabilities). Gives an accurate
- * lower bound even for feeds that currently fail to fetch.
+ * source across all reports). Gives an accurate lower bound even for feeds that
+ * currently fail to fetch.
  */
 export async function seedLastItemFromStored(db: Db): Promise<void> {
-  const [{ data: intel }, { data: breaches }, { data: vulns }, { data: sources }] =
-    await Promise.all([
-      db.from("intel_items").select("source_name, published_at"),
-      db.from("breaches").select("source_name, event_date"),
-      db.from("vulnerabilities").select("source_name, added_at"),
-      db.from("sources").select("name, last_item_at"),
-    ]);
+  const [{ data: intel }, { data: sources }] = await Promise.all([
+    db.from("intel_items").select("source_name, published_at"),
+    db.from("sources").select("name, last_item_at"),
+  ]);
 
   const maxByName = new Map<string, string>();
   const consider = (name: string | null, date: string | null) => {
@@ -67,8 +64,6 @@ export async function seedLastItemFromStored(db: Db): Promise<void> {
     if (!cur || date > cur) maxByName.set(name, date);
   };
   for (const r of intel ?? []) consider(r.source_name, r.published_at);
-  for (const r of breaches ?? []) consider(r.source_name, r.event_date);
-  for (const r of vulns ?? []) consider(r.source_name, r.added_at);
 
   await Promise.all(
     (sources ?? []).map(async (s) => {

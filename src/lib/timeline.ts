@@ -3,8 +3,6 @@ import type { GroupEntry } from "@/lib/ingest/enrich/rules";
 import { matchGroup, hasHacktivismKeyword } from "@/lib/ingest/enrich/rules";
 
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
-type BreachRow = Database["public"]["Tables"]["breaches"]["Row"];
-type VulnRow = Database["public"]["Tables"]["vulnerabilities"]["Row"];
 
 /** Marker type -> icon (chart point shape). */
 export type TimelineKind = "report" | "breach" | "exploit";
@@ -137,41 +135,71 @@ function intelEvent(
 }
 
 function breachEvent(
-  b: BreachRow,
+  i: IntelItemRow,
   category: TimelineCategory,
   actor: string,
 ): TimelineEvent {
   return {
-    id: b.id,
-    date: b.event_date as string,
+    id: i.id,
+    date: i.published_at as string,
     actor,
     category,
     kind: "breach",
-    title: b.org_name,
-    description: b.summary,
-    source: b.source_name,
-    url: b.url,
+    title: i.title,
+    description: i.description,
+    source: i.source_name,
+    url: i.url,
   };
 }
 
 /**
- * Assemble the unified timeline: one event per report / breach / exploit,
- * each attributed to an actor stream. Routing mirrors the actor cards -
- * motivation first, then text matching for unattributed reports - and collapses
- * anything unattributed onto the per-motivation UNID lane (BAT / SPIDER /
- * JACKAL). Exploits share a single "Exploits" lane.
+ * Assemble the unified timeline from a single intel_items feed, branching on
+ * each row's `kind`: research -> actor lanes (motivation first, then text
+ * matching, unattributed collapsing onto UNID BAT/SPIDER/JACKAL); breach ->
+ * its crew's lane or the neutral Breaches lane; exploit (PoC only) -> the
+ * Exploits lane. "other" rows are not passed in.
  */
 export function buildTimeline(
-  intel: IntelItemRow[],
-  breaches: BreachRow[],
-  vulns: VulnRow[],
+  items: IntelItemRow[],
   ecrimeGroups: GroupEntry[],
   hacktivismGroups: GroupEntry[],
 ): { events: TimelineEvent[]; streams: TimelineStream[] } {
   const events: TimelineEvent[] = [];
 
-  for (const i of intel) {
+  for (const i of items) {
     if (!i.published_at) continue;
+
+    if (i.kind === "exploit") {
+      // Timeline shows only exploits with a public proof-of-concept.
+      if (i.exploit_status !== "poc") continue;
+      events.push({
+        id: i.id,
+        date: i.published_at,
+        actor: EXPLOITS_STREAM,
+        category: "exploit",
+        kind: "exploit",
+        title: i.cve_id ?? i.title,
+        description: i.target ? `Target: ${i.target}` : i.description,
+        source: i.source_name,
+        url: i.url,
+      });
+      continue;
+    }
+
+    if (i.kind === "breach") {
+      const stored = namedActor(i.crowdstrike_adversary, i.adversary_label);
+      const text = `${i.title} ${i.description ?? ""}`.toLowerCase();
+      const h = matchGroup(text, hacktivismGroups)?.cs;
+      const crew = stored ?? matchGroup(text, ecrimeGroups)?.cs ?? null;
+      if (h) events.push(breachEvent(i, "hacktivism", stored ?? h));
+      // Only a breach that names an eCrime crew belongs on an eCrime lane.
+      else if (crew) events.push(breachEvent(i, "ecrime", crew));
+      // A breach with no threat-actor attribution is not eCrime; neutral lane.
+      else events.push(breachEvent(i, "breach", BREACHES_STREAM));
+      continue;
+    }
+
+    // research: route by motivation first, then text.
     const named = namedActor(i.crowdstrike_adversary, i.adversary_label);
     if (i.motivation === "nation_state") {
       events.push(intelEvent(i, "nation_state", named ?? UNID_NATION));
@@ -180,7 +208,6 @@ export function buildTimeline(
     } else if (i.motivation === "hacktivism") {
       events.push(intelEvent(i, "hacktivism", named ?? UNID_HACKTIVISM));
     } else {
-      // Unattributed motivation: route by text like buildActorSectionCards.
       const text = `${i.title} ${i.description ?? ""}`;
       const h = matchGroup(text.toLowerCase(), hacktivismGroups)?.cs;
       if (h) events.push(intelEvent(i, "hacktivism", h));
@@ -192,41 +219,6 @@ export function buildTimeline(
         // Otherwise unclassifiable - dropped, as on the cards.
       }
     }
-  }
-
-  for (const b of breaches) {
-    if (!b.event_date) continue;
-    const stored = namedActor(b.crowdstrike_adversary, b.adversary_label);
-    const text = `${b.org_name} ${b.summary ?? ""}`.toLowerCase();
-    const h = matchGroup(text, hacktivismGroups)?.cs;
-    const crew = stored ?? matchGroup(text, ecrimeGroups)?.cs ?? null;
-    if (h) {
-      events.push(breachEvent(b, "hacktivism", stored ?? h));
-    } else if (crew) {
-      // Only a breach that names an eCrime crew belongs on an eCrime lane.
-      events.push(breachEvent(b, "ecrime", crew));
-    } else {
-      // A breach with no threat-actor attribution is not eCrime; it gets its
-      // own neutral Breaches lane.
-      events.push(breachEvent(b, "breach", BREACHES_STREAM));
-    }
-  }
-
-  for (const v of vulns) {
-    if (!v.added_at) continue;
-    // Timeline shows only exploits with a public proof-of-concept.
-    if (v.status !== "poc") continue;
-    events.push({
-      id: v.id,
-      date: v.added_at,
-      actor: EXPLOITS_STREAM,
-      category: "exploit",
-      kind: "exploit",
-      title: v.cve_id,
-      description: v.target ? `Target: ${v.target}` : v.detail,
-      source: null,
-      url: v.url,
-    });
   }
 
   return { events, streams: buildStreams(events) };

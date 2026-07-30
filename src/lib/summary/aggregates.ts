@@ -49,26 +49,18 @@ export async function computeAggregates(db: Db): Promise<Aggregates> {
   const cut7 = isoDaysAgo(7);
   const cut1 = isoDaysAgo(1);
 
-  const [{ data: intel }, { data: vulns }, { data: breaches }] =
-    await Promise.all([
-      db
-        .from("intel_items")
-        .select(
-          "title, item_type, motivation, country, crowdstrike_adversary, published_at, url, description, source_name, raw_hash",
-        )
-        .gte("published_at", cut7)
-        .order("published_at", { ascending: false }),
-      db
-        .from("vulnerabilities")
-        .select("status, added_at, cve_id, target, detail, url, source_name, raw_hash")
-        .gte("added_at", cut7)
-        .order("added_at", { ascending: false }),
-      db
-        .from("breaches")
-        .select("event_date, org_name, summary, url, source_name, raw_hash")
-        .gte("event_date", cut7)
-        .order("event_date", { ascending: false }),
-    ]);
+  // Every report lives in intel_items now; partition by kind.
+  const { data: allRows } = await db
+    .from("intel_items")
+    .select(
+      "kind, title, item_type, motivation, country, crowdstrike_adversary, published_at, url, description, source_name, raw_hash, cve_id, target, exploit_status",
+    )
+    .gte("published_at", cut7)
+    .order("published_at", { ascending: false });
+  const rows = allRows ?? [];
+  const intel = rows.filter((r) => r.kind === "research");
+  const vulns = rows.filter((r) => r.kind === "exploit");
+  const breaches = rows.filter((r) => r.kind === "breach");
 
   const emptyWindow = (): WindowCounts => ({
     nationState: 0,
@@ -93,18 +85,19 @@ export async function computeAggregates(db: Db): Promise<Aggregates> {
     }
   }
 
-  for (const v of vulns ?? []) {
+  for (const v of vulns) {
     w7.vulns++;
-    if ((v.added_at ?? "") >= cut1) w24.vulns++;
+    if ((v.published_at ?? "") >= cut1) w24.vulns++;
   }
-  for (const b of breaches ?? []) {
+  for (const b of breaches) {
     w7.ecrime++;
-    if ((b.event_date ?? "") >= cut1) w24.ecrime++;
+    if ((b.published_at ?? "") >= cut1) w24.ecrime++;
   }
 
   const vuln7d = { confirmed: 0, poc: 0, suspected: 0 };
-  for (const v of vulns ?? []) {
-    if (v.status in vuln7d) vuln7d[v.status as keyof typeof vuln7d]++;
+  for (const v of vulns) {
+    const s = v.exploit_status ?? "";
+    if (s in vuln7d) vuln7d[s as keyof typeof vuln7d]++;
   }
 
   const notable: NotableItem[] = (intel ?? []).slice(0, 12).map((i) => {
@@ -113,7 +106,7 @@ export async function computeAggregates(db: Db): Promise<Aggregates> {
       actor:
         i.country ??
         (i.motivation === "nation_state" ? "Non Attributed" : "Unattributed"),
-      type: i.item_type,
+      type: i.kind ?? "research",
       date: i.published_at ?? "",
       cs: i.crowdstrike_adversary,
     };
@@ -136,30 +129,31 @@ export async function computeAggregates(db: Db): Promise<Aggregates> {
     });
   }
   const seenCve = new Set<string>();
-  for (const v of vulns ?? []) {
-    if (seenCve.has(v.cve_id)) continue;
-    seenCve.add(v.cve_id);
+  for (const v of vulns) {
+    const cve = v.cve_id ?? v.title;
+    if (seenCve.has(cve)) continue;
+    seenCve.add(cve);
     if (linkables.filter((l) => l.kind === "vuln").length >= 10) break;
     linkables.push({
       id: id++,
       kind: "vuln",
-      title: v.target ? `${v.cve_id} - ${v.target}` : v.cve_id,
+      title: v.target ? `${cve} - ${v.target}` : cve,
       url: v.url,
-      description: v.detail,
+      description: v.description,
       sourceName: v.source_name,
-      date: v.added_at,
+      date: v.published_at,
       rawHash: v.raw_hash,
     });
   }
-  for (const b of (breaches ?? []).slice(0, 8)) {
+  for (const b of breaches.slice(0, 8)) {
     linkables.push({
       id: id++,
       kind: "breach",
-      title: b.org_name,
+      title: b.title,
       url: b.url,
-      description: b.summary,
+      description: b.description,
       sourceName: b.source_name,
-      date: b.event_date,
+      date: b.published_at,
       rawHash: b.raw_hash,
     });
   }

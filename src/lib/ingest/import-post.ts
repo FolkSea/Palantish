@@ -12,18 +12,17 @@ import { toAscii } from "@/lib/text";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import { computeHash } from "./dedup";
 import { computeAdversaryLabel, sortGroups, GROUP_TABLE } from "./enrich/rules";
+import { kindFor, type ReportKind } from "./pipeline";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
 import type { EnrichedItem, RawCandidate } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 
 type IntelInsert = Database["public"]["Tables"]["intel_items"]["Insert"];
-type VulnInsert = Database["public"]["Tables"]["vulnerabilities"]["Insert"];
-type BreachInsert = Database["public"]["Tables"]["breaches"]["Insert"];
 
 const CVE_RE = /\bCVE-\d{4}-\d{3,7}\b/i;
 
 // Fields needed to open the imported item in the report modal. Shape matches
-// the client ReportModalData; only populated for reports (intel route).
+// the client ReportModalData. Every import is a report now, so always set.
 export type ImportedReport = {
   title: string;
   url: string | null;
@@ -39,11 +38,11 @@ export type ImportResult =
   | {
       ok: true;
       title: string;
-      route: "intel" | "vuln" | "breach";
+      route: ReportKind;
       itemType: string;
       sourceName: string;
       sourceCreated: boolean;
-      report?: ImportedReport;
+      report: ImportedReport;
     }
   | { ok: false; error: string; recoverable?: boolean };
 
@@ -115,15 +114,13 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     sourceCreated = true;
   }
 
-  // Dedup across all three target tables.
+  // Dedup: all reports live in intel_items now.
   const rawHash = computeHash(article.title, article.finalUrl);
-  const [iDup, vDup, bDup, delDup] = await Promise.all([
+  const [iDup, delDup] = await Promise.all([
     db.from("intel_items").select("id", { count: "exact", head: true }).eq("raw_hash", rawHash),
-    db.from("vulnerabilities").select("id", { count: "exact", head: true }).eq("raw_hash", rawHash),
-    db.from("breaches").select("id", { count: "exact", head: true }).eq("raw_hash", rawHash),
     db.from("deleted_items").select("raw_hash", { count: "exact", head: true }).eq("raw_hash", rawHash),
   ]);
-  if ((iDup.count ?? 0) + (vDup.count ?? 0) + (bDup.count ?? 0) > 0) {
+  if ((iDup.count ?? 0) > 0) {
     return { ok: false, error: "That post has already been imported." };
   }
   if ((delDup.count ?? 0) > 0) {
@@ -158,107 +155,78 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     rawHash,
   };
 
-  // Route (mirrors the pipeline): a "vuln" without a CVE id is really a report.
   const publishedDate = enriched.publishedAt.toISOString().slice(0, 10);
   const cveMatch = `${enriched.title} ${enriched.description ?? ""}`.match(CVE_RE);
-  let route: "intel" | "vuln" | "breach" =
-    enriched.itemType === "vuln" ? "vuln" : enriched.itemType === "breach" ? "breach" : "intel";
-  if (route === "vuln" && !cveMatch) route = "intel";
 
-  if (route === "vuln") {
-    const row: VulnInsert = {
-      cve_id: cveMatch![0].toUpperCase(),
-      target: enriched.title.slice(0, 200),
-      status: enriched.confidence ?? "suspected",
-      detail: enriched.description,
-      url: enriched.url,
-      source_name: source.name,
-      source_id: source.id,
-      raw_hash: rawHash,
-      added_at: publishedDate,
-    };
-    const { error } = await db
-      .from("vulnerabilities")
-      .upsert(row, { onConflict: "raw_hash", ignoreDuplicates: true });
-    if (error) return { ok: false, error: `Insert failed: ${error.message}` };
-  } else if (route === "breach") {
-    const row: BreachInsert = {
-      org_name: enriched.title.slice(0, 200),
-      event_date_label: publishedDate,
-      event_date: publishedDate,
-      summary: enriched.description,
-      source_name: source.name,
-      source_id: source.id,
-      url: enriched.url,
-      raw_hash: rawHash,
-    };
-    const { error } = await db
-      .from("breaches")
-      .upsert(row, { onConflict: "raw_hash", ignoreDuplicates: true });
-    if (error) return { ok: false, error: `Insert failed: ${error.message}` };
+  // Attribute: prefer the matched adversary's classification, else the nexus.
+  const adv = enriched.crowdstrikeAdversary
+    ? (adversaries ?? []).find(
+        (a) =>
+          (a.name ?? "").toLowerCase() ===
+          enriched.crowdstrikeAdversary!.toLowerCase(),
+      )
+    : undefined;
+  let motivation: string | null = null;
+  let country: string | null = null;
+  if (adv?.motivation?.[0]) {
+    motivation = adv.motivation[0];
+    country = adv.country ?? null;
+  } else if (enriched.nexus && enriched.nexus !== "other") {
+    motivation = "nation_state";
+    country = NEXUS_COUNTRY[enriched.nexus] ?? null;
   }
 
-  let report: ImportedReport | undefined;
-  if (route === "intel") {
-    // Attribute: prefer the matched adversary's classification, else the nexus.
-    const adv = enriched.crowdstrikeAdversary
-      ? (adversaries ?? []).find(
-          (a) =>
-            (a.name ?? "").toLowerCase() ===
-            enriched.crowdstrikeAdversary!.toLowerCase(),
-        )
-      : undefined;
-    let motivation: string | null = null;
-    let country: string | null = null;
-    if (adv?.motivation?.[0]) {
-      motivation = adv.motivation[0];
-      country = adv.country ?? null;
-    } else if (enriched.nexus && enriched.nexus !== "other") {
-      motivation = "nation_state";
-      country = NEXUS_COUNTRY[enriched.nexus] ?? null;
-    }
-    const adversaryLabel = computeAdversaryLabel(
-      enriched.crowdstrikeAdversary,
-      enriched.nexus,
-      enriched.title,
-      enriched.description,
-      sortGroups(GROUP_TABLE),
-    );
-    const row: IntelInsert = {
-      motivation,
-      country,
-      title: enriched.title,
-      description: enriched.description,
-      url: enriched.url,
-      published_at: publishedDate,
-      confidence: "medium",
-      crowdstrike_adversary: enriched.crowdstrikeAdversary,
-      adversary_label: adversaryLabel,
-      source_name: source.name,
-      source_id: source.id,
-      item_type: enriched.itemType,
-      raw_hash: rawHash,
-    };
-    const { error } = await db
-      .from("intel_items")
-      .upsert(row, { onConflict: "raw_hash", ignoreDuplicates: true });
-    if (error) return { ok: false, error: `Insert failed: ${error.message}` };
-    report = {
-      title: enriched.title,
-      url: enriched.url,
-      description: enriched.description,
-      sourceName: source.name,
-      date: publishedDate,
-      adversary: adversaryLabel,
-      confidence: "medium",
-      rawHash,
-    };
-  }
+  const kind = kindFor(enriched, motivation !== null, !!cveMatch);
+  const isExploit = kind === "exploit";
+  const adversaryLabel = computeAdversaryLabel(
+    enriched.crowdstrikeAdversary,
+    enriched.nexus,
+    enriched.title,
+    enriched.description,
+    sortGroups(GROUP_TABLE),
+  );
+  const title = isExploit ? cveMatch![0].toUpperCase() : enriched.title;
+  const confidence = isExploit ? null : "medium";
+
+  const row: IntelInsert = {
+    kind,
+    motivation,
+    country,
+    title,
+    description: enriched.description,
+    url: enriched.url,
+    published_at: publishedDate,
+    confidence,
+    crowdstrike_adversary: enriched.crowdstrikeAdversary,
+    adversary_label: adversaryLabel,
+    cve_id: isExploit ? cveMatch![0].toUpperCase() : null,
+    target: isExploit ? enriched.title.slice(0, 200) : null,
+    exploit_status: isExploit ? enriched.confidence ?? "suspected" : null,
+    source_name: source.name,
+    source_id: source.id,
+    item_type: enriched.itemType,
+    raw_hash: rawHash,
+  };
+  const { error } = await db
+    .from("intel_items")
+    .upsert(row, { onConflict: "raw_hash", ignoreDuplicates: true });
+  if (error) return { ok: false, error: `Insert failed: ${error.message}` };
+
+  const report: ImportedReport = {
+    title,
+    url: enriched.url,
+    description: enriched.description,
+    sourceName: source.name,
+    date: publishedDate,
+    adversary: adversaryLabel,
+    confidence,
+    rawHash,
+  };
 
   return {
     ok: true,
     title: enriched.title,
-    route,
+    route: kind,
     itemType: enriched.itemType,
     sourceName: source.name,
     sourceCreated,

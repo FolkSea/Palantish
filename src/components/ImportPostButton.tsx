@@ -41,14 +41,9 @@ export function ImportPostButton() {
     setUrlInput("");
     setPasteTitle("");
     setPasteBody("");
-    if (res.report) {
-      // Open the imported report in the modal; the dashboard is refreshed when
-      // the modal is closed (see the ReportModal onClose below).
-      setImported(res.report);
-    } else {
-      // Vulnerabilities / breaches have no report modal - refresh immediately.
-      router.refresh();
-    }
+    // Every import is a report now; open it in the modal (the dashboard is
+    // refreshed when the modal is closed - see the ReportModal onClose below).
+    setImported(res.report);
   }
 
   function openImport() {

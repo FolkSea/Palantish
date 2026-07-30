@@ -63,46 +63,18 @@ export async function deleteItemAction(
 
   const db = createAdminClient();
 
-  // The item lives in one of three tables (intel_items / breaches /
-  // vulnerabilities); capture url + a title for the audit record, then remove
-  // it wherever it is. raw_hash is unique across tables.
-  let url: string | null = null;
-  let title: string | null = null;
+  // Every report lives in intel_items now. Capture url + title for the audit
+  // record, then remove it.
   const intel = await db
     .from("intel_items")
     .select("url, title")
     .eq("raw_hash", rawHash)
     .maybeSingle();
-  if (intel.data) {
-    url = intel.data.url;
-    title = intel.data.title;
-  } else {
-    const breach = await db
-      .from("breaches")
-      .select("url, org_name")
-      .eq("raw_hash", rawHash)
-      .maybeSingle();
-    if (breach.data) {
-      url = breach.data.url;
-      title = breach.data.org_name;
-    } else {
-      const vuln = await db
-        .from("vulnerabilities")
-        .select("url, cve_id")
-        .eq("raw_hash", rawHash)
-        .maybeSingle();
-      if (vuln.data) {
-        url = vuln.data.url;
-        title = vuln.data.cve_id;
-      }
-    }
-  }
+  const url = intel.data?.url ?? null;
+  const title = intel.data?.title ?? null;
 
-  const del1 = await db.from("intel_items").delete().eq("raw_hash", rawHash);
-  const del2 = await db.from("breaches").delete().eq("raw_hash", rawHash);
-  const del3 = await db.from("vulnerabilities").delete().eq("raw_hash", rawHash);
-  const delErr = del1.error ?? del2.error ?? del3.error;
-  if (delErr) return { ok: false, error: delErr.message };
+  const del = await db.from("intel_items").delete().eq("raw_hash", rawHash);
+  if (del.error) return { ok: false, error: del.error.message };
 
   const { error: blockErr } = await db.from("deleted_items").upsert(
     { raw_hash: rawHash, url, title, deleted_by: user.id },
@@ -336,9 +308,9 @@ async function linkReportIocs(
 export async function getReportIndicatorsAction(
   rawHash: string,
 ): Promise<
-  // `kind` says whether the rawHash is an intel report or a breach - both are
-  // attributable, but IOCs/country/confidence only apply to intel reports.
-  | { ok: true; indicators: Indicators; kind: "intel" | "breach" | null }
+  // `kind` is "intel" when the rawHash resolves to a report (all reports are
+  // intel_items rows now, and every one is editable), null when it does not.
+  | { ok: true; indicators: Indicators; kind: "intel" | null }
   | { ok: false; error: string }
 > {
   const empty: Indicators = {
@@ -364,18 +336,7 @@ export async function getReportIndicatorsAction(
     .select("id")
     .eq("raw_hash", rawHash)
     .maybeSingle();
-  if (!item.data) {
-    const breach = await supabase
-      .from("breaches")
-      .select("id")
-      .eq("raw_hash", rawHash)
-      .maybeSingle();
-    return {
-      ok: true,
-      indicators: empty,
-      kind: breach.data ? "breach" : null,
-    };
-  }
+  if (!item.data) return { ok: true, indicators: empty, kind: null };
 
   const links = await supabase
     .from("intel_item_iocs")
@@ -465,10 +426,9 @@ export async function updateReportIocAction(
   const normalized = normalizeIndicatorValue(newValue, iocType);
 
   const db = createAdminClient();
-  // Editing an indicator on a breach reclassifies it into a report first.
-  const ensured = await ensureReportItem(db, rawHash);
-  if ("error" in ensured) return { ok: false, error: ensured.error };
-  const intelItemId = ensured.id;
+  const item = await resolveReport(db, rawHash);
+  if (!item) return { ok: false, error: "Report not found." };
+  const intelItemId = item.id;
 
   if (normalized !== oldValue) {
     const oldIoc = await db
@@ -566,53 +526,17 @@ export type UpdateAdversaryResult =
 
 type AdminDb = ReturnType<typeof createAdminClient>;
 
-/**
- * Resolve a rawHash to an intel_items report id. When it is currently a breach,
- * convert it into a report (carrying its fields + any stored attribution) and
- * delete the breach row - attributing a breach moves it into the reports table
- * so it can be edited exactly like any other report. `moved` reports whether a
- * conversion happened.
- */
-async function ensureReportItem(
+/** Resolve a rawHash to its intel_items row (id + current kind), or null. */
+async function resolveReport(
   db: AdminDb,
   rawHash: string,
-): Promise<{ id: string; moved: boolean } | { error: string }> {
-  const item = await db
+): Promise<{ id: string; kind: string | null } | null> {
+  const { data } = await db
     .from("intel_items")
-    .select("id")
+    .select("id, kind")
     .eq("raw_hash", rawHash)
     .maybeSingle();
-  if (item.data) return { id: item.data.id, moved: false };
-
-  const { data: b } = await db
-    .from("breaches")
-    .select("*")
-    .eq("raw_hash", rawHash)
-    .maybeSingle();
-  if (!b) return { error: "Report not found." };
-
-  const { data: inserted, error } = await db
-    .from("intel_items")
-    .insert({
-      raw_hash: b.raw_hash,
-      title: b.org_name,
-      description: b.summary,
-      url: b.url,
-      published_at: b.event_date ?? new Date().toISOString().slice(0, 10),
-      item_type: "report",
-      source_name: b.source_name,
-      source_id: b.source_id,
-      confidence: "medium",
-      adversary_label: b.adversary_label,
-      crowdstrike_adversary: b.crowdstrike_adversary,
-    })
-    .select("id")
-    .single();
-  if (error || !inserted) {
-    return { error: error?.message ?? "Could not move the breach to reports." };
-  }
-  await db.from("breaches").delete().eq("id", b.id);
-  return { id: inserted.id, moved: true };
+  return data ? { id: data.id, kind: data.kind } : null;
 }
 
 /**
@@ -676,33 +600,17 @@ export async function updateReportAdversaryAction(
     };
   }
 
-  // Clearing the attribution is an un-attribution, not a reclassification: leave
-  // a breach as a breach (just drop its stored label).
+  const item = await resolveReport(db, rawHash);
+  if (!item) return { ok: false, error: "Report not found." };
+
+  // Clearing the attribution is an un-attribution, not a reclassification: drop
+  // the stored label but leave the item's kind unchanged.
   if (!raw) {
-    const intel = await db
+    const { error } = await db
       .from("intel_items")
-      .select("id")
-      .eq("raw_hash", rawHash)
-      .maybeSingle();
-    if (intel.data) {
-      const { error } = await db
-        .from("intel_items")
-        .update({ adversary_label: null, crowdstrike_adversary: null })
-        .eq("id", intel.data.id);
-      if (error) return { ok: false, error: error.message };
-    } else {
-      const br = await db
-        .from("breaches")
-        .select("id")
-        .eq("raw_hash", rawHash)
-        .maybeSingle();
-      if (!br.data) return { ok: false, error: "Report not found." };
-      const { error } = await db
-        .from("breaches")
-        .update({ adversary_label: null, crowdstrike_adversary: null })
-        .eq("id", br.data.id);
-      if (error) return { ok: false, error: error.message };
-    }
+      .update({ adversary_label: null, crowdstrike_adversary: null })
+      .eq("id", item.id);
+    if (error) return { ok: false, error: error.message };
     revalidatePath("/");
     return {
       ok: true,
@@ -715,11 +623,8 @@ export async function updateReportAdversaryAction(
     };
   }
 
-  // Recognised attribution: ensure a report row (converting a breach), then set
-  // the actor + its country/motivation so it groups under the right card.
-  const ensured = await ensureReportItem(db, rawHash);
-  if ("error" in ensured) return { ok: false, error: ensured.error };
-
+  // Recognised attribution: set the actor + its country/motivation and flag the
+  // item as research so it groups under the right actor card.
   let label: string;
   let country: string | null;
   let update: {
@@ -727,6 +632,7 @@ export async function updateReportAdversaryAction(
     crowdstrike_adversary: string | null;
     country: string | null;
     motivation: string | null;
+    kind: string;
   };
   if (matched) {
     label = matched.name;
@@ -736,6 +642,7 @@ export async function updateReportAdversaryAction(
       crowdstrike_adversary: matched.name,
       country: matched.country,
       motivation: matched.motivation?.[0] ?? null,
+      kind: "research",
     };
   } else {
     label = raw.toUpperCase();
@@ -745,13 +652,14 @@ export async function updateReportAdversaryAction(
       crowdstrike_adversary: null,
       country: family!.country,
       motivation: family!.motivation,
+      kind: "research",
     };
   }
 
   const { error } = await db
     .from("intel_items")
     .update(update)
-    .eq("id", ensured.id);
+    .eq("id", item.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
   return {
@@ -761,7 +669,7 @@ export async function updateReportAdversaryAction(
     country,
     regrouped: true,
     recognised: true,
-    moved: ensured.moved,
+    moved: item.kind !== "research",
   };
 }
 
@@ -788,33 +696,29 @@ export async function updateReportCountryAction(
   // Clearing the country is only meaningful on an existing report; a breach has
   // no country, so leave it as a breach.
   if (!c) {
-    const intel = await db
-      .from("intel_items")
-      .select("id")
-      .eq("raw_hash", rawHash)
-      .maybeSingle();
-    if (intel.data) {
+    const item = await resolveReport(db, rawHash);
+    if (item) {
       const { error } = await db
         .from("intel_items")
         .update({ country: null })
-        .eq("id", intel.data.id);
+        .eq("id", item.id);
       if (error) return { ok: false, error: error.message };
       revalidatePath("/");
     }
     return { ok: true, country: null, moved: false };
   }
 
-  // Setting a country is a nation-state attribution: ensure a report row
-  // (converting a breach) and group it under that country.
-  const ensured = await ensureReportItem(db, rawHash);
-  if ("error" in ensured) return { ok: false, error: ensured.error };
+  // Setting a country is a nation-state attribution: group it under that
+  // country and flag the item as research.
+  const item = await resolveReport(db, rawHash);
+  if (!item) return { ok: false, error: "Report not found." };
   const { error } = await db
     .from("intel_items")
-    .update({ country: c, motivation: "nation_state" })
-    .eq("id", ensured.id);
+    .update({ country: c, motivation: "nation_state", kind: "research" })
+    .eq("id", item.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
-  return { ok: true, country: c, moved: ensured.moved };
+  return { ok: true, country: c, moved: item.kind !== "research" };
 }
 
 const CONFIDENCE_VALUES = ["high", "medium", "low"];
@@ -835,16 +739,16 @@ export async function updateReportConfidenceAction(
     return { ok: false, error: "Invalid confidence." };
 
   const db = createAdminClient();
-  const ensured = await ensureReportItem(db, rawHash);
-  if ("error" in ensured) return { ok: false, error: ensured.error };
+  const item = await resolveReport(db, rawHash);
+  if (!item) return { ok: false, error: "Report not found." };
 
   const { error } = await db
     .from("intel_items")
     .update({ confidence: c || null })
-    .eq("id", ensured.id);
+    .eq("id", item.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
-  return { ok: true, confidence: c || null, moved: ensured.moved };
+  return { ok: true, confidence: c || null, moved: false };
 }
 
 /* --- MITRE ATT&CK discovery ------------------------------------------------ */
@@ -994,30 +898,21 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
   if (safe.length < 2) return empty;
   const like = `%${safe}%`;
 
-  const [intelRes, breachRes, vulnRes, hiddenRes] = await Promise.all([
+  const [searchRes, hiddenRes] = await Promise.all([
+    // Every report lives in intel_items now; partition by kind below.
     supabase
       .from("intel_items")
-      .select("id, title, url, description, source_name, published_at, raw_hash")
-      .or(`title.ilike.${like},description.ilike.${like}`)
-      .order("published_at", { ascending: false })
-      .limit(SEARCH_LIMIT),
-    supabase
-      .from("breaches")
       .select(
-        "id, org_name, url, summary, source_name, event_date, event_date_label, raw_hash",
+        "id, kind, title, url, description, source_name, published_at, raw_hash, cve_id, target, exploit_status, date_label",
       )
-      .or(`org_name.ilike.${like},summary.ilike.${like}`)
-      .order("event_date", { ascending: false })
-      .limit(SEARCH_LIMIT),
-    supabase
-      .from("vulnerabilities")
-      .select("id, cve_id, target, url, detail, status, source_name, raw_hash")
-      .or(`cve_id.ilike.${like},target.ilike.${like},detail.ilike.${like}`)
-      .order("added_at", { ascending: false })
-      .limit(SEARCH_LIMIT),
+      .or(
+        `title.ilike.${like},description.ilike.${like},cve_id.ilike.${like},target.ilike.${like}`,
+      )
+      .order("published_at", { ascending: false })
+      .limit(SEARCH_LIMIT * 3),
     supabase.from("hidden_items").select("raw_hash"),
   ]);
-
+  const rows = searchRes.data ?? [];
   const hidden = new Set((hiddenRes.data ?? []).map((r) => r.raw_hash));
 
   // Indicator match: normalise the query (so it matches whether typed fanged or
@@ -1055,28 +950,38 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
   // Indicator hits are shown even if the relevance heuristic would drop them -
   // an explicit IOC search is a strong signal of intent.
   addReports(indicatorItems, false);
-  addReports(intelRes.data ?? [], true);
+  addReports(
+    rows.filter((r) => r.kind === "research" || r.kind === "other"),
+    true,
+  );
   const reports: SearchReport[] = [...reportById.values()];
-  const breaches: SearchBreach[] = (breachRes.data ?? [])
-    .filter((b) => !hidden.has(b.raw_hash) && isThreatIntel(b.org_name, b.summary))
+  const breaches: SearchBreach[] = rows
+    .filter(
+      (b) =>
+        b.kind === "breach" &&
+        !hidden.has(b.raw_hash) &&
+        isThreatIntel(b.title, b.description),
+    )
+    .slice(0, SEARCH_LIMIT)
     .map((b) => ({
       id: b.id,
-      org_name: b.org_name,
+      org_name: b.title,
       url: b.url,
-      summary: b.summary,
+      summary: b.description,
       source_name: b.source_name,
-      event_date: b.event_date,
-      event_date_label: b.event_date_label,
+      event_date: b.published_at,
+      event_date_label: b.date_label,
     }));
-  const vulns: SearchVuln[] = (vulnRes.data ?? [])
-    .filter((v) => !hidden.has(v.raw_hash))
+  const vulns: SearchVuln[] = rows
+    .filter((v) => v.kind === "exploit" && !hidden.has(v.raw_hash))
+    .slice(0, SEARCH_LIMIT)
     .map((v) => ({
       id: v.id,
-      cve_id: v.cve_id,
+      cve_id: v.cve_id ?? v.title,
       target: v.target,
       url: v.url,
-      detail: v.detail,
-      status: v.status,
+      detail: v.description,
+      status: (v.exploit_status ?? "suspected") as SearchVuln["status"],
       source_name: v.source_name,
     }));
 

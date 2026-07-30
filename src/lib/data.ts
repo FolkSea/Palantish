@@ -30,8 +30,10 @@ export type { TimelineEvent, TimelineStream };
 type Tables = Database["public"]["Tables"];
 
 export type IntelItemRow = Tables["intel_items"]["Row"];
-export type VulnerabilityRow = Tables["vulnerabilities"]["Row"];
-export type BreachRow = Tables["breaches"]["Row"];
+// Every report is an intel_items row now, discriminated by `kind`; these aliases
+// keep the section component prop names meaningful.
+export type VulnerabilityRow = IntelItemRow;
+export type BreachRow = IntelItemRow;
 export type SummaryCitation = {
   id: number;
   title: string;
@@ -109,46 +111,41 @@ export async function loadDashboard(): Promise<DashboardData> {
   ).toISOString();
 
   const [
-    activityRes,
-    timelineRes,
-    reportsRes,
-    vulnsRes,
-    breachesRes,
+    researchRes,
+    breachRes,
+    exploitRes,
+    otherRes,
     ecrimeAdvRes,
     summaryRes,
     staleFeedsRes,
     refreshRes,
   ] = await Promise.all([
+    // Research feeds the actor cards + timeline; 30d (sections slice to 7d).
     supabase
       .from("intel_items")
       .select("*")
-      .eq("item_type", "actor_activity")
-      .gte("published_at", recentCutoff)
-      .order("published_at", { ascending: false }),
-    // Unified timeline: all intel over the 30-day window, attributed to a stream.
-    supabase
-      .from("intel_items")
-      .select("*")
+      .eq("kind", "research")
       .gte("published_at", timelineCutoff)
-      .order("published_at", { ascending: true }),
+      .order("published_at", { ascending: false }),
     supabase
       .from("intel_items")
       .select("*")
-      .eq("item_type", "report")
+      .eq("kind", "breach")
+      .gte("published_at", timelineCutoff)
+      .order("published_at", { ascending: false }),
+    supabase
+      .from("intel_items")
+      .select("*")
+      .eq("kind", "exploit")
+      .gte("published_at", timelineCutoff)
+      .order("published_at", { ascending: false }),
+    // Other reporting is a 7-day list only (not on the timeline).
+    supabase
+      .from("intel_items")
+      .select("*")
+      .eq("kind", "other")
       .gte("published_at", recentCutoff)
       .order("published_at", { ascending: false }),
-    // 30-day window for the vulns tab; the table slices this to 7 days below.
-    supabase
-      .from("vulnerabilities")
-      .select("*")
-      .gte("added_at", timelineCutoff)
-      .order("added_at", { ascending: false }),
-    // 30-day window for the eCrime tab; the table/card slice to 7 days below.
-    supabase
-      .from("breaches")
-      .select("*")
-      .gte("event_date", timelineCutoff)
-      .order("event_date", { ascending: false, nullsFirst: false }),
     // eCrime adversary aliases (CrowdStrike cryptonyms) for attribution.
     supabase
       .from("adversaries")
@@ -191,11 +188,15 @@ export async function loadDashboard(): Promise<DashboardData> {
   // specific name, or "UNID <animal>" keyed by the actor's nexus (country-
   // specific for Rest of the World).
   const nsGroups = sortGroups(GROUP_TABLE);
-  const activityBase = (activityRes.data ?? []).filter(keep);
+  // Research items feed the actor sections + timeline. Cards show the last 7d.
+  const research30 = (researchRes.data ?? []).filter(keep);
+  const researchRecent = research30.filter(
+    (i) => (i.published_at ?? "") >= recentCutoff,
+  );
   // Nation-state activity grouped into one card per country, plus a
   // "Non Attributed" card for nation-state items without a country.
   const nsByCountry = new Map<string, ActorItem[]>();
-  for (const i of activityBase) {
+  for (const i of researchRecent) {
     if (i.motivation !== "nation_state") continue;
     const item: ActorItem = {
       ...i,
@@ -253,37 +254,40 @@ export async function loadDashboard(): Promise<DashboardData> {
     buildGroupsFromAdversaries(ecrimeAdvRes.data ?? []),
   );
 
-  const breaches30 = (breachesRes.data ?? []).filter(
-    (b) => isThreatIntel(b.org_name, b.summary) && !hidden.has(b.raw_hash),
-  );
-  const breaches = breaches30.filter((b) => (b.event_date ?? "") >= recentCutoff);
+  const breach30 = (breachRes.data ?? []).filter(keep);
+  const breaches = breach30.filter((b) => (b.published_at ?? "") >= recentCutoff);
 
-  const vulns30 = vulnsRes.data ?? [];
-  const vulnerabilities = vulns30.filter(
-    (v) => (v.added_at ?? "") >= recentCutoff,
+  const exploit30 = (exploitRes.data ?? []).filter((v) => !hidden.has(v.raw_hash));
+  const vulnerabilities = exploit30.filter(
+    (v) => (v.published_at ?? "") >= recentCutoff,
   );
 
-  const reports = (reportsRes.data ?? []).filter(keep);
+  // Other reporting: 7-day list of unattributed general reporting.
+  const reports = (otherRes.data ?? []).filter(keep);
 
   // Breaking ticker: PoC exploits and breaches observed in the last ~24h only,
   // newest first. Nothing else feeds the ticker.
   const breaking: TickerItem[] = [
-    ...vulns30
-      .filter((v) => v.status === "poc" && (v.added_at ?? "") >= breakingCutoff)
+    ...exploit30
+      .filter(
+        (v) =>
+          v.exploit_status === "poc" &&
+          (v.published_at ?? "") >= breakingCutoff,
+      )
       .map((v) => ({
-        id: `vuln-${v.id}`,
+        id: `exploit-${v.id}`,
         kind: "exploit" as const,
-        date: v.added_at,
-        title: v.target ? `${v.cve_id} - ${v.target}` : v.cve_id,
+        date: v.published_at,
+        title: v.target ? `${v.cve_id} - ${v.target}` : v.cve_id ?? v.title,
         url: v.url,
       })),
-    ...breaches30
-      .filter((b) => (b.event_date ?? "") >= breakingCutoff)
+    ...breach30
+      .filter((b) => (b.published_at ?? "") >= breakingCutoff)
       .map((b) => ({
         id: `breach-${b.id}`,
         kind: "breach" as const,
-        date: b.event_date,
-        title: b.org_name,
+        date: b.published_at,
+        title: b.title,
         url: b.url,
       })),
   ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
@@ -291,21 +295,18 @@ export async function loadDashboard(): Promise<DashboardData> {
   const hacktivismGroups = buildHacktivismGroups();
 
   // Activity-by-actor sections: per-country nation-state cards (built above),
-  // and per-actor eCrime and hacktivism cards. All three carry intelligence
-  // reports only; breach/leak posts stay in the dedicated Breaches list.
+  // and per-actor eCrime and hacktivism cards. All three carry research
+  // (intelligence) reports only; breach/leak posts stay in the Breaches list.
   const { ecrimeCards, hacktivismCards } = buildActorSectionCards(
-    reports,
+    researchRecent,
     ecrimeGroups,
     hacktivismGroups,
   );
 
-  // Unified timeline: reports + breaches + exploits over 30 days, each on an
-  // adversary stream (nation-state / eCrime / hacktivism), plus an Exploits lane.
-  const timelineIntel = (timelineRes.data ?? []).filter(keep);
+  // Unified timeline: research + breaches + exploits over 30 days, branched by
+  // kind onto adversary / Breaches / Exploits lanes.
   const timeline = buildTimeline(
-    timelineIntel,
-    breaches30,
-    vulns30,
+    [...research30, ...breach30, ...exploit30],
     ecrimeGroups,
     hacktivismGroups,
   );

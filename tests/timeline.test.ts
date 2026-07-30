@@ -16,14 +16,13 @@ import { buildEcrimeActorGroups } from "@/lib/ecrime";
 import type { Database } from "@/lib/supabase/database.types";
 
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
-type BreachRow = Database["public"]["Tables"]["breaches"]["Row"];
-type VulnRow = Database["public"]["Tables"]["vulnerabilities"]["Row"];
 
 let seq = 0;
 function intel(p: Partial<IntelItemRow>): IntelItemRow {
   seq += 1;
   return {
     id: `i-${seq}`,
+    kind: "research",
     title: "t",
     description: "",
     url: null,
@@ -33,39 +32,40 @@ function intel(p: Partial<IntelItemRow>): IntelItemRow {
     country: null,
     crowdstrike_adversary: null,
     adversary_label: null,
+    cve_id: null,
+    target: null,
+    exploit_status: null,
     raw_hash: `hi-${seq}`,
     ...p,
   } as IntelItemRow;
 }
-function breach(p: Partial<BreachRow>): BreachRow {
-  seq += 1;
-  return {
-    id: `b-${seq}`,
-    org_name: "org",
-    summary: "",
-    url: null,
-    source_name: "src",
-    event_date: "2026-07-20",
-    event_date_label: null,
-    adversary_label: null,
-    crowdstrike_adversary: null,
-    raw_hash: `hb-${seq}`,
-    ...p,
-  } as BreachRow;
+// Breaches/exploits are intel_items rows now; these translate the old-style
+// fields (org_name/summary, status/added_at/detail) onto the unified columns.
+function breach(
+  p: { org_name?: string; summary?: string } & Partial<IntelItemRow> = {},
+): IntelItemRow {
+  const { org_name, summary, ...rest } = p;
+  return intel({
+    kind: "breach",
+    title: org_name ?? "org",
+    description: summary ?? "",
+    ...rest,
+  });
 }
-function vuln(p: Partial<VulnRow>): VulnRow {
-  seq += 1;
-  return {
-    id: `v-${seq}`,
+function vuln(
+  p: { status?: string; added_at?: string; detail?: string } & Partial<IntelItemRow> = {},
+): IntelItemRow {
+  const { status, added_at, detail, ...rest } = p;
+  return intel({
+    kind: "exploit",
     cve_id: "CVE-2026-0001",
     target: "Acme",
-    detail: "",
-    url: null,
-    added_at: "2026-07-20",
-    status: "poc",
-    raw_hash: `hv-${seq}`,
-    ...p,
-  } as VulnRow;
+    title: "CVE-2026-0001",
+    exploit_status: status ?? "poc",
+    published_at: added_at ?? "2026-07-20",
+    description: detail ?? "",
+    ...rest,
+  });
 }
 
 const ecrimeGroups = buildEcrimeActorGroups([]);
@@ -73,10 +73,14 @@ const hacktivismGroups = buildHacktivismGroups();
 
 function run(
   intelRows: IntelItemRow[] = [],
-  breachRows: BreachRow[] = [],
-  vulnRows: VulnRow[] = [],
+  breachRows: IntelItemRow[] = [],
+  vulnRows: IntelItemRow[] = [],
 ) {
-  return buildTimeline(intelRows, breachRows, vulnRows, ecrimeGroups, hacktivismGroups);
+  return buildTimeline(
+    [...intelRows, ...breachRows, ...vulnRows],
+    ecrimeGroups,
+    hacktivismGroups,
+  );
 }
 
 describe("buildTimeline", () => {
