@@ -56,6 +56,8 @@ export const GROUP_TABLE: GroupEntry[] = [
   { alias: "blackcat", nexus: "other" },
   { alias: "cl0p", nexus: "other" },
   { alias: "clop", nexus: "other" },
+  { alias: "shinyhunters", nexus: "other", cs: "ShinyHunters" },
+  { alias: "shiny hunters", nexus: "other", cs: "ShinyHunters" },
   // Rest of the World - other nation-states, by named group (country animal
   // via badges). Generic "India-linked" attribution is left to the LLM.
   // India (Tiger)

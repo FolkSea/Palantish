@@ -200,6 +200,20 @@ describe("deriveAdversaryFromText", () => {
     ).toBe("Labyrinth Chollima");
   });
 
+  it("matches the eCrime crew ShinyHunters by name", () => {
+    expect(
+      deriveAdversaryFromText(
+        "ShinyHunters claims Brinks Home breach",
+        null,
+        groups,
+      ),
+    ).toBe("ShinyHunters");
+    // Also matches the spaced spelling.
+    expect(
+      deriveAdversaryFromText("Shiny Hunters leak stolen data", null, groups),
+    ).toBe("ShinyHunters");
+  });
+
   it("returns null when nothing matches", () => {
     expect(deriveAdversaryFromText("Ordinary security update", null, groups)).toBeNull();
   });
