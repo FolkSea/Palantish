@@ -106,9 +106,17 @@ describe("buildTimeline", () => {
     expect(events[1].actor).toBe(UNID_HACKTIVISM);
   });
 
-  it("routes a breach with no crew to UNID SPIDER as a breach marker", () => {
-    const { events } = run([], [breach({ summary: "data theft, no crew" })]);
-    expect(events[0]).toMatchObject({ actor: UNID_ECRIME, category: "ecrime", kind: "breach" });
+  it("puts a breach with no crew on the neutral Breaches lane, not eCrime", () => {
+    const { events, streams } = run([], [breach({ summary: "data theft, no crew" })]);
+    expect(events[0]).toMatchObject({ actor: "Breaches", category: "breach", kind: "breach" });
+    const lane = streams.find((s) => s.actor === "Breaches");
+    expect(lane?.category).toBe("breach");
+    expect(lane?.color).toBe(BREACH_COLOR);
+  });
+
+  it("keeps an eCrime-attributed breach on the crew's eCrime lane", () => {
+    const { events } = run([], [breach({ summary: "LockBit ransomware hit Acme" })]);
+    expect(events[0]).toMatchObject({ category: "ecrime", actor: "LockBit", kind: "breach" });
   });
 
   it("honours a stored breach attribution over the derived crew", () => {
@@ -210,5 +218,11 @@ describe("eventVisible", () => {
     const e = { ...base, actor: "Exploits", category: "exploit", kind: "exploit" } as const;
     expect(eventVisible(e, off("exploits"))).toBe(false);
     expect(eventVisible(e, off("breaches"))).toBe(true);
+  });
+
+  it("gates the neutral Breaches lane on the Breaches toggle, not eCrime", () => {
+    const e = { ...base, actor: "Breaches", category: "breach", kind: "breach" } as const;
+    expect(eventVisible(e, off("breaches"))).toBe(false);
+    expect(eventVisible(e, off("ecrime"))).toBe(true);
   });
 });

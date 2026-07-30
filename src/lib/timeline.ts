@@ -14,6 +14,7 @@ export type TimelineCategory =
   | "nation_state"
   | "ecrime"
   | "hacktivism"
+  | "breach"
   | "exploit";
 
 /** One dot on the unified timeline: a report, breach or exploit. */
@@ -59,6 +60,9 @@ export const UNID_ECRIME = "UNID SPIDER";
 export const UNID_HACKTIVISM = "UNID JACKAL";
 
 const EXPLOITS_STREAM = "Exploits";
+// Breaches with no eCrime crew or hacktivist collective share this neutral lane
+// - a breach is not eCrime unless it names an eCrime actor.
+const BREACHES_STREAM = "Breaches";
 
 // Reserved colours: red = PoC exploits, amber = breaches, grey = any
 // unattributed lane. Kept out of the actor palette so their meaning is unique.
@@ -87,6 +91,7 @@ const CATEGORY_ORDER: TimelineCategory[] = [
   "nation_state",
   "ecrime",
   "hacktivism",
+  "breach",
   "exploit",
 ];
 
@@ -94,6 +99,7 @@ export const CATEGORY_LABEL: Record<TimelineCategory, string> = {
   nation_state: "Nation State",
   ecrime: "eCrime",
   hacktivism: "Hacktivism",
+  breach: "Breaches",
   exploit: "Exploits",
 };
 
@@ -193,11 +199,16 @@ export function buildTimeline(
     const stored = namedActor(b.crowdstrike_adversary, b.adversary_label);
     const text = `${b.org_name} ${b.summary ?? ""}`.toLowerCase();
     const h = matchGroup(text, hacktivismGroups)?.cs;
+    const crew = stored ?? matchGroup(text, ecrimeGroups)?.cs ?? null;
     if (h) {
       events.push(breachEvent(b, "hacktivism", stored ?? h));
-    } else {
-      const crew = stored ?? matchGroup(text, ecrimeGroups)?.cs ?? UNID_ECRIME;
+    } else if (crew) {
+      // Only a breach that names an eCrime crew belongs on an eCrime lane.
       events.push(breachEvent(b, "ecrime", crew));
+    } else {
+      // A breach with no threat-actor attribution is not eCrime; it gets its
+      // own neutral Breaches lane.
+      events.push(breachEvent(b, "breach", BREACHES_STREAM));
     }
   }
 
@@ -253,6 +264,7 @@ function buildStreams(events: TimelineEvent[]): TimelineStream[] {
   return actors.map(({ actor, category }) => {
     let color: string;
     if (category === "exploit") color = POC_COLOR;
+    else if (category === "breach") color = BREACH_COLOR;
     else if (isUnid(actor)) color = UNID_COLOR;
     else color = PALETTE[hue++ % PALETTE.length];
     return { actor, category, color };
@@ -262,6 +274,8 @@ function buildStreams(events: TimelineEvent[]): TimelineStream[] {
 /** Whether an event passes the current filter toggles. */
 export function eventVisible(e: TimelineEvent, f: TimelineFilters): boolean {
   if (e.category === "exploit") return f.exploits;
+  // The neutral Breaches lane is gated solely by the Breaches toggle.
+  if (e.category === "breach") return f.breaches;
   if (e.category === "nation_state" && !f.nation_state) return false;
   if (e.category === "ecrime" && !f.ecrime) return false;
   if (e.category === "hacktivism" && !f.hacktivism) return false;
