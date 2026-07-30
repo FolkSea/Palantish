@@ -892,6 +892,8 @@
     "community_identifiers": [
       "Diamond Sleet",
       "ZINC",
+      "Lazarus",
+      "Lazarus Group",
       "Black Artemis",
       "Citrine Sleet",
       "Jade Sleet",
@@ -911,8 +913,6 @@
       "COPERNICIUM",
       "BlueNoroff",
       "APT38",
-      "Lazarus",
-      "Lazarus Group",
       "TA444",
       "CryptoCore",
       "Alluring Pisces",

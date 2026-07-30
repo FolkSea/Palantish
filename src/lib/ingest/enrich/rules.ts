@@ -12,7 +12,7 @@ export type GroupEntry = { alias: string; nexus: Nexus; cs?: string };
 
 export const GROUP_TABLE: GroupEntry[] = [
   // North Korea (Chollima)
-  { alias: "lazarus", nexus: "north_korea", cs: "Stardust Chollima" },
+  { alias: "lazarus", nexus: "north_korea", cs: "Labyrinth Chollima" },
   { alias: "apt38", nexus: "north_korea", cs: "Stardust Chollima" },
   { alias: "bluenoroff", nexus: "north_korea", cs: "Stardust Chollima" },
   { alias: "kimsuky", nexus: "north_korea", cs: "Velvet Chollima" },

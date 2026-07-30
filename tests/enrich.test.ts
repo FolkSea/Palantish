@@ -190,14 +190,14 @@ describe("deriveAdversaryFromText", () => {
     ).toBeNull();
   });
 
-  it("matches Lazarus to Stardust Chollima even when the country is named", () => {
+  it("matches Lazarus to Labyrinth Chollima even when the country is named", () => {
     expect(
       deriveAdversaryFromText(
         "North Korea's Lazarus Group shares tools with a crew",
         null,
         groups,
       ),
-    ).toBe("Stardust Chollima");
+    ).toBe("Labyrinth Chollima");
   });
 
   it("returns null when nothing matches", () => {
