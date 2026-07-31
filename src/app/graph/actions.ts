@@ -18,6 +18,7 @@ import {
   GRAPH_NODE_TYPES,
   type GraphData,
   type GraphNode,
+  type GraphEdge,
   type GraphNodeType,
   type GraphResult,
 } from "@/lib/graph/types";
@@ -167,25 +168,127 @@ async function entityItems(
   return out;
 }
 
-/** Seed the graph on a report: the item plus its depth-1 neighbours. */
+// A second step out from the seed: the reports that share the seed's depth-1
+// entities. Batched (a handful of queries, not one per entity) and capped so a
+// high-degree entity (a popular CVE, a prolific actor) cannot explode the seed.
+const SEED_DEPTH2_CAP = 60;
+
+async function depth2Items(
+  db: Db,
+  entityNodes: GraphNode[],
+  hidden: Set<string>,
+  seedItemId: string,
+): Promise<GraphData> {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  const seen = new Set<string>();
+
+  const addItem = (row: ItemFull, sourceNodeId: string) => {
+    if (row.id === seedItemId || hidden.has(row.raw_hash)) return;
+    const n = itemNode(row);
+    if (!seen.has(n.id)) {
+      if (seen.size >= SEED_DEPTH2_CAP) return;
+      seen.add(n.id);
+      nodes.push(n);
+    }
+    edges.push(edge(sourceNodeId, n.id));
+  };
+
+  // IOC / CVE / TTP entities -> the reports linked to those iocs.
+  const valueToNode = new Map<string, string>();
+  for (const n of entityNodes)
+    if (n.type !== "adversary" && n.value) valueToNode.set(n.value, n.id);
+  const values = [...valueToNode.keys()];
+  if (values.length) {
+    const { data: iocRows } = await db
+      .from("iocs")
+      .select("id, value")
+      .in("value", values);
+    const iocIdToValue = new Map<string, string>(
+      (iocRows ?? []).map((r) => [r.id, r.value]),
+    );
+    const iocIds = (iocRows ?? []).map((r) => r.id);
+    if (iocIds.length) {
+      const { data } = await db
+        .from("intel_item_iocs")
+        .select(`ioc_id, intel_items(${ITEM_COLS})`)
+        .in("ioc_id", iocIds)
+        .limit(500);
+      for (const row of (data ?? []) as unknown as {
+        ioc_id: string;
+        intel_items: ItemFull | null;
+      }[]) {
+        if (!row.intel_items) continue;
+        const v = iocIdToValue.get(row.ioc_id);
+        const src = v ? valueToNode.get(v) : undefined;
+        if (src) addItem(row.intel_items, src);
+      }
+    }
+  }
+
+  // CVE entities also match intel_items.cve_id directly.
+  const cveValues = entityNodes
+    .filter((n) => n.type === "cve" && n.value)
+    .map((n) => n.value as string);
+  if (cveValues.length) {
+    const { data } = await db
+      .from("intel_items")
+      .select(ITEM_COLS)
+      .in("cve_id", cveValues)
+      .limit(300);
+    for (const it of (data ?? []) as unknown as ItemFull[])
+      if (it.cve_id) addItem(it, `cve:${it.cve_id.toUpperCase()}`);
+  }
+
+  // Adversary entities -> the reports attributed to them.
+  const advNames = entityNodes
+    .filter((n) => n.type === "adversary")
+    .map((n) => parseNodeId(n.id).key);
+  if (advNames.length) {
+    for (const col of ["crowdstrike_adversary", "adversary_label"] as const) {
+      const { data } = await db
+        .from("intel_items")
+        .select(ITEM_COLS)
+        .in(col, advNames)
+        .order("published_at", { ascending: false })
+        .limit(300);
+      for (const it of (data ?? []) as unknown as ItemFull[]) {
+        const name = it[col];
+        if (name) addItem(it, `adv:${name}`);
+      }
+    }
+  }
+
+  return { nodes, edges };
+}
+
+/**
+ * Seed the graph on a report, two steps out: the item, its depth-1 entities
+ * (IOC/CVE/TTP/adversary), and the reports that share those entities.
+ */
 export async function seedGraphAction(rawHash: string): Promise<GraphResult> {
   if (!rawHash) return { ok: false, error: "Missing report." };
   const db = await authed();
   if (!db) return { ok: false, error: "Not authorized." };
 
-  const { data: item } = await db
+  const { data: itemData } = await db
     .from("intel_items")
     .select(ITEM_COLS)
     .eq("raw_hash", rawHash)
     .maybeSingle();
-  if (!item) return { ok: false, error: "Report not found." };
+  if (!itemData) return { ok: false, error: "Report not found." };
+  const item = itemData as unknown as ItemFull;
 
-  const graph = await itemNeighbours(
-    db,
-    item as unknown as ItemFull,
-    new Set(GRAPH_NODE_TYPES),
-  );
-  return { ok: true, graph, seedId: `item:${(item as { id: string }).id}` };
+  const g1 = await itemNeighbours(db, item, new Set(GRAPH_NODE_TYPES));
+  const hidden = await hiddenHashes(db);
+  const entityNodes = g1.nodes.filter((n) => n.type !== "item");
+  const g2 = await depth2Items(db, entityNodes, hidden, item.id);
+
+  return {
+    ok: true,
+    graph: mergeGraph(g1, g2),
+    seedId: `item:${item.id}`,
+  };
 }
 
 /**

@@ -24,8 +24,8 @@ export default async function GraphPage({
             Link analysis
           </h1>
           <p className="text-[11px] text-slate-500">
-            Tap a node to expand its depth-1 connections; choose which entity
-            types to follow on the left.
+            Seeded two steps out. Tap a node to expand it further; choose which
+            entity types to follow on the left.
           </p>
         </div>
         <Link
