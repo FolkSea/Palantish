@@ -61,4 +61,17 @@ export const serverEnv = {
   get searchApiKey(): string | undefined {
     return process.env.SEARCH_API_KEY || undefined;
   },
+  /**
+   * Optional reader-proxy base for pages a direct fetch cannot get (Cloudflare
+   * JS challenge, bot walls). When set (e.g. https://r.jina.ai/), the scraper
+   * routes blocked URLs through it to recover article text. Off (undefined) by
+   * default - no report URL leaves our servers unless an operator opts in.
+   */
+  get readerProxyUrl(): string | undefined {
+    return process.env.READER_PROXY_URL || undefined;
+  },
+  /** Optional bearer token for the reader proxy (higher rate limits). */
+  get readerProxyKey(): string | undefined {
+    return process.env.READER_PROXY_KEY || undefined;
+  },
 };

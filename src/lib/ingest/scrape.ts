@@ -330,6 +330,58 @@ function prepareEmbedHtml(html: string, baseUrl: string): string {
     : `${base}${cleaned}`;
 }
 
+// A body shorter than this is treated as "no real content" (a challenge
+// interstitial or JS-only shell that still returned 200), so we try the reader.
+const MIN_BODY_CHARS = 200;
+
+/**
+ * Last-resort reader for pages a direct fetch cannot get (Cloudflare JS
+ * challenge, bot walls): route the URL through a configured reader proxy
+ * (READER_PROXY_URL, e.g. https://r.jina.ai/) that renders the page and returns
+ * clean article text. Disabled - returns null - unless the proxy is configured,
+ * and null on any failure, so callers keep their existing fallback behaviour.
+ * The article URL is validated first (SSRF guard) before being handed to it.
+ */
+async function fetchViaReader(rawUrl: string): Promise<string | null> {
+  const base = serverEnv.readerProxyUrl;
+  if (!base) return null;
+  let target: URL;
+  try {
+    target = assertPublicHttpUrl(rawUrl.trim());
+  } catch {
+    return null;
+  }
+  const proxied =
+    (base.endsWith("/") ? base : `${base}/`) + target.toString();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    // Note: no browser User-Agent here - reader proxies (e.g. Jina) reject
+    // browser-like UAs with 403; they expect an API-style caller.
+    const headers: Record<string, string> = { "X-Return-Format": "text" };
+    const key = serverEnv.readerProxyKey;
+    if (key) headers.Authorization = `Bearer ${key}`;
+    const res = await fetch(proxied, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers,
+    });
+    if (!res.ok) return null;
+    const text = toAscii(await res.text(), true)
+      .replace(/[ \t]+/g, " ")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+    return text || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export type ArticleView = { frameable: boolean; html: string; text: string };
 
 /**
@@ -340,12 +392,24 @@ export type ArticleView = { frameable: boolean; html: string; text: string };
  * fetch / non-HTML failures so the caller can fall back to the source link.
  */
 export async function fetchArticleView(rawUrl: string): Promise<ArticleView> {
-  const { html, frameable, finalUrl } = await fetchPage(rawUrl);
-  return {
-    frameable,
-    html: prepareEmbedHtml(html, finalUrl),
-    text: articleParagraphs(html),
-  };
+  try {
+    const { html, frameable, finalUrl } = await fetchPage(rawUrl);
+    const text = articleParagraphs(html);
+    // A real page: show it (live frame or snapshot) as before.
+    if (text.length >= MIN_BODY_CHARS)
+      return { frameable, html: prepareEmbedHtml(html, finalUrl), text };
+    // Fetched OK but effectively empty (challenge/JS shell): try the reader, and
+    // present its text via the modal's fallback pane (html empty => not embedded).
+    const reader = await fetchViaReader(rawUrl);
+    if (reader) return { frameable: false, html: "", text: reader };
+    return { frameable, html: prepareEmbedHtml(html, finalUrl), text };
+  } catch (err) {
+    // Blocked outright (e.g. Cloudflare 403): recover text via the reader if one
+    // is configured, else rethrow so the modal shows "could not load".
+    const reader = await fetchViaReader(rawUrl);
+    if (reader) return { frameable: false, html: "", text: reader };
+    throw err;
+  }
 }
 
 /**
@@ -354,6 +418,14 @@ export async function fetchArticleView(rawUrl: string): Promise<ArticleView> {
  * failures so the caller can treat it as a report with no IOCs.
  */
 export async function fetchArticleText(rawUrl: string): Promise<string> {
-  const { html } = await fetchPage(rawUrl);
-  return articleParagraphs(html);
+  try {
+    const { html } = await fetchPage(rawUrl);
+    const text = articleParagraphs(html);
+    if (text.length >= MIN_BODY_CHARS) return text;
+    return (await fetchViaReader(rawUrl)) ?? text;
+  } catch (err) {
+    const reader = await fetchViaReader(rawUrl);
+    if (reader) return reader;
+    throw err;
+  }
 }
