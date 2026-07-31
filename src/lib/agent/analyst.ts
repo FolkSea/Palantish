@@ -27,6 +27,10 @@ const REFLECT_MODEL_DEFAULT = "claude-sonnet-5";
 // stronger model; overridable via ANTHROPIC_MODEL. The content cap bounds tokens
 // spent on an unexpectedly large page or PDF.
 const WEB_TRIAGE_MODEL_DEFAULT = "claude-sonnet-5";
+// Stage-one screen: a cheap title/description-only pass that filters obvious
+// non-intelligence before the expensive fetch-and-analyse call. Small fast model
+// by default; override with ANTHROPIC_SCREEN_MODEL.
+const SCREEN_MODEL_DEFAULT = "claude-haiku-4-5";
 const WEB_FETCH_MAX_CONTENT_TOKENS =
   Number(process.env.WEB_FETCH_MAX_CONTENT_TOKENS) || 8000;
 // Per-call timeout so one slow request never stalls a worker (see LlmEnricher).
@@ -87,6 +91,19 @@ Return ONLY strict JSON of this shape:
 }
 nexus is the attributed nation-state (china/russia/north_korea/iran), "rest_of_world" for any other nation-state (e.g. India, Turkey, Vietnam, Pakistan, South Korea), "other" for eCrime or hacktivism, or null if none.
 crowdstrikeAdversary is the public CrowdStrike cryptonym (Panda/Bear/Chollima/Kitten/Spider/Jackal naming) when one clearly applies, else null.`;
+
+// Stage one of triage. Deliberately asymmetric: a wrong "keep" only wastes one
+// fetch, a wrong "drop" loses the report for good - so anything uncertain is
+// kept and settled by the full pass that reads the article.
+const SCREEN_INSTRUCTIONS = `Decide whether an item is worth the cost of fetching and analysing in full.
+
+You see ONLY the feed title and description. Judge from those alone - do not guess at details you cannot see.
+
+Answer "drop" only when the item is clearly NOT threat intelligence: marketing, product or feature announcements, vendor self-promotion, "use cases" and customer stories, corporate/business news (funding, M&A, partnerships, awards, hiring, earnings, compliance PR), conference/contest/webinar promotion, podcasts, newsletters and "week in review" roundups, opinion and thought-leadership, or consumer-lifestyle and legal/policy stories with no attacker, malware, or vulnerability substance.
+
+Answer "keep" for anything that could plausibly be genuine threat reporting - a campaign, intrusion, malware or tooling analysis, breach or leak, vulnerability or advisory - AND for anything you are unsure about. When in doubt, keep.
+
+Return ONLY strict JSON: {"verdict": "keep" | "drop", "reason": string}`;
 
 const SUMMARY_INSTRUCTIONS = `Write the executive summary panel for the dashboard.
 Write a flowing, narrative briefing in plain ASCII prose (no markdown, no headings, no bullet characters, no emoji).
@@ -175,6 +192,41 @@ Description: ${c.description ?? ""}`,
       ],
     });
     return this.parseTriage(textOf(message));
+  }
+
+  /**
+   * Stage-one screen: a cheap title/description-only pass that decides whether a
+   * candidate is worth the expensive fetch-and-analyse call. Returns null when
+   * the call fails or cannot be parsed, which callers must treat as "keep" -
+   * the screen may only ever save work, never lose a report on its own.
+   */
+  async screen(c: RawCandidate): Promise<{ keep: boolean; reason: string } | null> {
+    const model = process.env.ANTHROPIC_SCREEN_MODEL || SCREEN_MODEL_DEFAULT;
+    try {
+      const message = await this.client.messages.create({
+        model,
+        max_tokens: 150,
+        // No memory brief: this pass only asks "is this threat intelligence at
+        // all", and the brief would add tokens to every candidate.
+        system: `${ANALYST_PERSONA}\n\n${SCREEN_INSTRUCTIONS}`,
+        messages: [
+          {
+            role: "user",
+            content: `Source: ${c.sourceName} (${c.sourceCategory ?? "unknown"})
+Title: ${c.title}
+Description: ${c.description ?? ""}`,
+          },
+        ],
+      });
+      const match = textOf(message).match(/\{[\s\S]*\}/);
+      if (!match) return null;
+      const o = JSON.parse(match[0]) as Record<string, unknown>;
+      const reason = typeof o.reason === "string" ? o.reason.trim() : "";
+      // Only an explicit "drop" filters; any other value keeps.
+      return { keep: o.verdict !== "drop", reason };
+    } catch {
+      return null;
+    }
   }
 
   /**

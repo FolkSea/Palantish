@@ -8,9 +8,17 @@ import {
   type GroupEntry,
 } from "./rules";
 
+/** A classifier verdict: an item to keep, a drop (optionally with the reason it
+ * was rejected, for the dropped-items audit), or "unavailable". */
+export type LlmVerdict =
+  | EnrichedItem
+  | "drop"
+  | "unavailable"
+  | { drop: true; reason: string };
+
 /** Minimal shape the hybrid needs from an LLM classifier (LlmEnricher fits). */
 export interface LlmClassifier {
-  classify(c: RawCandidate): Promise<EnrichedItem | "drop" | "unavailable">;
+  classify(c: RawCandidate): Promise<LlmVerdict>;
 }
 
 /**
@@ -128,6 +136,10 @@ export class HybridEnricher implements Enricher {
     const r = await this.llm!.classify(c);
     if (r === "drop") {
       this.reportDrop("llm", c, "LLM: not intelligence");
+      return null;
+    }
+    if (typeof r === "object" && "drop" in r) {
+      this.reportDrop("llm", c, r.reason || "LLM: not intelligence");
       return null;
     }
     if (r !== "unavailable") {

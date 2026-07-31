@@ -224,6 +224,56 @@ describe("fallback behaviour", () => {
   });
 });
 
+describe("stage-one screen (cheap pass before the fetch)", () => {
+  const screenReply = (verdict: "keep" | "drop", reason = "r") => ({
+    stop_reason: "end_turn",
+    content: [{ type: "text", text: JSON.stringify({ verdict, reason }) }],
+  });
+
+  it("drops obvious non-intelligence without paying for a fetch", async () => {
+    create.mockResolvedValueOnce(screenReply("drop", "vendor webinar promotion"));
+    const enricher = new LlmEnricher("sk-test");
+    const verdict = await enricher.classify(candidate);
+    expect(verdict).toMatchObject({ drop: true });
+    expect((verdict as { reason: string }).reason).toContain("webinar");
+    // Only the screen ran - no web_fetch request was made.
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0].tools).toBeUndefined();
+  });
+
+  it("passes survivors through to the full fetch-and-analyse pass", async () => {
+    create
+      .mockResolvedValueOnce(screenReply("keep"))
+      .mockResolvedValueOnce(successContent());
+    const enricher = new LlmEnricher("sk-test");
+    const item = await enricher.classify(candidate);
+    expect(item).toMatchObject({ fetchStatus: "full" });
+    expect(create).toHaveBeenCalledTimes(2);
+    // The second call is the one that enables web_fetch.
+    expect(create.mock.calls[1][0].tools[0].name).toBe("web_fetch");
+  });
+
+  it("fails open: an unusable screen response never loses a report", async () => {
+    create
+      .mockResolvedValueOnce({ stop_reason: "end_turn", content: [] }) // unparseable
+      .mockResolvedValueOnce(successContent());
+    const enricher = new LlmEnricher("sk-test");
+    const item = await enricher.classify(candidate);
+    expect(item).toMatchObject({ fetchStatus: "full" });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses a cheaper model for the screen than for the full pass", async () => {
+    create
+      .mockResolvedValueOnce(screenReply("keep"))
+      .mockResolvedValueOnce(successContent());
+    const enricher = new LlmEnricher("sk-test");
+    await enricher.classify(candidate);
+    expect(create.mock.calls[0][0].model).toContain("haiku");
+    expect(create.mock.calls[1][0].model).not.toContain("haiku");
+  });
+});
+
 describe("at most one fetch per configured retrieval method", () => {
   it("9. web-fetch triage calls the Messages API exactly once", async () => {
     create.mockResolvedValue(successContent());

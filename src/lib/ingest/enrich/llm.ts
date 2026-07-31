@@ -6,6 +6,7 @@ import { AnalystAgent } from "@/lib/agent/analyst";
 import type { WebTriageOutcome } from "@/lib/agent/web-triage";
 import { RulesEnricher } from "./rules";
 import type { GroupEntry } from "./rules";
+import type { LlmVerdict } from "./hybrid";
 
 /**
  * LLM-backed enricher: triages via the analyst agent's web-fetch triage, which
@@ -52,20 +53,39 @@ export class LlmEnricher implements Enricher {
   }
 
   /**
-   * Classify one candidate: the enriched item when relevant, "drop" when the
-   * agent judges it irrelevant, or "unavailable" when the call fails or cannot
-   * be parsed (so callers can apply a keep-by-default / rules-fallback policy).
-   * Note: a candidate is never dropped solely because the fetch fell back to the
-   * RSS feed - relevance is judged on whatever content was available.
+   * Classify one candidate in two stages: a cheap title/description screen that
+   * filters obvious non-intelligence, then - only for survivors - the full
+   * fetch-and-analyse pass. Returns the enriched item, a drop (with the reason,
+   * for the audit), or "unavailable" when the call fails or cannot be parsed (so
+   * callers can apply a keep-by-default / rules-fallback policy).
+   *
+   * The screen can only ever save work: if it is unavailable or unsure the
+   * candidate proceeds to the full pass. A candidate is likewise never dropped
+   * solely because the fetch fell back to the RSS feed - relevance is judged on
+   * whatever content was available.
    */
-  async classify(
-    c: RawCandidate,
-  ): Promise<EnrichedItem | "drop" | "unavailable"> {
+  async classify(c: RawCandidate): Promise<LlmVerdict> {
     if (!c.title || !c.url) return "drop";
     try {
+      // Stage 1 - cheap screen. null (failed/unparseable) means proceed.
+      const screened = await this.agent.screen(c);
+      if (screened && !screened.keep) {
+        return {
+          drop: true,
+          reason: `screened out: ${screened.reason || "not intelligence"}`,
+        };
+      }
+      // Stage 2 - fetch and analyse the article.
       const out = await this.agent.triageWithFetch(c);
       if (!out.parsed) return "unavailable";
-      return out.parsed.relevant ? this.toItem(c, out) : "drop";
+      if (!out.parsed.relevant)
+        return {
+          drop: true,
+          reason: out.parsed.reason
+            ? `LLM: ${out.parsed.reason}`
+            : "LLM: not intelligence",
+        };
+      return this.toItem(c, out);
     } catch {
       return "unavailable";
     }
@@ -75,6 +95,7 @@ export class LlmEnricher implements Enricher {
     const r = await this.classify(c);
     if (r === "drop") return null;
     if (r === "unavailable") return this.fallback.enrich(c);
+    if (typeof r === "object" && "drop" in r) return null;
     return r;
   }
 }
