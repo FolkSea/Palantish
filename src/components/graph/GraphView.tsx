@@ -49,6 +49,7 @@ function nodeEl(n: GraphNode): ElementDefinition {
       description: n.description ?? null,
       source: n.source ?? null,
       date: n.date ?? null,
+      degree: n.degree ?? 0,
     },
   };
 }
@@ -88,14 +89,32 @@ export default function GraphView({
   const typesRef = useRef(types);
   typesRef.current = types;
 
+  // Ring nodes whose rendered connections are fewer than their true degree - i.e.
+  // they still have neighbours to expand (or a hub capped at first fetch).
+  function refreshHighlights() {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.nodes().forEach((n) => {
+      const total = (n.data("degree") as number) ?? 0;
+      if (total > n.degree()) n.addClass("hasmore");
+      else n.removeClass("hasmore");
+    });
+  }
+
   // Add a graph's new nodes/edges to the live cytoscape instance and re-layout.
   function addToGraph(g: GraphData) {
     const cy = cyRef.current;
     if (!cy) return;
     const add = toElements(g).filter((el) => cy.getElementById(el.data!.id as string).empty());
-    if (add.length === 0) return;
+    // Even with no new nodes, expanding may raise a node's degree past its
+    // rendered edges (or confirm it is fully expanded), so always refresh.
+    if (add.length === 0) {
+      refreshHighlights();
+      return;
+    }
     cy.add(add);
     cy.layout(LAYOUT).run();
+    refreshHighlights();
   }
 
   async function expand(id: string) {
@@ -147,6 +166,15 @@ export default function GraphView({
           { selector: 'node[type="cve"]', style: { width: 18, height: 18 } },
           { selector: 'node[type="adversary"]', style: { width: 22, height: 22 } },
           {
+            // Amber halo: this node has more connections than are drawn.
+            selector: "node.hasmore",
+            style: {
+              "underlay-color": "#f59e0b",
+              "underlay-padding": 5,
+              "underlay-opacity": 0.4,
+            },
+          },
+          {
             selector: "node:selected",
             style: { "border-width": 3, "border-color": "#1d4ed8" },
           },
@@ -191,6 +219,7 @@ export default function GraphView({
         if (evt.target === cy) setSelected(null);
       });
 
+      refreshHighlights();
       setReady(true);
     })();
     return () => {
@@ -235,6 +264,13 @@ export default function GraphView({
             </li>
           ))}
         </ul>
+        <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2 text-[10px] text-slate-500">
+          <span
+            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+            style={{ boxShadow: "0 0 0 2px rgba(245,158,11,0.4)", background: "#94a3b8" }}
+          />
+          <span>Glowing nodes have more to expand</span>
+        </div>
         <div className="mt-2 flex gap-2 border-t border-slate-100 pt-2">
           <button
             type="button"

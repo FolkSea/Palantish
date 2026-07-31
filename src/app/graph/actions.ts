@@ -262,6 +262,97 @@ async function depth2Items(
   return { nodes, edges };
 }
 
+// Rows fetched to count a node's neighbours are cheap (single column), but a
+// hub entity can link thousands of reports - cap the scan so counting stays fast.
+const DEGREE_SCAN_CAP = 5000;
+
+/**
+ * Set node.degree = the node's total connectable neighbours in the DB, so the
+ * view can ring nodes that have more to expand than are currently rendered.
+ * Batched by type: a handful of single-column scans, counted in memory.
+ */
+async function withDegrees(db: Db, nodes: GraphNode[]): Promise<void> {
+  // Entity nodes (ioc/cve/ttp): neighbours are the reports that reference them.
+  const entityNodes = nodes.filter(
+    (n) => n.value && (n.type === "ioc" || n.type === "cve" || n.type === "ttp"),
+  );
+  if (entityNodes.length) {
+    const values = [...new Set(entityNodes.map((n) => n.value as string))];
+    const { data: iocRows } = await db
+      .from("iocs")
+      .select("id, value")
+      .in("value", values);
+    const idToValue = new Map<string, string>(
+      (iocRows ?? []).map((r) => [r.id, r.value]),
+    );
+    const iocIds = (iocRows ?? []).map((r) => r.id);
+    const countByValue = new Map<string, number>();
+    if (iocIds.length) {
+      const { data } = await db
+        .from("intel_item_iocs")
+        .select("ioc_id")
+        .in("ioc_id", iocIds)
+        .limit(DEGREE_SCAN_CAP);
+      for (const r of (data ?? []) as { ioc_id: string }[]) {
+        const v = idToValue.get(r.ioc_id);
+        if (v) countByValue.set(v, (countByValue.get(v) ?? 0) + 1);
+      }
+    }
+    // CVEs also match intel_items.cve_id directly.
+    const cveValues = entityNodes
+      .filter((n) => n.type === "cve")
+      .map((n) => n.value as string);
+    if (cveValues.length) {
+      const { data } = await db
+        .from("intel_items")
+        .select("cve_id")
+        .in("cve_id", cveValues)
+        .limit(DEGREE_SCAN_CAP);
+      for (const r of (data ?? []) as { cve_id: string | null }[]) {
+        const v = r.cve_id?.toUpperCase();
+        if (v) countByValue.set(v, (countByValue.get(v) ?? 0) + 1);
+      }
+    }
+    for (const n of entityNodes) n.degree = countByValue.get(n.value as string) ?? 0;
+  }
+
+  // Adversary nodes: neighbours are the reports attributed to them.
+  const advNodes = nodes.filter((n) => n.type === "adversary");
+  if (advNodes.length) {
+    const names = [...new Set(advNodes.map((n) => parseNodeId(n.id).key))];
+    const countByName = new Map<string, number>();
+    for (const col of ["crowdstrike_adversary", "adversary_label"] as const) {
+      const { data } = await db
+        .from("intel_items")
+        .select(col)
+        .in(col, names)
+        .limit(DEGREE_SCAN_CAP);
+      for (const r of (data ?? []) as Record<string, string | null>[]) {
+        const nm = r[col];
+        if (nm) countByName.set(nm, (countByName.get(nm) ?? 0) + 1);
+      }
+    }
+    for (const n of advNodes)
+      n.degree = countByName.get(parseNodeId(n.id).key) ?? 0;
+  }
+
+  // Item nodes: neighbours are their linked IOC/CVE/TTP entities (the adversary
+  // edge is a minor undercount - it never causes a false "has more").
+  const itemNodes = nodes.filter((n) => n.type === "item");
+  if (itemNodes.length) {
+    const ids = itemNodes.map((n) => parseNodeId(n.id).key);
+    const countById = new Map<string, number>();
+    const { data } = await db
+      .from("intel_item_iocs")
+      .select("intel_item_id")
+      .in("intel_item_id", ids)
+      .limit(DEGREE_SCAN_CAP * 2);
+    for (const r of (data ?? []) as { intel_item_id: string }[])
+      countById.set(r.intel_item_id, (countById.get(r.intel_item_id) ?? 0) + 1);
+    for (const n of itemNodes) n.degree = countById.get(parseNodeId(n.id).key) ?? 0;
+  }
+}
+
 /**
  * Seed the graph on a report, two steps out: the item, its depth-1 entities
  * (IOC/CVE/TTP/adversary), and the reports that share those entities.
@@ -284,9 +375,11 @@ export async function seedGraphAction(rawHash: string): Promise<GraphResult> {
   const entityNodes = g1.nodes.filter((n) => n.type !== "item");
   const g2 = await depth2Items(db, entityNodes, hidden, item.id);
 
+  const graph = mergeGraph(g1, g2);
+  await withDegrees(db, graph.nodes);
   return {
     ok: true,
-    graph: mergeGraph(g1, g2),
+    graph,
     seedId: `item:${item.id}`,
   };
 }
@@ -313,7 +406,9 @@ export async function expandNodeAction(
       .eq("id", key)
       .maybeSingle();
     if (!item) return { ok: true, graph: { nodes: [], edges: [] } };
-    return { ok: true, graph: await itemNeighbours(db, item as unknown as ItemFull, include) };
+    const graph = await itemNeighbours(db, item as unknown as ItemFull, include);
+    await withDegrees(db, graph.nodes);
+    return { ok: true, graph };
   }
 
   // Entity node: its only neighbours are items.
@@ -327,5 +422,6 @@ export async function expandNodeAction(
     nodes.push(n);
     edges.push(edge(nodeId, n.id));
   }
+  await withDegrees(db, nodes);
   return { ok: true, graph: { nodes, edges } };
 }

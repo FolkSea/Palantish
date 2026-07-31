@@ -35,6 +35,9 @@ export type GraphNode = {
   iocSubtype?: string; // ioc only: ip | domain | uri | file_hash
   // Adversary nodes - nexus tints the node colour.
   nexus?: string | null;
+  // Total connectable neighbours in the DB. The view rings a node when its
+  // rendered connections are fewer than this (it has more to expand).
+  degree?: number;
 };
 
 export type GraphEdge = { id: string; source: string; target: string };
