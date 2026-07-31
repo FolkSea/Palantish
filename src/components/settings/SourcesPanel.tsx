@@ -35,6 +35,21 @@ function byName(a: SettingsSource, b: SettingsSource) {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
+/** Cumulative kept vs dropped counts for a feed, with the keep rate. */
+function KeepDrop({ kept, dropped }: { kept: number; dropped: number }) {
+  const total = kept + dropped;
+  if (total === 0) return <span className="text-slate-400">-</span>;
+  const pct = Math.round((kept / total) * 100);
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="font-medium text-emerald-700">{kept}</span>
+      <span className="text-slate-300">/</span>
+      <span className="text-slate-500">{dropped}</span>
+      <span className="text-[10px] text-slate-400">({pct}% kept)</span>
+    </span>
+  );
+}
+
 export function SourcesPanel({
   initialSources,
 }: {
@@ -220,13 +235,14 @@ export function SourcesPanel({
               <th className="py-1.5 pr-3 font-medium">Type</th>
               <th className="py-1.5 pr-3 font-medium">URL</th>
               <th className="py-1.5 pr-3 font-medium">Active</th>
+              <th className="py-1.5 pr-3 font-medium">Kept / Dropped</th>
               <th className="py-1.5 text-right font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr className="border-t border-slate-100">
-                <td colSpan={6} className="py-4 text-center text-slate-400">
+                <td colSpan={7} className="py-4 text-center text-slate-400">
                   No sources match the filters.
                 </td>
               </tr>
@@ -234,7 +250,7 @@ export function SourcesPanel({
             {filtered.map((s) =>
               editing === s.id ? (
                 <tr key={s.id}>
-                  <td colSpan={6} className="py-2">
+                  <td colSpan={7} className="py-2">
                     <SourceForm
                       source={s}
                       onCancel={() => setEditing(null)}
@@ -267,6 +283,9 @@ export function SourcesPanel({
                     >
                       {s.active ? "Active" : "Off"}
                     </span>
+                  </td>
+                  <td className="py-2 pr-3 whitespace-nowrap">
+                    <KeepDrop kept={s.posts_kept} dropped={s.posts_dropped} />
                   </td>
                   <td className="py-2 text-right">
                     <RowMenu

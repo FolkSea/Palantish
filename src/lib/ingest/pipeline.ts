@@ -314,6 +314,8 @@ export async function runIngest(
       kind: string;
       adversary: string | null;
     }[] = [];
+    // Per-feed keep/drop tally, accumulated into the sources table after the run.
+    const perSource = new Map<string, { kept: number; dropped: number }>();
 
     const batches = Math.ceil(fresh.length / BATCH_SIZE);
     for (let b = 0; b < batches; b++) {
@@ -333,9 +335,19 @@ export async function runIngest(
       const batch = fresh.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
 
       // Enrich this batch (concurrency 6; llm-first makes each an LLM call).
-      const enriched = (
-        await mapWithConcurrency(batch, 6, (c) => enricher.enrich(c))
-      ).filter((e): e is EnrichedItem => e !== null);
+      const enrichedNullable = await mapWithConcurrency(batch, 6, (c) =>
+        enricher.enrich(c),
+      );
+      // Per-feed keep/drop tally: a null result was dropped, else kept.
+      for (let i = 0; i < batch.length; i++) {
+        const s = perSource.get(batch[i].sourceName) ?? { kept: 0, dropped: 0 };
+        if (enrichedNullable[i]) s.kept++;
+        else s.dropped++;
+        perSource.set(batch[i].sourceName, s);
+      }
+      const enriched = enrichedNullable.filter(
+        (e): e is EnrichedItem => e !== null,
+      );
 
       const batchRows = enriched.map(buildRow);
       for (const r of batchRows)
@@ -425,6 +437,21 @@ export async function runIngest(
     ilog(
       `inserted ${added} new items; IOC extraction: ${iocLinks} links (${iocFailed} fetch failures)`,
     );
+
+    // Accumulate this run's per-feed keep/drop counts onto the sources table
+    // (atomic add, so overlapping runs never lose increments).
+    const statPayload = [...perSource.entries()]
+      .map(([name, s]) => ({
+        id: sourceIdByName.get(name) ?? null,
+        kept: s.kept,
+        dropped: s.dropped,
+      }))
+      .filter((s): s is { id: string; kept: number; dropped: number } => !!s.id);
+    if (statPayload.length > 0) {
+      const { error } = await db.rpc("bump_source_stats", { stats: statPayload });
+      if (error) errors.push(`source stats: ${error.message}`);
+      else ilog(`updated keep/drop stats for ${statPayload.length} feeds`);
+    }
 
     // Record dropped candidates for the audit view (deduped by content hash).
     if (dropped.length > 0) {

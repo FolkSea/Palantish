@@ -18,6 +18,8 @@ export type SettingsSource = {
   feed_type: FeedType;
   feed_url: string | null;
   active: boolean;
+  posts_kept: number;
+  posts_dropped: number;
 };
 
 type Tab = "account" | "sources" | "actors" | "hidden" | "dropped" | "memory";

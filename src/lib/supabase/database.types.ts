@@ -489,6 +489,8 @@ export type Database = {
           last_fetched_at: string | null
           last_item_at: string | null
           name: string
+          posts_dropped: number
+          posts_kept: number
           updated_at: string
           url: string | null
         }
@@ -503,6 +505,8 @@ export type Database = {
           last_fetched_at?: string | null
           last_item_at?: string | null
           name: string
+          posts_dropped?: number
+          posts_kept?: number
           updated_at?: string
           url?: string | null
         }
@@ -517,6 +521,8 @@ export type Database = {
           last_fetched_at?: string | null
           last_item_at?: string | null
           name?: string
+          posts_dropped?: number
+          posts_kept?: number
           updated_at?: string
           url?: string | null
         }
@@ -527,6 +533,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      bump_source_stats: { Args: { stats: Json }; Returns: undefined }
       is_allowed_user: { Args: never; Returns: boolean }
     }
     Enums: {

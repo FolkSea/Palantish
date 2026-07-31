@@ -21,7 +21,9 @@ export default async function SettingsPage() {
 
   const { data: sources } = await supabase
     .from("sources")
-    .select("id, name, url, category, feed_type, feed_url, active")
+    .select(
+      "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped",
+    )
     .order("name");
 
   const { data: actors } = await supabase

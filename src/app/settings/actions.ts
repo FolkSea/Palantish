@@ -34,6 +34,8 @@ export type SourceResult = {
     feed_type: FeedType;
     feed_url: string | null;
     active: boolean;
+    posts_kept: number;
+    posts_dropped: number;
   };
 };
 
@@ -72,7 +74,8 @@ function normalise(input: SourceInput) {
   };
 }
 
-const SELECT = "id, name, url, category, feed_type, feed_url, active";
+const SELECT =
+  "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped";
 
 export async function addSource(input: SourceInput): Promise<SourceResult> {
   const unauth = await requireAllowed();
