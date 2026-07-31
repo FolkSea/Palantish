@@ -14,10 +14,11 @@ import { serverEnv } from "@/lib/env";
 export function selectEnricher(
   extraGroups: GroupEntry[] = [],
   report?: EnrichReport,
+  memoryBrief = "",
 ): Enricher {
   const key = serverEnv.anthropicApiKey;
   return new HybridEnricher(
-    key ? new LlmEnricher(key, extraGroups) : null,
+    key ? new LlmEnricher(key, extraGroups, memoryBrief) : null,
     extraGroups,
     report,
   );

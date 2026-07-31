@@ -6,6 +6,7 @@ import { SourcesPanel } from "./SourcesPanel";
 import { HiddenPanel, type HiddenPost } from "./HiddenPanel";
 import { ActorsPanel } from "./ActorsPanel";
 import { DroppedPanel, type DroppedItem } from "./DroppedPanel";
+import { AgentMemoryPanel, type AgentMemoryNote } from "./AgentMemoryPanel";
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
 import type { ActorRecord } from "@/lib/actor-catalogue";
 
@@ -19,7 +20,7 @@ export type SettingsSource = {
   active: boolean;
 };
 
-type Tab = "account" | "sources" | "actors" | "hidden" | "dropped";
+type Tab = "account" | "sources" | "actors" | "hidden" | "dropped" | "memory";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "account", label: "Account", hint: "Display name and password" },
@@ -27,6 +28,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "actors", label: "Actors", hint: "Threat actor catalogue" },
   { id: "hidden", label: "Hidden posts", hint: "Unhide posts you hid" },
   { id: "dropped", label: "Dropped", hint: "Review filtered-out candidates" },
+  { id: "memory", label: "Agent memory", hint: "What the analyst agent knows" },
 ];
 
 export function SettingsView({
@@ -37,6 +39,7 @@ export function SettingsView({
   actors,
   hidden,
   dropped,
+  memory,
 }: {
   email: string;
   displayName: string;
@@ -45,6 +48,7 @@ export function SettingsView({
   actors: ActorRecord[];
   hidden: HiddenPost[];
   dropped: DroppedItem[];
+  memory: AgentMemoryNote[];
 }) {
   const [tab, setTab] = useState<Tab>("account");
 
@@ -88,8 +92,10 @@ export function SettingsView({
           <ActorsPanel initialActors={actors} />
         ) : tab === "hidden" ? (
           <HiddenPanel initialHidden={hidden} />
-        ) : (
+        ) : tab === "dropped" ? (
           <DroppedPanel initial={dropped} />
+        ) : (
+          <AgentMemoryPanel notes={memory} />
         )}
       </div>
     </div>

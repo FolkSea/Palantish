@@ -13,6 +13,13 @@ import {
   sortGroups,
 } from "./enrich/rules";
 import { updateFeedHealth } from "./feed-health";
+import { serverEnv } from "@/lib/env";
+import { AnalystAgent } from "@/lib/agent/analyst";
+import {
+  loadMemoryBrief,
+  readMemory,
+  upsertMemoryNotes,
+} from "@/lib/agent/memory";
 import { ilog } from "./log";
 import { fetchArticleText } from "./scrape";
 import { indicatorRows, linkIocsToItem } from "./iocs";
@@ -218,7 +225,9 @@ export async function runIngest(
           `${r.itemType ? ` [${r.itemType}]` : ""}: ${r.title.slice(0, 90)}`,
       );
     };
-    const enricher = selectEnricher(adversaryGroups, report);
+    // The analyst agent's accumulated knowledge, injected into every triage.
+    const memoryBrief = await loadMemoryBrief(db);
+    const enricher = selectEnricher(adversaryGroups, report, memoryBrief);
     const enrichedNullable = await mapWithConcurrency(fresh, 6, (c) =>
       enricher.enrich(c),
     );
@@ -388,6 +397,30 @@ export async function runIngest(
       ilog(
         `IOC extraction done: ${iocLinks} links across ${withUrl.length} reports (${iocFailed} fetch failures)`,
       );
+    }
+
+    // The analyst reflects on this run's kept reports and updates its long-term
+    // memory of adversaries and trends, so future triage/summaries build on it.
+    // Runs before the summary so the summary sees the freshest memory. Non-fatal.
+    const apiKey = serverEnv.anthropicApiKey;
+    if (apiKey && intelRows.length > 0) {
+      ilog("analyst reflecting on the run (updating memory)...");
+      try {
+        const agent = new AnalystAgent(apiKey, memoryBrief);
+        const existing = (await readMemory(db)).map((n) => n.subject);
+        const reports = intelRows.slice(0, 80).map((r) => ({
+          title: r.title,
+          kind: r.kind ?? "other",
+          adversary: r.crowdstrike_adversary ?? r.adversary_label ?? null,
+        }));
+        const updates = await agent.reflect(reports, existing);
+        const n = await upsertMemoryNotes(db, updates);
+        ilog(`analyst memory: ${n} notes written/updated`);
+      } catch (err) {
+        errors.push(
+          `memory: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
 
     // Recalculate the executive summary on every completed run so it always

@@ -112,6 +112,39 @@ export type Database = {
         }
         Relationships: []
       }
+      analyst_memory: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          kind: string
+          last_seen: string
+          mentions: number
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          kind: string
+          last_seen?: string
+          mentions?: number
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          last_seen?: string
+          mentions?: number
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       deleted_items: {
         Row: {
           deleted_at: string

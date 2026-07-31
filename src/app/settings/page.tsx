@@ -48,6 +48,20 @@ export default async function SettingsPage() {
     droppedAt: d.created_at,
   }));
 
+  // The analyst agent's memory (adversary knowledge + tracked trends).
+  const { data: memoryRows } = await supabase
+    .from("analyst_memory")
+    .select("kind, subject, content, mentions, last_seen")
+    .order("last_seen", { ascending: false })
+    .limit(500);
+  const memory = (memoryRows ?? []).map((m) => ({
+    kind: m.kind as "adversary" | "trend",
+    subject: m.subject,
+    content: m.content,
+    mentions: m.mentions,
+    lastSeen: m.last_seen,
+  }));
+
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ?? "";
   const focus = ((user?.user_metadata?.focus as string | undefined) ??
@@ -121,6 +135,7 @@ export default async function SettingsPage() {
         actors={(actors ?? []) as ActorRecord[]}
         hidden={hidden}
         dropped={dropped}
+        memory={memory}
       />
     </div>
   );
