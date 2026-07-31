@@ -19,6 +19,7 @@ import {
   updateReportCountryAction,
   updateReportConfidenceAction,
   updateReportNoteAction,
+  updateReportLabelsAction,
   getAttributionOptionsAction,
 } from "@/app/actions";
 import { EditableIocList } from "./EditableIocList";
@@ -248,9 +249,20 @@ export function ReportModal({
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   }
 
-  // Analyst notes (markdown), loaded with the indicators below.
+  // User-defined labels + analyst notes (markdown), loaded with the indicators
+  // below.
+  const [labels, setLabels] = useState<string[]>([]);
   const [analystComments, setAnalystComments] = useState<string | null>(null);
   const [visibilityGaps, setVisibilityGaps] = useState<string | null>(null);
+
+  async function saveLabels(
+    value: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!rawHash) return { ok: false, error: "This report cannot be edited." };
+    const res = await updateReportLabelsAction(rawHash, value);
+    if (res.ok) setLabels(res.labels);
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
+  }
 
   async function saveAnalystComments(
     value: string,
@@ -279,6 +291,7 @@ export function ReportModal({
     if (!rawHash) {
       setStored(null);
       setKind(null);
+      setLabels([]);
       setAnalystComments(null);
       setVisibilityGaps(null);
       return;
@@ -290,6 +303,7 @@ export function ReportModal({
       if (active && r.ok) {
         setStored(r.indicators);
         setKind(r.kind);
+        setLabels(r.labels);
         setAnalystComments(r.notes.analystComments);
         setVisibilityGaps(r.notes.visibilityGaps);
       }
@@ -520,6 +534,14 @@ export function ReportModal({
               ) : (
                 <Empty>No summary available.</Empty>
               )}
+            </CollapsibleCard>
+
+            <CollapsibleCard title="Labels" count={labels.length}>
+              <LabelEditor
+                labels={labels}
+                editable={iocsEditable}
+                onSave={saveLabels}
+              />
             </CollapsibleCard>
 
             <CollapsibleCard title="Analyst Comments">
@@ -1253,6 +1275,128 @@ function EditableConfidence({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <p className="text-[12px] italic text-slate-400">{children}</p>;
+}
+
+/**
+ * User-defined labels for a report. Displays the stored labels as chips and,
+ * when editable, offers a comma-separated text box: text entered is split on
+ * commas into individual labels, which are persisted and linked to the report.
+ */
+function LabelEditor({
+  labels,
+  editable,
+  onSave,
+}: {
+  labels: string[];
+  editable: boolean;
+  onSave: (value: string) => Promise<{ ok: boolean; error?: string }>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(labels.join(", "));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Keep the draft in sync when labels load/change while not editing.
+  useEffect(() => {
+    if (!editing) setDraft(labels.join(", "));
+  }, [labels, editing]);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const res = await onSave(draft);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error ?? "Save failed.");
+      return;
+    }
+    setEditing(false);
+  }
+
+  function cancel() {
+    setEditing(false);
+    setDraft(labels.join(", "));
+    setError(null);
+  }
+
+  if (editing) {
+    return (
+      <div>
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            } else if (e.key === "Escape") {
+              cancel();
+            }
+          }}
+          placeholder="Comma-separated, e.g. ransomware, finance, priority"
+          className="w-full rounded border border-slate-300 px-2 py-1.5 text-[12px] text-slate-800 outline-none focus:border-slate-400"
+        />
+        <div className="mt-1 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={save}
+            disabled={busy}
+            className="rounded px-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={cancel}
+            className="rounded px-1 text-[11px] text-slate-500 hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          <span className="text-[10px] text-slate-400">
+            Separate labels with commas.
+          </span>
+          {error ? (
+            <span className="text-[10px] text-red-600">{error}</span>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {labels.length ? (
+        <div className="flex flex-wrap gap-1">
+          {labels.map((l) => (
+            <span
+              key={l}
+              className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700"
+            >
+              {l}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <Empty>No labels yet.</Empty>
+      )}
+      {editable ? (
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(labels.join(", "));
+            setEditing(true);
+          }}
+          className="mt-1 rounded px-1 text-[11px] font-medium text-[#1d4ed8] hover:bg-slate-100"
+        >
+          {labels.length ? "Edit" : "Add"}
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 /**

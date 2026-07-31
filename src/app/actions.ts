@@ -315,7 +315,13 @@ export async function getReportIndicatorsAction(
 ): Promise<
   // `kind` is "intel" when the rawHash resolves to a report (all reports are
   // intel_items rows now, and every one is editable), null when it does not.
-  | { ok: true; indicators: Indicators; kind: "intel" | null; notes: ReportNotes }
+  | {
+      ok: true;
+      indicators: Indicators;
+      kind: "intel" | null;
+      notes: ReportNotes;
+      labels: string[];
+    }
   | { ok: false; error: string }
 > {
   const empty: Indicators = {
@@ -328,7 +334,7 @@ export async function getReportIndicatorsAction(
   };
   const noNotes: ReportNotes = { analystComments: null, visibilityGaps: null };
   if (!rawHash)
-    return { ok: true, indicators: empty, kind: null, notes: noNotes };
+    return { ok: true, indicators: empty, kind: null, notes: noNotes, labels: [] };
 
   const supabase = await createClient();
   const {
@@ -344,11 +350,27 @@ export async function getReportIndicatorsAction(
     .eq("raw_hash", rawHash)
     .maybeSingle();
   if (!item.data)
-    return { ok: true, indicators: empty, kind: null, notes: noNotes };
+    return { ok: true, indicators: empty, kind: null, notes: noNotes, labels: [] };
   const notes: ReportNotes = {
     analystComments: item.data.analyst_comments,
     visibilityGaps: item.data.visibility_gaps,
   };
+
+  // User-defined labels linked to this report (deduped, alphabetical).
+  const labelLinks = await supabase
+    .from("intel_item_labels")
+    .select("label_id")
+    .eq("intel_item_id", item.data.id);
+  const labelIds = (labelLinks.data ?? []).map((r) => r.label_id);
+  let labels: string[] = [];
+  if (labelIds.length) {
+    const lr = await supabase
+      .from("labels")
+      .select("name")
+      .in("id", labelIds)
+      .order("name");
+    labels = (lr.data ?? []).map((r) => r.name);
+  }
 
   const links = await supabase
     .from("intel_item_iocs")
@@ -356,7 +378,7 @@ export async function getReportIndicatorsAction(
     .eq("intel_item_id", item.data.id);
   const iocIds = (links.data ?? []).map((r) => r.ioc_id);
   if (iocIds.length === 0)
-    return { ok: true, indicators: empty, kind: "intel", notes };
+    return { ok: true, indicators: empty, kind: "intel", notes, labels };
 
   const iocsRes = await supabase
     .from("iocs")
@@ -380,7 +402,7 @@ export async function getReportIndicatorsAction(
     else if (ioc.ioc_type === "cve") grouped.cves.push(ioc.value);
     else if (ioc.ioc_type === "mitre") grouped.mitre.push(ioc.value);
   }
-  return { ok: true, indicators: grouped, kind: "intel", notes };
+  return { ok: true, indicators: grouped, kind: "intel", notes, labels };
 }
 
 /** Delete an ioc's link to a report (and the ioc row if it becomes orphaned),
@@ -794,6 +816,81 @@ export async function updateReportNoteAction(
   if (error) return { ok: false, error: error.message };
   revalidatePath("/");
   return { ok: true };
+}
+
+/**
+ * Replace a report's user-defined labels with the comma-separated set entered in
+ * the modal. Each label is trimmed and deduped case-insensitively; new labels
+ * are added to the shared `labels` table (find-or-create) and linked to the
+ * report, and links no longer present are removed. Returns the stored labels.
+ */
+export async function updateReportLabelsAction(
+  rawHash: string,
+  input: string,
+): Promise<{ ok: true; labels: string[] } | { ok: false; error: string }> {
+  if (!rawHash) return { ok: false, error: "Missing report." };
+  const unauth = await ensureAllowed();
+  if (unauth) return { ok: false, error: unauth };
+
+  const db = createAdminClient();
+  const item = await resolveReport(db, rawHash);
+  if (!item) return { ok: false, error: "Report not found." };
+
+  // Parse the comma-separated field: trim, drop empties, dedup case-insensitively
+  // while keeping the first spelling seen.
+  const seen = new Map<string, string>();
+  for (const raw of input.split(",")) {
+    const name = raw.trim().replace(/\s+/g, " ");
+    if (name && !seen.has(name.toLowerCase())) seen.set(name.toLowerCase(), name);
+  }
+  const names = [...seen.values()];
+
+  // Find-or-create each label, collecting its id.
+  const labelIds: string[] = [];
+  for (const name of names) {
+    const existing = await db
+      .from("labels")
+      .select("id")
+      .ilike("name", name)
+      .maybeSingle();
+    if (existing.data) {
+      labelIds.push(existing.data.id);
+      continue;
+    }
+    const inserted = await db
+      .from("labels")
+      .insert({ name })
+      .select("id")
+      .single();
+    if (inserted.error) {
+      // A concurrent insert may have won the unique(lower(name)) race; re-read.
+      const again = await db
+        .from("labels")
+        .select("id")
+        .ilike("name", name)
+        .maybeSingle();
+      if (again.data) labelIds.push(again.data.id);
+      else return { ok: false, error: inserted.error.message };
+    } else {
+      labelIds.push(inserted.data.id);
+    }
+  }
+
+  // Replace the report's links with the new set: clear then re-link.
+  const del = await db
+    .from("intel_item_labels")
+    .delete()
+    .eq("intel_item_id", item.id);
+  if (del.error) return { ok: false, error: del.error.message };
+  if (labelIds.length) {
+    const ins = await db.from("intel_item_labels").insert(
+      labelIds.map((label_id) => ({ intel_item_id: item.id, label_id })),
+    );
+    if (ins.error) return { ok: false, error: ins.error.message };
+  }
+
+  revalidatePath("/");
+  return { ok: true, labels: names.sort((a, b) => a.localeCompare(b)) };
 }
 
 /* --- MITRE ATT&CK discovery ------------------------------------------------ */

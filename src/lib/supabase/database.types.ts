@@ -250,6 +250,39 @@ export type Database = {
           },
         ]
       }
+      intel_item_labels: {
+        Row: {
+          created_at: string
+          intel_item_id: string
+          label_id: string
+        }
+        Insert: {
+          created_at?: string
+          intel_item_id: string
+          label_id: string
+        }
+        Update: {
+          created_at?: string
+          intel_item_id?: string
+          label_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intel_item_labels_intel_item_id_fkey"
+            columns: ["intel_item_id"]
+            isOneToOne: false
+            referencedRelation: "intel_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "intel_item_labels_label_id_fkey"
+            columns: ["label_id"]
+            isOneToOne: false
+            referencedRelation: "labels"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       intel_items: {
         Row: {
           adversary_label: string | null
@@ -360,6 +393,24 @@ export type Database = {
           ioc_type?: string
           updated_at?: string
           value?: string
+        }
+        Relationships: []
+      }
+      labels: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
         }
         Relationships: []
       }
