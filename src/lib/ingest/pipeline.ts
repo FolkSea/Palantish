@@ -92,9 +92,17 @@ export type IngestResult = {
  * service role, and record a refresh_runs row. Never throws for feed/LLM
  * problems; only a hard failure (e.g. DB unreachable) marks the run "error".
  */
+// Soft wall-clock budget for a single run. Serverless invocations are capped at
+// 5 minutes; under llm-first a big backlog cannot finish in one go, so the run
+// stops starting new batches past this budget, finalises cleanly (summary /
+// memory / run status), and leaves the remainder for the next trigger or cron
+// (dedup skips what was already inserted). Override with INGEST_RUN_BUDGET_MS.
+const RUN_BUDGET_MS = Number(process.env.INGEST_RUN_BUDGET_MS) || 230000;
+
 export async function runIngest(
   options?: { sourceIds?: string[] },
 ): Promise<IngestResult> {
+  const runStartMs = Date.now();
   const db = createAdminClient();
   const errors: string[] = [];
 
@@ -309,6 +317,19 @@ export async function runIngest(
 
     const batches = Math.ceil(fresh.length / BATCH_SIZE);
     for (let b = 0; b < batches; b++) {
+      // Stop starting new batches once the budget is spent (but always do at
+      // least one). The unprocessed candidates are simply picked up next run.
+      if (b > 0 && Date.now() - runStartMs > RUN_BUDGET_MS) {
+        errors.push(
+          `time budget reached: ${b} of ${batches} batches processed, ` +
+            `${fresh.length - b * BATCH_SIZE} candidates deferred to the next run`,
+        );
+        ilog(
+          `run budget reached after ${b}/${batches} batches; ${added} added, ` +
+            `deferring the rest to the next run`,
+        );
+        break;
+      }
       const batch = fresh.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
 
       // Enrich this batch (concurrency 6; llm-first makes each an LLM call).

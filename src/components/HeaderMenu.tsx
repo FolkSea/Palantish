@@ -47,11 +47,13 @@ export function HeaderMenu() {
         res.ok
           ? {
               kind: "ok",
-              text: `Feeds refreshed${
-                typeof res.itemsAdded === "number"
-                  ? ` - ${res.itemsAdded} new item${res.itemsAdded === 1 ? "" : "s"}`
-                  : ""
-              }.`,
+              text: res.started
+                ? "Refresh started - new items will appear as they are processed. Reload to see progress."
+                : `Feeds refreshed${
+                    typeof res.itemsAdded === "number"
+                      ? ` - ${res.itemsAdded} new item${res.itemsAdded === 1 ? "" : "s"}`
+                      : ""
+                  }.`,
             }
           : { kind: "err", text: res.error ?? "Refresh failed." },
       );

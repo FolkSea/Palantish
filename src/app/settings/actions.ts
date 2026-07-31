@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { toAscii } from "@/lib/text";
@@ -134,6 +135,9 @@ export type IngestActionResult = {
   error?: string;
   itemsAdded?: number;
   errors?: string[];
+  // True when the run was started in the background (a full refresh) rather than
+  // awaited to completion (a single-source update).
+  started?: boolean;
 };
 
 async function triggerIngest(
@@ -160,9 +164,28 @@ async function triggerIngest(
   }
 }
 
-/** Force a full ingest of all active feeds. */
+/**
+ * Force a full ingest of all active feeds. A full run can take minutes (an LLM
+ * call per new item under llm-first), so it runs *after* the response is sent
+ * rather than blocking the request - otherwise the browser waits on a request
+ * that is killed at the function limit and surfaces as a page-load error.
+ * Progress is persisted in batches and appears on the dashboard as it runs; the
+ * run self-limits to the time budget and the rest is picked up on the next
+ * trigger (or the cron).
+ */
 export async function ingestAllSources(): Promise<IngestActionResult> {
-  return triggerIngest();
+  const unauth = await requireAllowed();
+  if (unauth) return { ok: false, error: unauth };
+  after(async () => {
+    try {
+      await runIngest();
+      revalidatePath("/");
+      revalidatePath("/settings");
+    } catch {
+      // Non-fatal here: the run records its own errors in refresh_runs.
+    }
+  });
+  return { ok: true, started: true };
 }
 
 /** Ingest a single feed on demand (the row "Update" action). */
