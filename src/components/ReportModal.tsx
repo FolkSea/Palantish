@@ -532,14 +532,41 @@ export function ReportModal({
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
               Report details
             </span>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
-            >
-              Close
-            </button>
+            <div className="flex items-center gap-2">
+              {rawHash ? (
+                <a
+                  href={`/graph?seed=${encodeURIComponent(rawHash)}`}
+                  title="Open this report in the link-analysis graph"
+                  className="inline-flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] font-medium text-[#1d4ed8] hover:bg-slate-50"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="5" cy="6" r="2.5" />
+                    <circle cx="19" cy="6" r="2.5" />
+                    <circle cx="12" cy="18" r="2.5" />
+                    <path d="M7 7.5 10.5 16M17 7.5 13.5 16" />
+                  </svg>
+                  Graph
+                </a>
+              ) : null}
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
+              >
+                Close
+              </button>
+            </div>
           </div>
           <div className="flex-1 space-y-2 overflow-y-auto p-3 text-[13px]">
             <CollapsibleCard title="Summary">
