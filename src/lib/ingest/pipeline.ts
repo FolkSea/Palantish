@@ -9,6 +9,7 @@ import { buildGroupsFromAdversaries } from "./adversaries";
 import {
   computeAdversaryLabel,
   hasHacktivismKeyword,
+  isVulnAdvisory,
   sortGroups,
 } from "./enrich/rules";
 import { updateFeedHealth } from "./feed-health";
@@ -25,6 +26,8 @@ import type { Database } from "@/lib/supabase/database.types";
 type IntelInsert = Database["public"]["Tables"]["intel_items"]["Insert"];
 
 const CVE_RE = /\bCVE-\d{4}-\d{3,7}\b/i;
+// PoC/exploit-code signal used to grade a promoted advisory (poc vs confirmed).
+const POC_RE = /\b(proof.?of.?concept|\bpoc\b|exploit code|proof-of-concept)\b/i;
 
 /** Report kind: which dashboard section an item belongs to. */
 export type ReportKind = "research" | "breach" | "exploit" | "other";
@@ -291,12 +294,13 @@ export async function runIngest(
       url: string | null;
       title: string;
       description: string | null;
+      kind: string;
     }[] = [];
     if (intelRows.length > 0) {
       const { data, error } = await db
         .from("intel_items")
         .upsert(intelRows, { onConflict: "raw_hash", ignoreDuplicates: true })
-        .select("id, url, title, description");
+        .select("id, url, title, description, kind");
       if (error) errors.push(`intel_items insert: ${error.message}`);
       else {
         insertedIntel = data ?? [];
@@ -354,6 +358,29 @@ export async function runIngest(
           );
           const rows = indicatorRows(indicators);
           if (rows.length > 0) iocLinks += await linkIocsToItem(db, item.id, rows);
+
+          // A vulnerability advisory whose CVE only appears in the body (not the
+          // title/description the classifier saw) lands in "other". Now that the
+          // body has been read and a real CVE extracted, move it to the Exploits
+          // section. Only unattributed "other" items are promoted.
+          if (
+            item.kind === "other" &&
+            isVulnAdvisory(item.title) &&
+            indicators.cves.length > 0
+          ) {
+            const text = `${item.title} ${item.description ?? ""} ${body}`;
+            await db
+              .from("intel_items")
+              .update({
+                kind: "exploit",
+                item_type: "vuln",
+                cve_id: indicators.cves[0].toUpperCase(),
+                target: item.title.slice(0, 200),
+                exploit_status: POC_RE.test(text) ? "poc" : "confirmed",
+                confidence: null,
+              })
+              .eq("id", item.id);
+          }
         } catch {
           iocFailed++;
         }

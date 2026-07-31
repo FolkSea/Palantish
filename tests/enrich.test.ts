@@ -4,6 +4,7 @@ import {
   deriveAdversaryFromText,
   computeAdversaryLabel,
   classifyItemType,
+  isVulnAdvisory,
   type GroupEntry,
 } from "@/lib/ingest/enrich/rules";
 import { catalogueGroups } from "./helpers/catalogue";
@@ -219,6 +220,28 @@ describe("deriveAdversaryFromText", () => {
 
   it("returns null when nothing matches", () => {
     expect(deriveAdversaryFromText("Ordinary security update", null, groups)).toBeNull();
+  });
+});
+
+describe("isVulnAdvisory", () => {
+  it("recognises vulnerability advisory titles (English + French)", () => {
+    for (const t of [
+      "2026-007: Critical Vulnerability in Windows Netlogon",
+      "Multiple vulnerabilities in Ivanti Sentry",
+      "Cisco ACI Multi-Site CloudSec Information Disclosure Vulnerability",
+      "Multiples vulnerabilites dans les produits VMware (30 juillet 2026)",
+      "Vulnerabilite dans Apache Tomcat (29 juillet 2026)",
+    ])
+      expect(isVulnAdvisory(t)).toBe(true);
+  });
+
+  it("does not match unrelated titles", () => {
+    for (const t of [
+      "SilverFox Targets Japanese Manufacturer with BYOVD Chain",
+      "Weekly security roundup",
+      "ShinyHunters claims Brinks Home breach",
+    ])
+      expect(isVulnAdvisory(t)).toBe(false);
   });
 });
 

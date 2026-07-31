@@ -128,6 +128,18 @@ export function hasHacktivismKeyword(text: string): boolean {
   return HACKTIVISM_RE.test(text);
 }
 
+// A vulnerability advisory / bulletin: the subject (title) is about a
+// vulnerability, e.g. "2026-007: Critical Vulnerability in Windows Netlogon",
+// "Multiple vulnerabilities in Ivanti Sentry", or French "Vulnerabilite dans
+// ...". Matched on the title only (the subject), so a research post that merely
+// mentions a vulnerability in its body is not swept up.
+const VULN_ADVISORY_RE = /\bvulnerabilit(?:y|ies|es?)\b/i;
+
+/** True when the title reads as a vulnerability advisory/bulletin. */
+export function isVulnAdvisory(title: string): boolean {
+  return VULN_ADVISORY_RE.test(title);
+}
+
 export function classifyItemType(
   c: RawCandidate,
   group: GroupEntry | null,

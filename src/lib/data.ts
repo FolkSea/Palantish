@@ -108,16 +108,19 @@ async function loadLabelsById(
   const map: LabelsById = new Map();
   const unique = [...new Set(ids)];
   if (unique.length === 0) return map;
-  const { data } = await supabase
-    .from("intel_item_labels")
-    .select("intel_item_id, labels(name)")
-    .in("intel_item_id", unique);
-  for (const row of data ?? []) {
-    const name = (row.labels as { name: string } | null)?.name;
-    if (!name) continue;
-    const arr = map.get(row.intel_item_id);
-    if (arr) arr.push(name);
-    else map.set(row.intel_item_id, [name]);
+  // Small batches: many UUIDs in a GET .in() filter would overflow the URI.
+  for (let i = 0; i < unique.length; i += 100) {
+    const { data } = await supabase
+      .from("intel_item_labels")
+      .select("intel_item_id, labels(name)")
+      .in("intel_item_id", unique.slice(i, i + 100));
+    for (const row of data ?? []) {
+      const name = (row.labels as { name: string } | null)?.name;
+      if (!name) continue;
+      const arr = map.get(row.intel_item_id);
+      if (arr) arr.push(name);
+      else map.set(row.intel_item_id, [name]);
+    }
   }
   for (const [id, names] of map)
     map.set(id, names.sort((a, b) => a.localeCompare(b)));
