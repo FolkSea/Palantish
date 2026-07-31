@@ -21,6 +21,7 @@ export function selectEnricher(
     key ? new LlmEnricher(key, extraGroups, memoryBrief) : null,
     extraGroups,
     report,
+    serverEnv.enrichStrategy,
   );
 }
 

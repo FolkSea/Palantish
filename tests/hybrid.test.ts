@@ -89,3 +89,68 @@ describe("HybridEnricher (rules-first)", () => {
     expect(out?.itemType).toBe("report");
   });
 });
+
+describe("HybridEnricher (llm-first)", () => {
+  const llmItem = (over: Partial<EnrichedItem> = {}): EnrichedItem => ({
+    title: "x",
+    description: null,
+    url: "u",
+    publishedAt: new Date(),
+    nexus: "russia",
+    itemType: "actor_activity",
+    confidence: "suspected",
+    crowdstrikeAdversary: null,
+    sourceName: "s",
+    rawHash: "h",
+    ...over,
+  });
+
+  it("uses the LLM verdict for every item, even one the rules would classify", async () => {
+    const item = llmItem();
+    const spy = vi.fn(async () => item);
+    const h = new HybridEnricher({ classify: spy }, groups, undefined, "llm-first");
+    // A candidate the rules would confidently classify still goes to the LLM.
+    const out = await h.enrich(
+      candidate({ title: "Volt Typhoon targets critical infrastructure" }),
+    );
+    expect(spy).toHaveBeenCalledOnce();
+    expect(out).toBe(item);
+  });
+
+  it("honours an LLM drop", async () => {
+    const h = new HybridEnricher(
+      { classify: vi.fn(async () => "drop" as const) },
+      groups,
+      undefined,
+      "llm-first",
+    );
+    expect(await h.enrich(candidate({ title: "Anything" }))).toBeNull();
+  });
+
+  it("falls back to the rules when the LLM is unavailable", async () => {
+    const h = new HybridEnricher(
+      { classify: vi.fn(async () => "unavailable" as const) },
+      groups,
+      undefined,
+      "llm-first",
+    );
+    // Rules drop clear marketing...
+    expect(
+      await h.enrich(candidate({ title: "Register now for our product webinar" })),
+    ).toBeNull();
+    // ...and keep a confident actor match.
+    const kept = await h.enrich(
+      candidate({ title: "Volt Typhoon targets critical infrastructure" }),
+    );
+    expect(kept?.itemType).toBe("actor_activity");
+    expect(kept?.nexus).toBe("china");
+  });
+
+  it("canonicalises the LLM adversary name against the catalogue", async () => {
+    const spy = vi.fn(async () => llmItem({ crowdstrikeAdversary: "Volt Typhoon" }));
+    const h = new HybridEnricher({ classify: spy }, groups, undefined, "llm-first");
+    const out = await h.enrich(candidate({ title: "Some report" }));
+    // "Volt Typhoon" is a catalogue alias of VANGUARD PANDA.
+    expect(out?.crowdstrikeAdversary).toBe("VANGUARD PANDA");
+  });
+});

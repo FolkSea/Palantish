@@ -48,6 +48,16 @@ export const serverEnv = {
   get anthropicApiKey(): string | undefined {
     return process.env.ANTHROPIC_API_KEY || undefined;
   },
+  /**
+   * Which classifier leads during ingest. Defaults to "llm-first" (the LLM
+   * classifies every item, rules fall back); set ENRICH_STRATEGY=rules-first to
+   * revert to the cheaper rules-first behaviour.
+   */
+  get enrichStrategy(): "rules-first" | "llm-first" {
+    return process.env.ENRICH_STRATEGY === "rules-first"
+      ? "rules-first"
+      : "llm-first";
+  },
   get searchApiKey(): string | undefined {
     return process.env.SEARCH_API_KEY || undefined;
   },
