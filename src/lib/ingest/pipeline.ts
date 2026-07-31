@@ -228,22 +228,24 @@ export async function runIngest(
     // The analyst agent's accumulated knowledge, injected into every triage.
     const memoryBrief = await loadMemoryBrief(db);
     const enricher = selectEnricher(adversaryGroups, report, memoryBrief);
-    const enrichedNullable = await mapWithConcurrency(fresh, 6, (c) =>
-      enricher.enrich(c),
-    );
-    const enriched = enrichedNullable.filter(
-      (e): e is EnrichedItem => e !== null,
-    );
-    ilog(
-      `enrichment done: rules kept ${tally.rulesKeep}, rules dropped ${tally.rulesDrop}, ` +
-        `LLM kept ${tally.llmKeep}, LLM dropped ${tally.llmDrop}`,
-    );
+    // Process in batches so progress persists incrementally: each batch is
+    // enriched, inserted, and IOC-populated before the next begins. If the run
+    // is killed (the serverless path is capped at 5 min), everything already
+    // inserted is kept instead of the whole run being lost - important under
+    // llm-first, where every item costs an LLM call. Items also appear on the
+    // dashboard as the run progresses.
+    const BATCH_SIZE = 25;
 
-    // Build rows -------------------------------------------------------------
-    // Every report is an intel_items row, discriminated by `kind`.
-    const intelRows: IntelInsert[] = [];
+    // A source's own domain is never an IOC; compute the exclusion set once.
+    const sourceDomains = new Set<string>();
+    for (const s of sources ?? []) {
+      for (const d of [sourceDomain(s.url), sourceDomain(s.feed_url)]) {
+        if (d) sourceDomains.add(d);
+      }
+    }
 
-    for (const item of enriched) {
+    // Build one intel_items row from an enriched item (attribution + kind).
+    const buildRow = (item: EnrichedItem): IntelInsert => {
       const publishedDate = item.publishedAt.toISOString().slice(0, 10);
       const sourceId = sourceIdByName.get(item.sourceName) ?? null;
 
@@ -265,7 +267,7 @@ export async function runIngest(
       const kind = kindFor(item, motivation !== null, !!cveMatch);
       const isExploit = kind === "exploit";
 
-      intelRows.push({
+      return {
         kind,
         motivation,
         country,
@@ -292,32 +294,116 @@ export async function runIngest(
         source_id: sourceId,
         item_type: item.itemType,
         raw_hash: item.rawHash,
-      });
-    }
+      };
+    };
 
-    ilog(`inserting: ${intelRows.length} reports`);
     let added = 0;
-    // Newly-inserted reports, for IOC extraction below.
-    let insertedIntel: {
-      id: string;
-      url: string | null;
+    let iocLinks = 0;
+    let iocFailed = 0;
+    // Lightweight per-report facts for the analyst's end-of-run reflection.
+    const reflectionInputs: {
       title: string;
-      description: string | null;
       kind: string;
+      adversary: string | null;
     }[] = [];
-    if (intelRows.length > 0) {
-      const { data, error } = await db
-        .from("intel_items")
-        .upsert(intelRows, { onConflict: "raw_hash", ignoreDuplicates: true })
-        .select("id, url, title, description, kind");
-      if (error) errors.push(`intel_items insert: ${error.message}`);
-      else {
-        insertedIntel = data ?? [];
-        added += insertedIntel.length;
+
+    const batches = Math.ceil(fresh.length / BATCH_SIZE);
+    for (let b = 0; b < batches; b++) {
+      const batch = fresh.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
+
+      // Enrich this batch (concurrency 6; llm-first makes each an LLM call).
+      const enriched = (
+        await mapWithConcurrency(batch, 6, (c) => enricher.enrich(c))
+      ).filter((e): e is EnrichedItem => e !== null);
+
+      const batchRows = enriched.map(buildRow);
+      for (const r of batchRows)
+        reflectionInputs.push({
+          title: r.title,
+          kind: r.kind ?? "other",
+          adversary: r.crowdstrike_adversary ?? r.adversary_label ?? null,
+        });
+
+      // Insert this batch before moving on, so progress survives a timeout.
+      let insertedIntel: {
+        id: string;
+        url: string | null;
+        title: string;
+        description: string | null;
+        kind: string;
+      }[] = [];
+      if (batchRows.length > 0) {
+        const { data, error } = await db
+          .from("intel_items")
+          .upsert(batchRows, { onConflict: "raw_hash", ignoreDuplicates: true })
+          .select("id, url, title, description, kind");
+        if (error) errors.push(`intel_items insert: ${error.message}`);
+        else {
+          insertedIntel = data ?? [];
+          added += insertedIntel.length;
+        }
       }
+
+      // Populate IOCs for this batch's new reports (fetch body, extract, link),
+      // and promote a body-only-CVE vulnerability advisory to the Exploits
+      // section. Per-item failures are non-fatal (the report just has no IOCs).
+      const withUrl = insertedIntel.filter((i) => i.url);
+      if (withUrl.length > 0) {
+        await mapWithConcurrency(withUrl, 4, async (item) => {
+          try {
+            const body = await fetchArticleText(item.url as string);
+            const exclude = new Set(sourceDomains);
+            const own = sourceDomain(item.url);
+            if (own) exclude.add(own);
+            const indicators = extractIndicators(
+              `${item.title} ${item.description ?? ""} ${body}`,
+              exclude,
+            );
+            const rows = indicatorRows(indicators);
+            if (rows.length > 0)
+              iocLinks += await linkIocsToItem(db, item.id, rows);
+
+            // A vulnerability advisory whose CVE only appears in the body (not
+            // the title/description the classifier saw) lands in "other". Now
+            // that the body has been read and a real CVE extracted, move it to
+            // the Exploits section. Only unattributed "other" items are promoted.
+            if (
+              item.kind === "other" &&
+              isVulnAdvisory(item.title) &&
+              indicators.cves.length > 0
+            ) {
+              const text = `${item.title} ${item.description ?? ""} ${body}`;
+              await db
+                .from("intel_items")
+                .update({
+                  kind: "exploit",
+                  item_type: "vuln",
+                  cve_id: indicators.cves[0].toUpperCase(),
+                  target: item.title.slice(0, 200),
+                  exploit_status: POC_RE.test(text) ? "poc" : "confirmed",
+                  confidence: null,
+                })
+                .eq("id", item.id);
+            }
+          } catch {
+            iocFailed++;
+          }
+        });
+      }
+
+      ilog(
+        `batch ${b + 1}/${batches}: +${insertedIntel.length} inserted ` +
+          `(running total ${added} of ${fresh.length})`,
+      );
     }
 
-    ilog(`inserted ${added} new items`);
+    ilog(
+      `enrichment done: rules kept ${tally.rulesKeep}, rules dropped ${tally.rulesDrop}, ` +
+        `LLM kept ${tally.llmKeep}, LLM dropped ${tally.llmDrop}`,
+    );
+    ilog(
+      `inserted ${added} new items; IOC extraction: ${iocLinks} links (${iocFailed} fetch failures)`,
+    );
 
     // Record dropped candidates for the audit view (deduped by content hash).
     if (dropped.length > 0) {
@@ -338,82 +424,16 @@ export async function runIngest(
       else ilog(`recorded ${droppedRows.length} dropped candidates`);
     }
 
-    // Populate IOCs for the new reports: fetch each article body, extract
-    // indicators (IP / domain / URI / file hash), and link them so they are
-    // stored and searchable without anyone opening the report. Bounded
-    // concurrency; per-item failures are non-fatal (the report just has no IOCs).
-    const withUrl = insertedIntel.filter((i) => i.url);
-    if (withUrl.length > 0) {
-      // Known blog/source domains, so a source's own domain is never an IOC.
-      const sourceDomains = new Set<string>();
-      for (const s of sources ?? []) {
-        for (const d of [sourceDomain(s.url), sourceDomain(s.feed_url)]) {
-          if (d) sourceDomains.add(d);
-        }
-      }
-      ilog(`extracting IOCs for ${withUrl.length} new reports...`);
-      let iocLinks = 0;
-      let iocFailed = 0;
-      await mapWithConcurrency(withUrl, 4, async (item) => {
-        try {
-          const body = await fetchArticleText(item.url as string);
-          // Exclude the whole source catalogue plus this report's own domain.
-          const exclude = new Set(sourceDomains);
-          const own = sourceDomain(item.url);
-          if (own) exclude.add(own);
-          const indicators = extractIndicators(
-            `${item.title} ${item.description ?? ""} ${body}`,
-            exclude,
-          );
-          const rows = indicatorRows(indicators);
-          if (rows.length > 0) iocLinks += await linkIocsToItem(db, item.id, rows);
-
-          // A vulnerability advisory whose CVE only appears in the body (not the
-          // title/description the classifier saw) lands in "other". Now that the
-          // body has been read and a real CVE extracted, move it to the Exploits
-          // section. Only unattributed "other" items are promoted.
-          if (
-            item.kind === "other" &&
-            isVulnAdvisory(item.title) &&
-            indicators.cves.length > 0
-          ) {
-            const text = `${item.title} ${item.description ?? ""} ${body}`;
-            await db
-              .from("intel_items")
-              .update({
-                kind: "exploit",
-                item_type: "vuln",
-                cve_id: indicators.cves[0].toUpperCase(),
-                target: item.title.slice(0, 200),
-                exploit_status: POC_RE.test(text) ? "poc" : "confirmed",
-                confidence: null,
-              })
-              .eq("id", item.id);
-          }
-        } catch {
-          iocFailed++;
-        }
-      });
-      ilog(
-        `IOC extraction done: ${iocLinks} links across ${withUrl.length} reports (${iocFailed} fetch failures)`,
-      );
-    }
-
     // The analyst reflects on this run's kept reports and updates its long-term
     // memory of adversaries and trends, so future triage/summaries build on it.
     // Runs before the summary so the summary sees the freshest memory. Non-fatal.
     const apiKey = serverEnv.anthropicApiKey;
-    if (apiKey && intelRows.length > 0) {
+    if (apiKey && reflectionInputs.length > 0) {
       ilog("analyst reflecting on the run (updating memory)...");
       try {
         const agent = new AnalystAgent(apiKey, memoryBrief);
         const existing = (await readMemory(db)).map((n) => n.subject);
-        const reports = intelRows.slice(0, 80).map((r) => ({
-          title: r.title,
-          kind: r.kind ?? "other",
-          adversary: r.crowdstrike_adversary ?? r.adversary_label ?? null,
-        }));
-        const updates = await agent.reflect(reports, existing);
+        const updates = await agent.reflect(reflectionInputs.slice(0, 80), existing);
         const n = await upsertMemoryNotes(db, updates);
         ilog(`analyst memory: ${n} notes written/updated`);
       } catch (err) {
@@ -444,7 +464,7 @@ export async function runIngest(
         log: JSON.stringify({
           candidates: allCandidates.length,
           fresh: fresh.length,
-          enriched: enriched.length,
+          enriched: reflectionInputs.length,
           added,
           enricher: enricher.name,
           errors: errors.slice(0, 50),
