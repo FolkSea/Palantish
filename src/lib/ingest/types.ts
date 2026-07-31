@@ -31,6 +31,16 @@ export type EnrichedItem = {
   rawHash: string;
   // Taxonomy labels the triage agent assigned (Prefix/Value); [] from the rules.
   labels: string[];
+  // Web-fetch triage extras (only set by the LLM enricher; undefined from rules).
+  // The dashboard section the LLM chose, its report summary, ATT&CK techniques,
+  // the raw structured indicators + the fetched page text (for pipeline-side IOC
+  // reconciliation), and how retrieval went (drives retrieval_status / review).
+  dashboardKind?: "research" | "breach" | "exploit" | "other";
+  summary?: string | null;
+  mitreTechniques?: string[];
+  llmIndicators?: import("@/lib/agent/web-triage").LlmIndicators;
+  fetchedText?: string | null;
+  fetchStatus?: import("@/lib/agent/web-triage").FetchStatus;
 };
 
 /**

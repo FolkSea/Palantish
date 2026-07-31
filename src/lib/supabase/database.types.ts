@@ -334,6 +334,8 @@ export type Database = {
           motivation: string | null
           published_at: string
           raw_hash: string
+          report_summary: string | null
+          retrieval_status: string | null
           source_id: string | null
           source_name: string | null
           target: string | null
@@ -359,6 +361,8 @@ export type Database = {
           motivation?: string | null
           published_at: string
           raw_hash: string
+          report_summary?: string | null
+          retrieval_status?: string | null
           source_id?: string | null
           source_name?: string | null
           target?: string | null
@@ -384,6 +388,8 @@ export type Database = {
           motivation?: string | null
           published_at?: string
           raw_hash?: string
+          report_summary?: string | null
+          retrieval_status?: string | null
           source_id?: string | null
           source_name?: string | null
           target?: string | null

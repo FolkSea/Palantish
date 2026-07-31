@@ -13,7 +13,10 @@ export type Indicators = {
 
 // File extensions that mark a token as a filename rather than a domain.
 const FILE_EXT =
-  "exe|dll|sys|ps1|bat|cmd|vbs|js|jse|wsf|hta|scr|lnk|jar|apk|dmg|iso|img|bin|msi|doc|docx|xls|xlsx|ppt|pptx|pdf|rtf|zip|rar|7z|gz|tar|py|sh|elf|so|tmp|dat|macho";
+  "exe|dll|sys|ps1|bat|cmd|vbs|js|jse|wsf|hta|scr|lnk|jar|apk|dmg|iso|img|bin|msi|doc|docx|xls|xlsx|ppt|pptx|pdf|rtf|zip|rar|7z|gz|tar|py|sh|elf|so|tmp|dat|macho|" +
+  // Web-asset extensions: image/style/font filenames on a scraped page must not
+  // be mistaken for domains (e.g. photo.jpg, index.html).
+  "jpg|jpeg|png|gif|webp|svg|ico|css|html|htm|woff|woff2|ttf|otf";
 
 const URI_RE = /\bhttps?:\/\/[^\s"'<>()\]]+/gi;
 const IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
@@ -21,6 +24,23 @@ const DOMAIN_RE = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi
 // Match SHA256 (64) / SHA1 (40) / MD5 (32) hex hashes, longest first.
 const HASH_RE = /\b(?:[a-f0-9]{64}|[a-f0-9]{40}|[a-f0-9]{32})\b/gi;
 const EXT_ONLY_RE = new RegExp(`^(?:${FILE_EXT})$`, "i");
+
+// Code identifiers in malware write-ups look like domains to DOMAIN_RE
+// (window.fetch, console.log, exec.command, os.path). Reject a token whose
+// last label is a common method/property name, or whose first label is a
+// well-known namespace object - neither is ever a real TLD/domain.
+const CODE_TAIL_RE =
+  /^(?:log|error|warn|info|debug|trace|fetch|then|catch|push|pop|map|filter|join|split|slice|call|apply|bind|exec|spawn|run|send|write|read|open|close|start|stop|create|delete|update|get|post|put|head|command|commands|argv|env|path|json|stringify|parse|test|match|replace|trim|length|name|value|data|type|id|url|href|src|innerhtml|textcontent|prototype|constructor|tostring|valueof|now|random|floor|round|ceil|min|max|abs|keys|values|entries|assign|freeze|target|origin|host|hostname|search|hash|body|title|status|headers|params|query|state|props|self|this|default|module|exports|require|import|main|init|setup|config|options|args|result|response|request|client|server|session|token|key|secret|user|admin|root|local|remote|temp|tmp|cache|buffer|stream|file|dir|folder|list|item|items|count|total|sum|avg|first|last|next|prev|current|active|enabled|disabled|visible|hidden|open_|close_)$/i;
+const CODE_HEAD_RE =
+  /^(?:window|document|console|process|os|sys|math|json|object|array|string|number|boolean|date|regexp|promise|map|set|error|exec|child_process|subprocess|shutil|urllib|requests|axios|fs|path|http|https|net|crypto|util|events|stream|buffer|assert|zlib|querystring|readline|cluster|worker|navigator|location|history|screen|localstorage|sessionstorage|globalthis|module|exports|require|this|self|super|new|typeof|instanceof)$/i;
+
+/** Whether a domain-shaped token is really a code identifier (window.fetch). */
+function isCodeIdentifier(domain: string): boolean {
+  const labels = domain.split(".");
+  if (labels.length < 2) return false;
+  if (CODE_HEAD_RE.test(labels[0])) return true;
+  return CODE_TAIL_RE.test(labels[labels.length - 1]);
+}
 const MITRE_RE = /\bT\d{4}(?:\.\d{3})?\b/g;
 const CVE_RE = /\bCVE-\d{4}-\d{4,7}\b/gi;
 
@@ -48,7 +68,7 @@ function uniq(arr: string[]): string[] {
 function matchAll(text: string, re: RegExp): string[] {
   return text.match(re) ?? [];
 }
-function validIpv4(ip: string): boolean {
+export function validIpv4(ip: string): boolean {
   const parts = ip.split(".");
   return (
     parts.length === 4 &&
@@ -219,10 +239,14 @@ export function extractIndicators(
   const domains = uniq(
     matchAll(t, DOMAIN_RE)
       .map((d) => d.toLowerCase())
+      // A percent-encoded slash in a share link leaves a "2f"-prefixed label
+      // (...%2Funit42.example -> 2funit42.example); recover the real domain.
+      .map((d) => d.replace(/^2f/, ""))
       .filter(
         (d) =>
           !ipSet.has(d) &&
           !isFileExt(d) &&
+          !isCodeIdentifier(d) &&
           !uriHosts.has(d) &&
           !isExcludedDomain(d, excluded),
       ),
@@ -255,13 +279,33 @@ const HASH_FULL_RE = /^(?:[a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i;
 const CVE_FULL_RE = /^CVE-\d{4}-\d{4,7}$/i;
 const MITRE_FULL_RE = /^T\d{4}(?:\.\d{3})?$/i;
 
-/** Whether `value` is a valid indicator of the given ioc_type. */
+// Full-match IPv6 (canonical, incl. ::-compression and IPv4-mapped tails).
+const IPV6_FULL_RE =
+  /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|::(ffff(:0{1,4})?:)?((25[0-5]|(2[0-4]|1?[0-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1?[0-9])?[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1?[0-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1?[0-9])?[0-9]))$/;
+/** A valid IPv6 address (must contain a colon so an IPv4 never matches). */
+export function validIpv6(value: string): boolean {
+  const v = (value ?? "").trim();
+  return v.includes(":") && IPV6_FULL_RE.test(v);
+}
+
+/** IPv6 addresses that are never a reportable IOC: unspecified (::), loopback
+ * (::1), link-local (fe80::/10), and unique-local (fc00::/7). */
+export function isNonRoutableIpv6(value: string): boolean {
+  const v = (value ?? "").trim().toLowerCase();
+  if (v === "::" || v === "::1") return true;
+  if (/^fe[89ab][0-9a-f]?:/.test(v)) return true; // fe80::/10
+  if (/^f[cd][0-9a-f]{2}:/.test(v)) return true; // fc00::/7
+  return false;
+}
+
+/** Whether `value` is a valid indicator of the given ioc_type. IPv6 is stored
+ * under ioc_type "ip" (there is no separate column), so "ip" accepts both. */
 export function validIndicator(value: string, type: string): boolean {
   const v = value.trim();
   if (!v) return false;
   switch (type) {
     case "ip":
-      return validIpv4(v);
+      return validIpv4(v) || validIpv6(v);
     case "domain":
       return DOMAIN_FULL_RE.test(v);
     case "uri":

@@ -26,6 +26,7 @@ import { ilog } from "./log";
 import { fetchArticleText } from "./scrape";
 import { indicatorRows, linkIocsToItem } from "./iocs";
 import { linkLabelsToItem } from "./labels";
+import { reconcileIndicators } from "@/lib/agent/ioc-validate";
 import { loadIocAllowlist } from "./allowlist";
 import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
@@ -281,8 +282,13 @@ export async function runIngest(
       }
 
       const cveMatch = `${item.title} ${item.description ?? ""}`.match(CVE_RE);
-      const kind = kindFor(item, motivation !== null, !!cveMatch);
-      const isExploit = kind === "exploit";
+      let kind = kindFor(item, motivation !== null, !!cveMatch);
+      // Prefer the LLM's chosen section when it is more specific than "other" and
+      // does not contradict the CVE-driven exploit rule (exploit needs a CVE).
+      const llmKind = item.dashboardKind;
+      if (llmKind && llmKind !== "exploit" && kind === "other") kind = llmKind;
+      if (llmKind === "exploit" && cveMatch) kind = "exploit";
+      const isExploit = kind === "exploit" && !!cveMatch;
 
       return {
         kind,
@@ -318,6 +324,11 @@ export async function runIngest(
         source_id: sourceId,
         item_type: item.itemType,
         raw_hash: item.rawHash,
+        // How the body was retrieved for analysis (web fetch vs feed/scrape),
+        // and the LLM's summary of the fetched article. Refined post-insert for
+        // items that fall back to the app-side scraper.
+        retrieval_status: item.fetchStatus ?? null,
+        report_summary: item.summary ?? null,
       };
     };
 
@@ -381,6 +392,11 @@ export async function runIngest(
       const labelsByHash = new Map<string, string[]>(
         enriched.filter((e) => e.labels.length).map((e) => [e.rawHash, e.labels]),
       );
+      // Map raw_hash to the enriched item so the IOC step can prefer the IOCs
+      // Claude already extracted from the web-fetched article.
+      const enrichedByHash = new Map<string, EnrichedItem>(
+        enriched.map((e) => [e.rawHash, e]),
+      );
 
       // Insert this batch before moving on, so progress survives a timeout.
       let insertedIntel: {
@@ -419,56 +435,88 @@ export async function runIngest(
         }
       }
 
-      // Populate IOCs for this batch's new reports (fetch body, extract, link),
-      // and promote a body-only-CVE vulnerability advisory to the Exploits
-      // section. Per-item failures are non-fatal (the report just has no IOCs).
-      const withUrl = insertedIntel.filter((i) => i.url);
-      if (withUrl.length > 0) {
-        await mapWithConcurrency(withUrl, 4, async (item) => {
+      // Populate IOCs. Prefer the indicators Claude already extracted from the
+      // web-fetched article (validated + reconciled against the fetched text
+      // here). Only reports whose body was NOT fetched full fall back to the
+      // app-side scraper (+ reader proxy) - so each retrieval method runs at most
+      // once. Per-item failures are non-fatal (the report just has no IOCs).
+      await mapWithConcurrency(insertedIntel, 4, async (item) => {
+        const src = enrichedByHash.get(item.raw_hash);
+        const exclude = new Set(sourceDomains);
+        const own = sourceDomain(item.url);
+        if (own) exclude.add(own);
+
+        // Web-fetch path: reconcile Claude's IOCs with the fetched text.
+        if (src?.fetchStatus === "full" && src.llmIndicators) {
           try {
-            const body = await fetchArticleText(item.url as string);
-            const exclude = new Set(sourceDomains);
-            const own = sourceDomain(item.url);
-            if (own) exclude.add(own);
-            const indicators = extractIndicators(
-              `${item.title} ${item.description ?? ""} ${body}`,
-              exclude,
-              allowIps,
+            const rows = reconcileIndicators(
+              src.llmIndicators,
+              src.mitreTechniques ?? [],
+              src.fetchedText ?? null,
+              { excludeDomains: exclude, excludeIps: allowIps },
             );
-            const rows = indicatorRows(indicators);
             if (rows.length > 0)
               iocLinks += await linkIocsToItem(db, item.id, rows);
-
-            // A vulnerability advisory whose CVE only appears in the body (not
-            // the title/description the classifier saw) lands in "other". Now
-            // that the body has been read and a real CVE extracted, move it to
-            // the Exploits section. Only unattributed "other" items are promoted.
-            if (
-              item.kind === "other" &&
-              isVulnAdvisory(item.title) &&
-              indicators.cves.length > 0
-            ) {
-              const text = `${item.title} ${item.description ?? ""} ${body}`;
-              await db
-                .from("intel_items")
-                .update({
-                  kind: "exploit",
-                  item_type: "vuln",
-                  cve_id: indicators.cves[0].toUpperCase(),
-                  target: item.title.slice(0, 200),
-                  exploit_status: classifyExploitStatus(
-                    text,
-                    sourceCategoryByName.get(item.source_name ?? ""),
-                  ),
-                  confidence: null,
-                })
-                .eq("id", item.id);
-            }
           } catch {
             iocFailed++;
           }
-        });
-      }
+          return; // web fetch already retrieved the body - do not also scrape
+        }
+
+        // Fallback path: app-side scraper for feed-only / rules items.
+        if (!item.url) return;
+        try {
+          const body = await fetchArticleText(item.url);
+          const indicators = extractIndicators(
+            `${item.title} ${item.description ?? ""} ${body}`,
+            exclude,
+            allowIps,
+          );
+          const rows = indicatorRows(indicators);
+          if (rows.length > 0)
+            iocLinks += await linkIocsToItem(db, item.id, rows);
+          // The scraper retrieved the body: mark feed_only (needs review) unless
+          // triage already recorded a status.
+          await db
+            .from("intel_items")
+            .update({ retrieval_status: "feed_only" })
+            .eq("id", item.id)
+            .is("retrieval_status", null);
+
+          // A vulnerability advisory whose CVE only appears in the body (not the
+          // title/description the classifier saw) lands in "other". Now that the
+          // body has been read and a real CVE extracted, move it to the Exploits
+          // section. Only unattributed "other" items are promoted.
+          if (
+            item.kind === "other" &&
+            isVulnAdvisory(item.title) &&
+            indicators.cves.length > 0
+          ) {
+            const text = `${item.title} ${item.description ?? ""} ${body}`;
+            await db
+              .from("intel_items")
+              .update({
+                kind: "exploit",
+                item_type: "vuln",
+                cve_id: indicators.cves[0].toUpperCase(),
+                target: item.title.slice(0, 200),
+                exploit_status: classifyExploitStatus(
+                  text,
+                  sourceCategoryByName.get(item.source_name ?? ""),
+                ),
+                confidence: null,
+              })
+              .eq("id", item.id);
+          }
+        } catch {
+          iocFailed++;
+          await db
+            .from("intel_items")
+            .update({ retrieval_status: "failed" })
+            .eq("id", item.id)
+            .is("retrieval_status", null);
+        }
+      });
 
       ilog(
         `batch ${b + 1}/${batches}: +${insertedIntel.length} inserted ` +

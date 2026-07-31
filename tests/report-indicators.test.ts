@@ -55,6 +55,21 @@ describe("extractIndicators", () => {
     expect(i.ips).not.toContain("999.1.1.1");
   });
 
+  it("does not treat web-asset filenames as domains", () => {
+    const i = extractIndicators("shows photo.jpeg, hero-image.png and index.html");
+    expect(i.domains).toHaveLength(0);
+  });
+
+  it("does not treat code identifiers in snippets as domains", () => {
+    const i = extractIndicators(
+      "The loader calls window.fetch and console.log, then exec.command " +
+        "and os.path before beaconing to updates.malwarehost.net",
+    );
+    expect(i.domains).toContain("updates.malwarehost.net"); // the real IOC
+    for (const noise of ["window.fetch", "console.log", "exec.command", "os.path"])
+      expect(i.domains).not.toContain(noise);
+  });
+
   it("excludes benign web/social domains and the given source domains", () => {
     const text =
       "Follow us on twitter.com. Reported by securelist.com. " +

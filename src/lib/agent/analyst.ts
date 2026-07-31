@@ -5,6 +5,17 @@ import type { Nexus, Confidence } from "@/lib/badges";
 import type { ItemType, RawCandidate } from "@/lib/ingest/types";
 import { parseReflection, type MemoryUpdate } from "./memory";
 import { parseLabels } from "./labels";
+import {
+  WEB_TRIAGE_INSTRUCTIONS,
+  allowedDomainsFor,
+  buildTriageUserMessage,
+  parseFetchOutcome,
+  parseWebTriage,
+  textOfBlocks,
+  webFetchTool,
+  type FetchStatus,
+  type WebTriageOutcome,
+} from "./web-triage";
 
 // Per-item triage is high-volume/low-complexity, so it defaults to a small fast
 // model; the summary and the reflection are lower-volume/higher-judgement, so
@@ -12,6 +23,12 @@ import { parseLabels } from "./labels";
 const TRIAGE_MODEL_DEFAULT = "claude-haiku-4-5";
 const SUMMARY_MODEL_DEFAULT = "claude-sonnet-5";
 const REFLECT_MODEL_DEFAULT = "claude-sonnet-5";
+// Web-fetch triage reads and analyses the full article, so it defaults to a
+// stronger model; overridable via ANTHROPIC_MODEL. The content cap bounds tokens
+// spent on an unexpectedly large page or PDF.
+const WEB_TRIAGE_MODEL_DEFAULT = "claude-sonnet-5";
+const WEB_FETCH_MAX_CONTENT_TOKENS =
+  Number(process.env.WEB_FETCH_MAX_CONTENT_TOKENS) || 8000;
 // Per-call timeout so one slow request never stalls a worker (see LlmEnricher).
 const REQUEST_TIMEOUT_MS = Number(process.env.INGEST_LLM_TIMEOUT_MS) || 20000;
 
@@ -158,6 +175,72 @@ Description: ${c.description ?? ""}`,
       ],
     });
     return this.parseTriage(textOf(message));
+  }
+
+  /**
+   * Triage a candidate by having Claude fetch the report URL with the server
+   * web_fetch tool and analyse the article, returning validated JSON. The fetch
+   * outcome (full / feed_only / failed) is decided from the actual tool-result
+   * blocks - never the model's own claim. Bounded by max_content_tokens and the
+   * host allow-list; resumes a server-tool pause_turn. Returns a failed outcome
+   * (parsed=null) on any error so callers can fall back to rules/RSS.
+   */
+  async triageWithFetch(c: RawCandidate): Promise<WebTriageOutcome> {
+    const model = process.env.ANTHROPIC_MODEL || WEB_TRIAGE_MODEL_DEFAULT;
+    const tool = webFetchTool(model, {
+      allowedDomains: allowedDomainsFor(c.url),
+      maxContentTokens: WEB_FETCH_MAX_CONTENT_TOKENS,
+    });
+    const params = {
+      // Generous budget: the enhanced tool runs several fetch/filter rounds with
+      // thinking before the final JSON, and a truncated turn yields no text block
+      // at all (which would look like an unparseable response).
+      model,
+      max_tokens: 8000,
+      system: this.system(WEB_TRIAGE_INSTRUCTIONS, true),
+      tools: [tool],
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const create = (this.client as any).messages.create.bind(this.client.messages);
+    // Web fetch + analysis is slower than plain triage; give it a longer budget.
+    const options = { timeout: REQUEST_TIMEOUT_MS * 4 };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let content: any[] = [];
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages: any[] = [
+        { role: "user", content: buildTriageUserMessage(c) },
+      ];
+      let msg = await create({ ...params, messages }, options);
+      // Resume the server-tool sampling loop if it paused (bounded).
+      let guard = 0;
+      while (msg.stop_reason === "pause_turn" && guard++ < 4) {
+        messages.push({ role: "assistant", content: msg.content });
+        msg = await create({ ...params, messages }, options);
+      }
+      content = msg.content ?? [];
+    } catch {
+      return { parsed: null, fetchStatus: "failed", fetchedText: null, fetchedUrl: null };
+    }
+
+    const outcome = parseFetchOutcome(content);
+    const parsed = parseWebTriage(textOfBlocks(content));
+    if (!parsed)
+      return {
+        parsed: null,
+        fetchStatus: "failed",
+        fetchedText: outcome.text,
+        fetchedUrl: outcome.fetchedUrl,
+      };
+    // fetchStatus reflects the real web_fetch result, not the model's claim.
+    const fetchStatus: FetchStatus = outcome.succeeded ? "full" : "feed_only";
+    return {
+      parsed: { ...parsed, fetchStatus },
+      fetchStatus,
+      fetchedText: outcome.succeeded ? outcome.text : null,
+      fetchedUrl: outcome.fetchedUrl,
+    };
   }
 
   /** Write the executive summary from the aggregates; empty on failure. */
