@@ -267,11 +267,18 @@ async function depth2Items(
 const DEGREE_SCAN_CAP = 5000;
 
 /**
- * Set node.degree = the node's total connectable neighbours in the DB, so the
- * view can ring nodes that have more to expand than are currently rendered.
- * Batched by type: a handful of single-column scans, counted in memory.
+ * Set node.degree = the count of *distinct, non-hidden neighbour nodes* the node
+ * could ever expand into - deliberately the same set expansion produces, so a
+ * fully-opened node's rendered edges reach its degree and its halo clears. We
+ * count distinct nodes (deduping a CVE reachable via both intel_item_iocs and
+ * cve_id, and duplicate ioc rows sharing a value) and drop hidden reports.
+ * Batched by type: a handful of scans, deduped into sets in memory.
  */
-async function withDegrees(db: Db, nodes: GraphNode[]): Promise<void> {
+async function withDegrees(
+  db: Db,
+  nodes: GraphNode[],
+  hidden: Set<string>,
+): Promise<void> {
   // Entity nodes (ioc/cve/ttp): neighbours are the reports that reference them.
   const entityNodes = nodes.filter(
     (n) => n.value && (n.type === "ioc" || n.type === "cve" || n.type === "ttp"),
@@ -286,70 +293,95 @@ async function withDegrees(db: Db, nodes: GraphNode[]): Promise<void> {
       (iocRows ?? []).map((r) => [r.id, r.value]),
     );
     const iocIds = (iocRows ?? []).map((r) => r.id);
-    const countByValue = new Map<string, number>();
+    // value -> set of distinct non-hidden item ids referencing it.
+    const itemsByValue = new Map<string, Set<string>>();
+    const add = (value: string | undefined, id: string, rawHash: string) => {
+      if (!value || hidden.has(rawHash)) return;
+      (itemsByValue.get(value) ?? itemsByValue.set(value, new Set()).get(value)!).add(id);
+    };
     if (iocIds.length) {
       const { data } = await db
         .from("intel_item_iocs")
-        .select("ioc_id")
+        .select("ioc_id, intel_items(id, raw_hash)")
         .in("ioc_id", iocIds)
         .limit(DEGREE_SCAN_CAP);
-      for (const r of (data ?? []) as { ioc_id: string }[]) {
-        const v = idToValue.get(r.ioc_id);
-        if (v) countByValue.set(v, (countByValue.get(v) ?? 0) + 1);
+      for (const r of (data ?? []) as unknown as {
+        ioc_id: string;
+        intel_items: { id: string; raw_hash: string } | null;
+      }[]) {
+        if (r.intel_items)
+          add(idToValue.get(r.ioc_id), r.intel_items.id, r.intel_items.raw_hash);
       }
     }
-    // CVEs also match intel_items.cve_id directly.
+    // CVEs also match intel_items.cve_id directly (same node, so dedupe by id).
     const cveValues = entityNodes
       .filter((n) => n.type === "cve")
       .map((n) => n.value as string);
     if (cveValues.length) {
       const { data } = await db
         .from("intel_items")
-        .select("cve_id")
+        .select("id, raw_hash, cve_id")
         .in("cve_id", cveValues)
         .limit(DEGREE_SCAN_CAP);
-      for (const r of (data ?? []) as { cve_id: string | null }[]) {
-        const v = r.cve_id?.toUpperCase();
-        if (v) countByValue.set(v, (countByValue.get(v) ?? 0) + 1);
-      }
+      for (const r of (data ?? []) as {
+        id: string;
+        raw_hash: string;
+        cve_id: string | null;
+      }[])
+        add(r.cve_id?.toUpperCase(), r.id, r.raw_hash);
     }
-    for (const n of entityNodes) n.degree = countByValue.get(n.value as string) ?? 0;
+    for (const n of entityNodes)
+      n.degree = itemsByValue.get(n.value as string)?.size ?? 0;
   }
 
   // Adversary nodes: neighbours are the reports attributed to them.
   const advNodes = nodes.filter((n) => n.type === "adversary");
   if (advNodes.length) {
     const names = [...new Set(advNodes.map((n) => parseNodeId(n.id).key))];
-    const countByName = new Map<string, number>();
+    const itemsByName = new Map<string, Set<string>>();
     for (const col of ["crowdstrike_adversary", "adversary_label"] as const) {
       const { data } = await db
         .from("intel_items")
-        .select(col)
+        .select(`id, raw_hash, ${col}`)
         .in(col, names)
         .limit(DEGREE_SCAN_CAP);
       for (const r of (data ?? []) as Record<string, string | null>[]) {
         const nm = r[col];
-        if (nm) countByName.set(nm, (countByName.get(nm) ?? 0) + 1);
+        if (nm && r.raw_hash && !hidden.has(r.raw_hash))
+          (itemsByName.get(nm) ?? itemsByName.set(nm, new Set()).get(nm)!).add(
+            r.id as string,
+          );
       }
     }
     for (const n of advNodes)
-      n.degree = countByName.get(parseNodeId(n.id).key) ?? 0;
+      n.degree = itemsByName.get(parseNodeId(n.id).key)?.size ?? 0;
   }
 
-  // Item nodes: neighbours are their linked IOC/CVE/TTP entities (the adversary
-  // edge is a minor undercount - it never causes a false "has more").
+  // Item nodes: neighbours are their distinct linked IOC/CVE/TTP entity nodes.
+  // (The always-rendered cve_id/adversary edges are omitted here - they never
+  // cause a false "has more" because rendered edges then meet or exceed degree.)
   const itemNodes = nodes.filter((n) => n.type === "item");
   if (itemNodes.length) {
     const ids = itemNodes.map((n) => parseNodeId(n.id).key);
-    const countById = new Map<string, number>();
+    const entitiesByItem = new Map<string, Set<string>>();
     const { data } = await db
       .from("intel_item_iocs")
-      .select("intel_item_id")
+      .select("intel_item_id, iocs(value, ioc_type)")
       .in("intel_item_id", ids)
       .limit(DEGREE_SCAN_CAP * 2);
-    for (const r of (data ?? []) as { intel_item_id: string }[])
-      countById.set(r.intel_item_id, (countById.get(r.intel_item_id) ?? 0) + 1);
-    for (const n of itemNodes) n.degree = countById.get(parseNodeId(n.id).key) ?? 0;
+    for (const r of (data ?? []) as unknown as {
+      intel_item_id: string;
+      iocs: { value: string; ioc_type: string } | null;
+    }[]) {
+      if (!r.iocs?.value) continue;
+      const nodeId = iocNode(r.iocs.value, r.iocs.ioc_type).id;
+      (
+        entitiesByItem.get(r.intel_item_id) ??
+        entitiesByItem.set(r.intel_item_id, new Set()).get(r.intel_item_id)!
+      ).add(nodeId);
+    }
+    for (const n of itemNodes)
+      n.degree = entitiesByItem.get(parseNodeId(n.id).key)?.size ?? 0;
   }
 }
 
@@ -376,7 +408,7 @@ export async function seedGraphAction(rawHash: string): Promise<GraphResult> {
   const g2 = await depth2Items(db, entityNodes, hidden, item.id);
 
   const graph = mergeGraph(g1, g2);
-  await withDegrees(db, graph.nodes);
+  await withDegrees(db, graph.nodes, hidden);
   return {
     ok: true,
     graph,
@@ -398,6 +430,7 @@ export async function expandNodeAction(
     includeTypes.length ? includeTypes : GRAPH_NODE_TYPES,
   );
   const { type, key } = parseNodeId(nodeId);
+  const hidden = await hiddenHashes(db);
 
   if (type === "item") {
     const { data: item } = await db
@@ -407,13 +440,12 @@ export async function expandNodeAction(
       .maybeSingle();
     if (!item) return { ok: true, graph: { nodes: [], edges: [] } };
     const graph = await itemNeighbours(db, item as unknown as ItemFull, include);
-    await withDegrees(db, graph.nodes);
+    await withDegrees(db, graph.nodes, hidden);
     return { ok: true, graph };
   }
 
   // Entity node: its only neighbours are items.
   if (!include.has("item")) return { ok: true, graph: { nodes: [], edges: [] } };
-  const hidden = await hiddenHashes(db);
   const items = await entityItems(db, type, key, hidden);
   const nodes: GraphNode[] = [];
   const edges = [];
@@ -422,6 +454,6 @@ export async function expandNodeAction(
     nodes.push(n);
     edges.push(edge(nodeId, n.id));
   }
-  await withDegrees(db, nodes);
+  await withDegrees(db, nodes, hidden);
   return { ok: true, graph: { nodes, edges } };
 }
