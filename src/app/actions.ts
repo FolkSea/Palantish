@@ -22,6 +22,7 @@ import {
   type Indicators,
 } from "@/lib/report-indicators";
 import { indicatorRows, linkIocsToItem, type IocRow } from "@/lib/ingest/iocs";
+import { loadIocAllowlist } from "@/lib/ingest/allowlist";
 import { familyForAnimal } from "@/lib/ingest/adversaries";
 import { discoverTechniques } from "@/lib/mitre/discover";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
@@ -330,6 +331,9 @@ export async function getReportIndicatorsAction(
       notes: ReportNotes;
       labels: string[];
       attribution: ReportAttribution;
+      // The IOC allowlist, so the modal's fallback extraction (for reports with
+      // no stored IOCs) drops the same vendor domains / noise IPs as ingest.
+      allowlist: { domains: string[]; ips: string[] };
     }
   | { ok: false; error: string }
 > {
@@ -347,6 +351,7 @@ export async function getReportIndicatorsAction(
     country: null,
     confidence: null,
   };
+  const noAllow = { domains: [], ips: [] };
   if (!rawHash)
     return {
       ok: true,
@@ -355,6 +360,7 @@ export async function getReportIndicatorsAction(
       notes: noNotes,
       labels: [],
       attribution: noAttr,
+      allowlist: noAllow,
     };
 
   const supabase = await createClient();
@@ -364,6 +370,7 @@ export async function getReportIndicatorsAction(
   if (!user) {
     return { ok: false, error: "Not authorized." };
   }
+  const allowlist = await loadIocAllowlist(supabase);
 
   const item = await supabase
     .from("intel_items")
@@ -380,6 +387,7 @@ export async function getReportIndicatorsAction(
       notes: noNotes,
       labels: [],
       attribution: noAttr,
+      allowlist,
     };
   const notes: ReportNotes = {
     analystComments: item.data.analyst_comments,
@@ -413,7 +421,7 @@ export async function getReportIndicatorsAction(
     .eq("intel_item_id", item.data.id);
   const iocIds = (links.data ?? []).map((r) => r.ioc_id);
   if (iocIds.length === 0)
-    return { ok: true, indicators: empty, kind: "intel", notes, labels, attribution };
+    return { ok: true, indicators: empty, kind: "intel", notes, labels, attribution, allowlist };
 
   const iocsRes = await supabase
     .from("iocs")
@@ -437,7 +445,7 @@ export async function getReportIndicatorsAction(
     else if (ioc.ioc_type === "cve") grouped.cves.push(ioc.value);
     else if (ioc.ioc_type === "mitre") grouped.mitre.push(ioc.value);
   }
-  return { ok: true, indicators: grouped, kind: "intel", notes, labels, attribution };
+  return { ok: true, indicators: grouped, kind: "intel", notes, labels, attribution, allowlist };
 }
 
 /** Delete an ioc's link to a report (and the ioc row if it becomes orphaned),

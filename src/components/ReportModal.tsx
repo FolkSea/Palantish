@@ -285,6 +285,11 @@ export function ReportModal({
   // a fallback for reports that have none stored yet. `stored` is null until the
   // lookup resolves.
   const [stored, setStored] = useState<Indicators | null>(null);
+  // The IOC allowlist (vendor domains / noise IPs) so fallback extraction below
+  // drops the same indicators the ingest pipeline does.
+  const [allowlist, setAllowlist] = useState<{ domains: string[]; ips: string[] }>(
+    { domains: [], ips: [] },
+  );
   // What the rawHash resolves to: an intel report, a breach, or neither.
   const [kind, setKind] = useState<"intel" | "breach" | null>(null);
   useEffect(() => {
@@ -294,6 +299,7 @@ export function ReportModal({
       setLabels([]);
       setAnalystComments(null);
       setVisibilityGaps(null);
+      setAllowlist({ domains: [], ips: [] });
       return;
     }
     let active = true;
@@ -304,6 +310,7 @@ export function ReportModal({
         setStored(r.indicators);
         setKind(r.kind);
         setLabels(r.labels);
+        setAllowlist(r.allowlist);
         setAnalystComments(r.notes.analystComments);
         setVisibilityGaps(r.notes.visibilityGaps);
         // Populate attribution from the DB so it shows regardless of how the
@@ -322,11 +329,13 @@ export function ReportModal({
 
   const extracted = useMemo(() => {
     const own = sourceDomain(report.url);
+    const excludeDomains = [...allowlist.domains, ...(own ? [own] : [])];
     return extractIndicators(
       `${report.title} ${report.description ?? ""} ${detailsText}`,
-      own ? [own] : undefined,
+      excludeDomains,
+      allowlist.ips,
     );
-  }, [report.title, report.description, report.url, detailsText]);
+  }, [report.title, report.description, report.url, detailsText, allowlist]);
 
   const hasStoredIocs =
     !!stored &&
