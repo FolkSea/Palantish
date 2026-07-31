@@ -4,7 +4,7 @@ import { toAscii } from "@/lib/text";
 
 export type Db = SupabaseClient<Database>;
 
-export type MemoryKind = "adversary" | "trend";
+export type MemoryKind = "adversary" | "trend" | "label";
 
 /** One note in the analyst's memory. */
 export type MemoryNote = {
@@ -26,7 +26,8 @@ export type MemoryUpdate = {
 // cheap. These caps bound the token cost regardless of how large memory grows.
 const BRIEF_ADVERSARIES = 16;
 const BRIEF_TRENDS = 6;
-const BRIEF_MAX_CHARS = 2000;
+const BRIEF_LABELS = 40;
+const BRIEF_MAX_CHARS = 2600;
 
 /** Read all memory notes, most recently-seen first. */
 export async function readMemory(db: Db): Promise<MemoryNote[]> {
@@ -50,6 +51,7 @@ export async function readMemory(db: Db): Promise<MemoryNote[]> {
 export function selectBriefNotes(notes: MemoryNote[]): {
   adversaries: MemoryNote[];
   trends: MemoryNote[];
+  labels: MemoryNote[];
 } {
   const rank = (a: MemoryNote, b: MemoryNote) =>
     b.lastSeen.localeCompare(a.lastSeen) || b.mentions - a.mentions;
@@ -61,7 +63,13 @@ export function selectBriefNotes(notes: MemoryNote[]): {
     .filter((n) => n.kind === "trend")
     .sort(rank)
     .slice(0, BRIEF_TRENDS);
-  return { adversaries, trends };
+  // Labels are ranked by salience (mentions) first so the most-used taxonomy
+  // survives the cap, then recency.
+  const labels = notes
+    .filter((n) => n.kind === "label")
+    .sort((a, b) => b.mentions - a.mentions || b.lastSeen.localeCompare(a.lastSeen))
+    .slice(0, BRIEF_LABELS);
+  return { adversaries, trends, labels };
 }
 
 /**
@@ -70,8 +78,9 @@ export function selectBriefNotes(notes: MemoryNote[]): {
  * drop it in unconditionally.
  */
 export function composeBrief(notes: MemoryNote[]): string {
-  const { adversaries, trends } = selectBriefNotes(notes);
-  if (adversaries.length === 0 && trends.length === 0) return "";
+  const { adversaries, trends, labels } = selectBriefNotes(notes);
+  if (adversaries.length === 0 && trends.length === 0 && labels.length === 0)
+    return "";
   const lines: string[] = [];
   if (adversaries.length) {
     lines.push("Known adversaries:");
@@ -80,6 +89,14 @@ export function composeBrief(notes: MemoryNote[]): string {
   if (trends.length) {
     lines.push("Tracked trends:");
     for (const t of trends) lines.push(`- ${t.subject}: ${t.content}`);
+  }
+  if (labels.length) {
+    // Compact single line: the agent reuses an existing label when it matches.
+    lines.push(
+      `Known labels (reuse the exact label when it applies): ${labels
+        .map((l) => l.subject)
+        .join(", ")}`,
+    );
   }
   return toAscii(lines.join("\n"), true).slice(0, BRIEF_MAX_CHARS);
 }
@@ -104,7 +121,8 @@ export async function upsertMemoryNotes(
     const subject = u.subject?.trim();
     const content = toAscii((u.content ?? "").trim(), true).slice(0, 1000);
     if (!subject || !content) continue;
-    if (u.kind !== "adversary" && u.kind !== "trend") continue;
+    if (u.kind !== "adversary" && u.kind !== "trend" && u.kind !== "label")
+      continue;
 
     const existing = await db
       .from("analyst_memory")
@@ -130,6 +148,21 @@ export async function upsertMemoryNotes(
     }
   }
   return written;
+}
+
+/**
+ * Record the taxonomy labels used in a run as `label` memory notes (subject =
+ * the label; content mirrors it since the label is self-describing), so a later
+ * run's brief lists them and the agent reuses them. Deterministic - no LLM - so
+ * the store always reflects every label actually applied. Returns notes written.
+ */
+export async function recordLabels(db: Db, labels: string[]): Promise<number> {
+  const uniq = [...new Set(labels.map((l) => l.trim()).filter(Boolean))];
+  if (uniq.length === 0) return 0;
+  return upsertMemoryNotes(
+    db,
+    uniq.map((label) => ({ kind: "label" as const, subject: label, content: label })),
+  );
 }
 
 /**

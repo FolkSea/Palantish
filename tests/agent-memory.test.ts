@@ -32,6 +32,16 @@ describe("composeBrief", () => {
     expect(brief).toContain("Tracked trends:");
     expect(brief).toContain("edge-device-exploitation: VPN/firewall zero-days.");
   });
+
+  it("lists known labels on one compact line for reuse", () => {
+    const brief = composeBrief([
+      note({ kind: "label", subject: "Malware/FlyingEagle", content: "Malware/FlyingEagle" }),
+      note({ kind: "label", subject: "Target/Zimbra", content: "Target/Zimbra" }),
+    ]);
+    expect(brief).toContain("Known labels");
+    expect(brief).toContain("Malware/FlyingEagle");
+    expect(brief).toContain("Target/Zimbra");
+  });
 });
 
 describe("selectBriefNotes", () => {

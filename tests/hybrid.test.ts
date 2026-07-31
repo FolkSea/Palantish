@@ -66,6 +66,7 @@ describe("HybridEnricher (rules-first)", () => {
       crowdstrikeAdversary: null,
       sourceName: "s",
       rawHash: "h",
+      labels: [],
     };
     const h = new HybridEnricher({ classify: vi.fn(async () => item) });
     const out = await h.enrich(candidate({ title: "Ambiguous item" }));
@@ -102,6 +103,7 @@ describe("HybridEnricher (llm-first)", () => {
     crowdstrikeAdversary: null,
     sourceName: "s",
     rawHash: "h",
+    labels: [],
     ...over,
   });
 

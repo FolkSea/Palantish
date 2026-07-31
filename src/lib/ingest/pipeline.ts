@@ -19,11 +19,13 @@ import { AnalystAgent } from "@/lib/agent/analyst";
 import {
   loadMemoryBrief,
   readMemory,
+  recordLabels,
   upsertMemoryNotes,
 } from "@/lib/agent/memory";
 import { ilog } from "./log";
 import { fetchArticleText } from "./scrape";
 import { indicatorRows, linkIocsToItem } from "./iocs";
+import { linkLabelsToItem } from "./labels";
 import { loadIocAllowlist } from "./allowlist";
 import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
@@ -322,6 +324,10 @@ export async function runIngest(
     let added = 0;
     let iocLinks = 0;
     let iocFailed = 0;
+    let labelLinks = 0;
+    // Every taxonomy label applied this run, recorded to memory at the end so the
+    // agent reuses them next run (consistent labelling).
+    const labelsUsed = new Set<string>();
     // Lightweight per-report facts for the analyst's end-of-run reflection.
     const reflectionInputs: {
       title: string;
@@ -370,6 +376,11 @@ export async function runIngest(
           kind: r.kind ?? "other",
           adversary: r.crowdstrike_adversary ?? r.adversary_label ?? null,
         });
+      // Map each report's raw_hash to its triage labels, so they can be attached
+      // to the rows that actually get inserted (dedup may drop some).
+      const labelsByHash = new Map<string, string[]>(
+        enriched.filter((e) => e.labels.length).map((e) => [e.rawHash, e.labels]),
+      );
 
       // Insert this batch before moving on, so progress survives a timeout.
       let insertedIntel: {
@@ -379,16 +390,32 @@ export async function runIngest(
         description: string | null;
         kind: string;
         source_name: string | null;
+        raw_hash: string;
       }[] = [];
       if (batchRows.length > 0) {
         const { data, error } = await db
           .from("intel_items")
           .upsert(batchRows, { onConflict: "raw_hash", ignoreDuplicates: true })
-          .select("id, url, title, description, kind, source_name");
+          .select("id, url, title, description, kind, source_name, raw_hash");
         if (error) errors.push(`intel_items insert: ${error.message}`);
         else {
           insertedIntel = data ?? [];
           added += insertedIntel.length;
+        }
+      }
+
+      // Attach the triage labels to the inserted reports (find-or-create + link).
+      // Per-item failures are non-fatal - the report just carries fewer labels.
+      for (const item of insertedIntel) {
+        const labels = labelsByHash.get(item.raw_hash);
+        if (!labels?.length) continue;
+        try {
+          labelLinks += await linkLabelsToItem(db, item.id, labels);
+          for (const l of labels) labelsUsed.add(l);
+        } catch (err) {
+          errors.push(
+            `label link (${item.raw_hash}): ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
       }
 
@@ -454,8 +481,22 @@ export async function runIngest(
         `LLM kept ${tally.llmKeep}, LLM dropped ${tally.llmDrop}`,
     );
     ilog(
-      `inserted ${added} new items; IOC extraction: ${iocLinks} links (${iocFailed} fetch failures)`,
+      `inserted ${added} new items; IOC extraction: ${iocLinks} links (${iocFailed} fetch failures); ` +
+        `${labelLinks} labels linked`,
     );
+
+    // Record this run's taxonomy labels to memory so the agent reuses them next
+    // run (consistent labelling). Deterministic; non-fatal.
+    if (labelsUsed.size > 0) {
+      try {
+        const n = await recordLabels(db, [...labelsUsed]);
+        ilog(`analyst memory: ${n} labels recorded/refreshed`);
+      } catch (err) {
+        errors.push(
+          `label memory: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
 
     // Accumulate this run's per-feed keep/drop counts onto the sources table
     // (atomic add, so overlapping runs never lose increments).

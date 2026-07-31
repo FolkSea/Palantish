@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Nexus, Confidence } from "@/lib/badges";
 import type { ItemType, RawCandidate } from "@/lib/ingest/types";
 import { parseReflection, type MemoryUpdate } from "./memory";
+import { parseLabels } from "./labels";
 
 // Per-item triage is high-volume/low-complexity, so it defaults to a small fast
 // model; the summary and the reflection are lower-volume/higher-judgement, so
@@ -51,13 +52,21 @@ KEEP genuine reporting and classify itemType so it lands in the right section:
 
 Only keep eCrime/ransomware when it names a crew or is large-scale (many victims or major sector impact); drop a bare crew mention with no substance.
 
+Also assign taxonomy labels for the item, drawn ONLY from what the report actually states:
+- malware: named malware families, tools or RATs (e.g. "Flying Eagle", "ValleyRAT", "Cobalt Strike").
+- adversary: named threat actors or crews (e.g. "Fancy Bear", "Lazarus Group", "Scattered Spider").
+- target: the targeted product, system, sector or organisation (e.g. "Zimbra", "SharePoint", "water utilities").
+- ai: an AI model or assistant named as used in the attack/tooling (e.g. "Claude", "ChatGPT"); usually empty.
+Give each as a short bare name (no prefix); omit a category when nothing applies. Do not invent labels. When a name in the memory brief's "Known labels" list matches, reuse that exact name so labelling stays consistent.
+
 Return ONLY strict JSON of this shape:
 {
   "relevant": boolean,
   "nexus": "china" | "russia" | "north_korea" | "iran" | "rest_of_world" | "other" | null,
   "itemType": "actor_activity" | "breach" | "vuln" | "report" | "breaking",
   "confidence": "confirmed" | "suspected" | "poc",
-  "crowdstrikeAdversary": string | null
+  "crowdstrikeAdversary": string | null,
+  "labels": { "malware": string[], "adversary": string[], "target": string[], "ai": string[] }
 }
 nexus is the attributed nation-state (china/russia/north_korea/iran), "rest_of_world" for any other nation-state (e.g. India, Turkey, Vietnam, Pakistan, South Korea), "other" for eCrime or hacktivism, or null if none.
 crowdstrikeAdversary is the public CrowdStrike cryptonym (Panda/Bear/Chollima/Kitten/Spider/Jackal naming) when one clearly applies, else null.`;
@@ -88,6 +97,8 @@ export type TriageResult = {
   itemType: ItemType;
   confidence: Confidence;
   crowdstrikeAdversary: string | null;
+  // Canonical `Prefix/Value` taxonomy labels (AI/Malware/Adversary/Target).
+  labels: string[];
 };
 
 /** A compact observation about one kept report, fed into reflection. */
@@ -135,7 +146,7 @@ export class AnalystAgent {
     const model = process.env.ANTHROPIC_MODEL || TRIAGE_MODEL_DEFAULT;
     const message = await this.client.messages.create({
       model,
-      max_tokens: 256,
+      max_tokens: 400,
       system: this.system(TRIAGE_INSTRUCTIONS, true),
       messages: [
         {
@@ -238,6 +249,7 @@ Description: ${c.description ?? ""}`,
         typeof o.crowdstrikeAdversary === "string" && o.crowdstrikeAdversary
           ? o.crowdstrikeAdversary
           : null,
+      labels: parseLabels(o.labels),
     };
   }
 }

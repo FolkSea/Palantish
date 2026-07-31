@@ -198,6 +198,8 @@ export function buildEnriched(
     crowdstrikeAdversary: group?.cs ?? null,
     sourceName: c.sourceName,
     rawHash: computeHash(c.title, c.url),
+    // The deterministic rules do not assign taxonomy labels; only the LLM does.
+    labels: [],
   };
 }
 

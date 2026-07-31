@@ -35,6 +35,7 @@ export class LlmEnricher implements Enricher {
       crowdstrikeAdversary: parsed.crowdstrikeAdversary,
       sourceName: c.sourceName,
       rawHash: computeHash(c.title, c.url),
+      labels: parsed.labels,
     };
   }
 

@@ -8,6 +8,8 @@ import {
   type ScrapedArticle,
 } from "./scrape";
 import { selectEnricher } from "./enrich/select";
+import { linkLabelsToItem } from "./labels";
+import { recordLabels } from "@/lib/agent/memory";
 import { toAscii } from "@/lib/text";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import { computeHash } from "./dedup";
@@ -154,6 +156,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     crowdstrikeAdversary: null,
     sourceName: source.name,
     rawHash,
+    labels: [],
   };
 
   const publishedDate = enriched.publishedAt.toISOString().slice(0, 10);
@@ -208,10 +211,23 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     item_type: enriched.itemType,
     raw_hash: rawHash,
   };
-  const { error } = await db
+  const { data: insertedRow, error } = await db
     .from("intel_items")
-    .upsert(row, { onConflict: "raw_hash", ignoreDuplicates: true });
+    .upsert(row, { onConflict: "raw_hash", ignoreDuplicates: true })
+    .select("id")
+    .maybeSingle();
   if (error) return { ok: false, error: `Insert failed: ${error.message}` };
+
+  // Attach the triage labels to the newly-imported item and remember them, so
+  // the taxonomy stays consistent with the feed pipeline. Non-fatal.
+  if (insertedRow && enriched.labels.length) {
+    try {
+      await linkLabelsToItem(db, insertedRow.id, enriched.labels);
+      await recordLabels(db, enriched.labels);
+    } catch {
+      // A labelling failure must not fail the import.
+    }
+  }
 
   const report: ImportedReport = {
     title,

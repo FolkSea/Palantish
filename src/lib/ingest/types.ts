@@ -29,6 +29,8 @@ export type EnrichedItem = {
   crowdstrikeAdversary: string | null;
   sourceName: string;
   rawHash: string;
+  // Taxonomy labels the triage agent assigned (Prefix/Value); [] from the rules.
+  labels: string[];
 };
 
 /**
