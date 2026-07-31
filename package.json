@@ -26,6 +26,7 @@
     "@supabase/supabase-js": "^2.110.8",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
+    "cytoscape": "^3.34.0",
     "date-fns": "^4.4.0",
     "next": "16.2.12",
     "react": "19.2.4",
