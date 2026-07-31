@@ -9,10 +9,15 @@ import {
   VulnStatusBadge,
 } from "@/components/Badges";
 import { ReportTitle } from "@/components/ReportModal";
+import { LabelChips } from "@/components/LabelChips";
 import { usePaginated, PaginationFooter } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
 import { prioritiseVulns } from "@/lib/vuln-priority";
-import type { BreachRow, IntelItemRow, VulnerabilityRow } from "@/lib/data";
+import type {
+  BreachRow,
+  LabeledIntelRow,
+  VulnerabilityRow,
+} from "@/lib/data";
 
 /* --- Trending exploits & vulnerabilities ---------------------------------- */
 export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
@@ -129,6 +134,7 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
                           rawHash: b.raw_hash,
                         }}
                       />
+                      <LabelChips labels={b.labels} className="mt-1" />
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap text-slate-500">
                       {b.date_label ?? formatDate(b.published_at)}
@@ -162,7 +168,7 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
 }
 
 /* --- Other reporting ------------------------------------------------------- */
-export function ReportsList({ items }: { items: IntelItemRow[] }) {
+export function ReportsList({ items }: { items: LabeledIntelRow[] }) {
   const p = usePaginated(items);
   return (
     <Card title="Other reporting">
@@ -195,6 +201,7 @@ export function ReportsList({ items }: { items: IntelItemRow[] }) {
                           rawHash: r.raw_hash,
                         }}
                       />
+                      <LabelChips labels={r.labels} className="mt-1" />
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap text-slate-500">
                       {formatDate(r.published_at)}

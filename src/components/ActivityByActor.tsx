@@ -9,6 +9,7 @@ import {
   SourceBadge,
 } from "@/components/Badges";
 import { ItemActions } from "@/components/ItemActions";
+import { LabelChips } from "@/components/LabelChips";
 import { ReportTitle } from "@/components/ReportModal";
 import { formatDate } from "@/lib/format";
 
@@ -223,6 +224,7 @@ function ActorEntry({ item }: { item: ActorItem }) {
           <ItemActions rawHash={item.raw_hash} />
         </span>
       </div>
+      <LabelChips labels={item.labels} className="mt-1.5" />
     </div>
   );
 }

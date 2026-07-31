@@ -27,7 +27,11 @@ export type ActorItem = {
   confidence: string | null;
   country: string | null;
   adversary: string | null;
+  labels: string[];
 };
+
+/** Map of intel_items.id -> its user-defined labels, for card/list rendering. */
+export type LabelsById = Map<string, string[]>;
 
 /** One actor's card: the actor (or "Non Attributed"), accent/flag and items. */
 export type ActorCard = {
@@ -38,7 +42,7 @@ export type ActorCard = {
   items: ActorItem[];
 };
 
-function intelToItem(i: IntelItemRow): ActorItem {
+function intelToItem(i: IntelItemRow, labels: string[]): ActorItem {
   return {
     id: i.id,
     raw_hash: i.raw_hash,
@@ -50,6 +54,7 @@ function intelToItem(i: IntelItemRow): ActorItem {
     confidence: i.confidence,
     country: null,
     adversary: null,
+    labels,
   };
 }
 
@@ -109,26 +114,28 @@ export function buildActorSectionCards(
   reports: IntelItemRow[],
   ecrimeGroups: GroupEntry[],
   hacktivismGroups: GroupEntry[],
+  labelsById: LabelsById = new Map(),
 ): { ecrimeCards: ActorCard[]; hacktivismCards: ActorCard[] } {
   const ecrime = new Map<string, ActorItem[]>();
   const hack = new Map<string, ActorItem[]>();
+  const toItem = (r: IntelItemRow) => intelToItem(r, labelsById.get(r.id) ?? []);
 
   for (const r of reports) {
     const named = namedActor(r.crowdstrike_adversary, r.adversary_label);
     const text = `${r.title} ${r.description ?? ""}`.toLowerCase();
 
     if (r.motivation === "ecrime") {
-      push(ecrime, named ?? matchGroup(text, ecrimeGroups)?.cs ?? NON_ATTRIBUTED, intelToItem(r));
+      push(ecrime, named ?? matchGroup(text, ecrimeGroups)?.cs ?? NON_ATTRIBUTED, toItem(r));
     } else if (r.motivation === "hacktivism") {
-      push(hack, named ?? matchGroup(text, hacktivismGroups)?.cs ?? NON_ATTRIBUTED, intelToItem(r));
+      push(hack, named ?? matchGroup(text, hacktivismGroups)?.cs ?? NON_ATTRIBUTED, toItem(r));
     } else {
       // Unattributed: fall back to text matching, hacktivism first.
       const h = matchGroup(text, hacktivismGroups)?.cs;
-      if (h) push(hack, h, intelToItem(r));
-      else if (hasHacktivismKeyword(text)) push(hack, NON_ATTRIBUTED, intelToItem(r));
+      if (h) push(hack, h, toItem(r));
+      else if (hasHacktivismKeyword(text)) push(hack, NON_ATTRIBUTED, toItem(r));
       else {
         const e = matchGroup(text, ecrimeGroups)?.cs;
-        if (e) push(ecrime, e, intelToItem(r));
+        if (e) push(ecrime, e, toItem(r));
         // else: no eCrime/hacktivism signal - not shown in these sections.
       }
     }

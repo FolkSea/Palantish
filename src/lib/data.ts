@@ -13,6 +13,7 @@ import {
   buildActorSectionCards,
   type ActorItem,
   type ActorCard,
+  type LabelsById,
 } from "@/lib/actor-sections";
 import {
   buildTimeline,
@@ -28,9 +29,11 @@ type Tables = Database["public"]["Tables"];
 
 export type IntelItemRow = Tables["intel_items"]["Row"];
 // Every report is an intel_items row now, discriminated by `kind`; these aliases
-// keep the section component prop names meaningful.
+// keep the section component prop names meaningful. Rows shown in the breach /
+// other-reporting lists carry their user-defined labels for display.
 export type VulnerabilityRow = IntelItemRow;
-export type BreachRow = IntelItemRow;
+export type LabeledIntelRow = IntelItemRow & { labels: string[] };
+export type BreachRow = LabeledIntelRow;
 export type SummaryCitation = {
   id: number;
   title: string;
@@ -76,7 +79,7 @@ export type DashboardData = {
   timeline: { events: TimelineEvent[]; streams: TimelineStream[] };
   // Breaking ticker: PoC exploits + breaches from the last ~24h. Nothing else.
   breaking: TickerItem[];
-  reports: IntelItemRow[];
+  reports: LabeledIntelRow[];
   vulnerabilities: VulnerabilityRow[];
   breaches: BreachRow[];
   staleFeeds: StaleFeed[];
@@ -94,6 +97,31 @@ function daysAgo(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
+}
+
+/** Load the user-defined labels for a set of intel_items ids, grouped by id and
+ * sorted alphabetically. RLS-scoped like every other dashboard query. */
+async function loadLabelsById(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ids: string[],
+): Promise<LabelsById> {
+  const map: LabelsById = new Map();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return map;
+  const { data } = await supabase
+    .from("intel_item_labels")
+    .select("intel_item_id, labels(name)")
+    .in("intel_item_id", unique);
+  for (const row of data ?? []) {
+    const name = (row.labels as { name: string } | null)?.name;
+    if (!name) continue;
+    const arr = map.get(row.intel_item_id);
+    if (arr) arr.push(name);
+    else map.set(row.intel_item_id, [name]);
+  }
+  for (const [id, names] of map)
+    map.set(id, names.sort((a, b) => a.localeCompare(b)));
+  return map;
 }
 
 export async function loadDashboard(): Promise<DashboardData> {
@@ -182,6 +210,14 @@ export async function loadDashboard(): Promise<DashboardData> {
   // and drop anything this user has hidden.
   const keep = (i: { title: string | null; description?: string | null; raw_hash: string }) =>
     isThreatIntel(i.title, i.description) && !hidden.has(i.raw_hash);
+  // Labels for every report shown on the page (actor cards, breaches, other
+  // reporting), fetched once and looked up by intel_items id.
+  const labelsById = await loadLabelsById(supabase, [
+    ...(researchRes.data ?? []).map((r) => r.id),
+    ...(breachRes.data ?? []).map((r) => r.id),
+    ...(otherRes.data ?? []).map((r) => r.id),
+  ]);
+
   // Split the adversary catalogue into the three matchers the dashboard needs.
   // "other" nexus is eCrime or hacktivism, told apart by the actor's motivation;
   // everything else is nation-state / rest-of-world.
@@ -215,6 +251,7 @@ export async function loadDashboard(): Promise<DashboardData> {
           nexusForCountry(i.country),
           `${i.title} ${i.description ?? ""}`,
         ),
+      labels: labelsById.get(i.id) ?? [],
     };
     const key = i.country ?? "";
     const arr = nsByCountry.get(key);
@@ -261,8 +298,14 @@ export async function loadDashboard(): Promise<DashboardData> {
     buildGroupsFromAdversaries(allAdv.filter((a) => hasMotivation(a, "ecrime"))),
   );
 
+  const withLabels = (r: IntelItemRow): LabeledIntelRow => ({
+    ...r,
+    labels: labelsById.get(r.id) ?? [],
+  });
   const breach30 = (breachRes.data ?? []).filter(keep);
-  const breaches = breach30.filter((b) => (b.published_at ?? "") >= recentCutoff);
+  const breaches = breach30
+    .filter((b) => (b.published_at ?? "") >= recentCutoff)
+    .map(withLabels);
 
   const exploit30 = (exploitRes.data ?? []).filter((v) => !hidden.has(v.raw_hash));
   const vulnerabilities = exploit30.filter(
@@ -270,7 +313,7 @@ export async function loadDashboard(): Promise<DashboardData> {
   );
 
   // Other reporting: 7-day list of unattributed general reporting.
-  const reports = (otherRes.data ?? []).filter(keep);
+  const reports = (otherRes.data ?? []).filter(keep).map(withLabels);
 
   // Breaking ticker: PoC exploits and breaches observed in the last ~24h only,
   // newest first. Nothing else feeds the ticker.
@@ -313,6 +356,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     researchRecent,
     ecrimeGroups,
     hacktivismGroups,
+    labelsById,
   );
 
   // Unified timeline: research + breaches + exploits over 30 days, branched by
