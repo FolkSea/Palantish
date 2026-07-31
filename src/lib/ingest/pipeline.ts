@@ -103,7 +103,12 @@ export type IngestResult = {
 // stops starting new batches past this budget, finalises cleanly (summary /
 // memory / run status), and leaves the remainder for the next trigger or cron
 // (dedup skips what was already inserted). Override with INGEST_RUN_BUDGET_MS.
-const RUN_BUDGET_MS = Number(process.env.INGEST_RUN_BUDGET_MS) || 230000;
+// Leaves headroom under the 300s function cap for everything that runs AFTER
+// the batch loop - source stats, dropped items, label memory, the end-of-run
+// reflection and the summary. Those last two are large single LLM calls; when
+// the budget left them too little time the reflection simply timed out and no
+// memory was ever written.
+const RUN_BUDGET_MS = Number(process.env.INGEST_RUN_BUDGET_MS) || 180000;
 
 // How many candidates are enriched concurrently. Each is one LLM call that
 // fetches and analyses the article, so this is I/O-bound - the ceiling is the

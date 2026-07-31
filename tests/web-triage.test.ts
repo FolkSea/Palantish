@@ -291,6 +291,38 @@ describe("at most one fetch per configured retrieval method", () => {
   });
 });
 
+describe("end-of-run reflection (memory writes)", () => {
+  const reports = [{ title: "t", kind: "research", adversary: "FANCY BEAR" }];
+
+  it("gets a longer timeout than per-item triage", async () => {
+    create.mockResolvedValue({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: '{"adversaries":[],"trends":[]}' }],
+    });
+    const agent = new AnalystAgent("sk-test");
+    await agent.reflect(reports, []);
+    // Reflecting over a whole run cannot fit in the per-item budget; a silent
+    // timeout here is why memory was never written.
+    const timeout = create.mock.calls[0][1]?.timeout;
+    expect(timeout).toBeGreaterThan(20000);
+  });
+
+  it("propagates failures instead of silently writing no memory", async () => {
+    // A malformed response (no content block) throws inside reflect. It must
+    // surface so the pipeline records it against the run, rather than being
+    // swallowed into [] - which reports a successful run that wrote no memory.
+    create.mockResolvedValue({ stop_reason: "end_turn" });
+    const agent = new AnalystAgent("sk-test");
+    let failed = false;
+    try {
+      await agent.reflect(reports, []);
+    } catch {
+      failed = true;
+    }
+    expect(failed).toBe(true);
+  });
+});
+
 describe("classification, labels and IOC validation", () => {
   it("6. parses classification + canonical labels from the triage JSON", () => {
     const p = parseWebTriage(JSON.stringify(TRIAGE_JSON))!;

@@ -35,6 +35,13 @@ const WEB_FETCH_MAX_CONTENT_TOKENS =
   Number(process.env.WEB_FETCH_MAX_CONTENT_TOKENS) || 8000;
 // Per-call timeout so one slow request never stalls a worker (see LlmEnricher).
 const REQUEST_TIMEOUT_MS = Number(process.env.INGEST_LLM_TIMEOUT_MS) || 20000;
+// The summary and the end-of-run reflection are single, large calls over the
+// whole run rather than one small call per item, so they need far more headroom
+// than the per-item budget above: reflecting on 80 reports took well over the
+// 20s per-item timeout, which silently produced no memory at all. Kept well
+// under the remaining function time so finalisation still fits in maxDuration.
+const LONG_CALL_TIMEOUT_MS =
+  Number(process.env.INGEST_LLM_LONG_TIMEOUT_MS) || 60000;
 
 const NEXUS_VALUES: Nexus[] = [
   "china",
@@ -301,20 +308,26 @@ Description: ${c.description ?? ""}`,
     counts: unknown,
   ): Promise<{ text: string; model: string }> {
     const model = process.env.ANTHROPIC_SUMMARY_MODEL || SUMMARY_MODEL_DEFAULT;
-    const message = await this.client.messages.create({
-      model,
-      max_tokens: 500,
-      system: this.system(SUMMARY_INSTRUCTIONS, true),
-      messages: [
-        {
-          role: "user",
-          content:
-            `Reference items (id: kind - title):\n${references}\n\n` +
-            `Aggregated counts (JSON):\n${JSON.stringify(counts, null, 2)}\n\n` +
-            `Write the executive summary, adding [id] citation markers after specific mentions.`,
-        },
-      ],
-    });
+    const message = await this.client.messages.create(
+      {
+        model,
+        // Same thinking-plus-text budget as the reflection above: the summary
+        // itself is short, but the cap has to leave room for the reasoning that
+        // precedes it or the response comes back empty.
+        max_tokens: 4000,
+        system: this.system(SUMMARY_INSTRUCTIONS, true),
+        messages: [
+          {
+            role: "user",
+            content:
+              `Reference items (id: kind - title):\n${references}\n\n` +
+              `Aggregated counts (JSON):\n${JSON.stringify(counts, null, 2)}\n\n` +
+              `Write the executive summary, adding [id] citation markers after specific mentions.`,
+          },
+        ],
+      },
+      { timeout: LONG_CALL_TIMEOUT_MS },
+    );
     return { text: textOf(message).trim(), model };
   }
 
@@ -336,10 +349,21 @@ Description: ${c.description ?? ""}`,
       )
       .join("\n");
     const known = existing.length ? existing.join(", ") : "none yet";
-    try {
-      const message = await this.client.messages.create({
+    // Deliberately NOT wrapped in a catch: a swallowed failure here writes no
+    // memory and reports no error, which is indistinguishable from "the run had
+    // nothing to remember". The caller logs the failure against the run.
+    const message = await this.client.messages.create(
+      {
         model,
-        max_tokens: 1500,
+        // Must cover thinking AND the JSON: the reflect model thinks adaptively
+        // by default, and max_tokens caps both together. At 1500 a reflection
+        // over 80 reports spent the whole budget thinking and returned no text
+        // at all, which parsed to "no memory updates" and silently wrote
+        // nothing. Sized so the JSON always has room after the reasoning.
+        max_tokens: 8000,
+        // Condensing reports into notes is extraction, not deep reasoning, and
+        // unconstrained thinking here is slow enough to hit the call timeout.
+        output_config: { effort: "low" },
         system: this.system(REFLECT_INSTRUCTIONS, true),
         messages: [
           {
@@ -347,11 +371,10 @@ Description: ${c.description ?? ""}`,
             content: `Subjects already in memory: ${known}\n\nThis run's kept reports:\n${lines}\n\nReturn the memory updates as JSON.`,
           },
         ],
-      });
-      return parseReflection(textOf(message));
-    } catch {
-      return [];
-    }
+      },
+      { timeout: LONG_CALL_TIMEOUT_MS },
+    );
+    return parseReflection(textOf(message));
   }
 
   private parseTriage(text: string): TriageResult | null {
