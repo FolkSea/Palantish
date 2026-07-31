@@ -206,6 +206,7 @@ function ActorEntry({ item }: { item: ActorItem }) {
           rawHash: item.raw_hash,
         }}
       />
+      <LabelChips labels={item.labels} className="mt-1" />
       {item.description ? (
         <p className="mt-1 text-[12px] leading-snug text-slate-600">
           {item.description}
@@ -224,7 +225,6 @@ function ActorEntry({ item }: { item: ActorItem }) {
           <ItemActions rawHash={item.raw_hash} />
         </span>
       </div>
-      <LabelChips labels={item.labels} className="mt-1.5" />
     </div>
   );
 }
