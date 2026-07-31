@@ -310,6 +310,14 @@ export type ReportNotes = {
   visibilityGaps: string | null;
 };
 
+/** The stored attribution for a report, so the modal shows it regardless of how
+ * it was opened (a card passes it in the prop; the summary / search do not). */
+export type ReportAttribution = {
+  adversary: string | null;
+  country: string | null;
+  confidence: string | null;
+};
+
 export async function getReportIndicatorsAction(
   rawHash: string,
 ): Promise<
@@ -321,6 +329,7 @@ export async function getReportIndicatorsAction(
       kind: "intel" | null;
       notes: ReportNotes;
       labels: string[];
+      attribution: ReportAttribution;
     }
   | { ok: false; error: string }
 > {
@@ -333,8 +342,20 @@ export async function getReportIndicatorsAction(
     mitre: [],
   };
   const noNotes: ReportNotes = { analystComments: null, visibilityGaps: null };
+  const noAttr: ReportAttribution = {
+    adversary: null,
+    country: null,
+    confidence: null,
+  };
   if (!rawHash)
-    return { ok: true, indicators: empty, kind: null, notes: noNotes, labels: [] };
+    return {
+      ok: true,
+      indicators: empty,
+      kind: null,
+      notes: noNotes,
+      labels: [],
+      attribution: noAttr,
+    };
 
   const supabase = await createClient();
   const {
@@ -346,14 +367,28 @@ export async function getReportIndicatorsAction(
 
   const item = await supabase
     .from("intel_items")
-    .select("id, analyst_comments, visibility_gaps")
+    .select(
+      "id, analyst_comments, visibility_gaps, adversary_label, crowdstrike_adversary, country, confidence",
+    )
     .eq("raw_hash", rawHash)
     .maybeSingle();
   if (!item.data)
-    return { ok: true, indicators: empty, kind: null, notes: noNotes, labels: [] };
+    return {
+      ok: true,
+      indicators: empty,
+      kind: null,
+      notes: noNotes,
+      labels: [],
+      attribution: noAttr,
+    };
   const notes: ReportNotes = {
     analystComments: item.data.analyst_comments,
     visibilityGaps: item.data.visibility_gaps,
+  };
+  const attribution: ReportAttribution = {
+    adversary: item.data.adversary_label ?? item.data.crowdstrike_adversary ?? null,
+    country: item.data.country,
+    confidence: item.data.confidence,
   };
 
   // User-defined labels linked to this report (deduped, alphabetical).
@@ -378,7 +413,7 @@ export async function getReportIndicatorsAction(
     .eq("intel_item_id", item.data.id);
   const iocIds = (links.data ?? []).map((r) => r.ioc_id);
   if (iocIds.length === 0)
-    return { ok: true, indicators: empty, kind: "intel", notes, labels };
+    return { ok: true, indicators: empty, kind: "intel", notes, labels, attribution };
 
   const iocsRes = await supabase
     .from("iocs")
@@ -402,7 +437,7 @@ export async function getReportIndicatorsAction(
     else if (ioc.ioc_type === "cve") grouped.cves.push(ioc.value);
     else if (ioc.ioc_type === "mitre") grouped.mitre.push(ioc.value);
   }
-  return { ok: true, indicators: grouped, kind: "intel", notes, labels };
+  return { ok: true, indicators: grouped, kind: "intel", notes, labels, attribution };
 }
 
 /** Delete an ioc's link to a report (and the ioc row if it becomes orphaned),

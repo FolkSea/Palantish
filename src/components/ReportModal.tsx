@@ -306,6 +306,13 @@ export function ReportModal({
         setLabels(r.labels);
         setAnalystComments(r.notes.analystComments);
         setVisibilityGaps(r.notes.visibilityGaps);
+        // Populate attribution from the DB so it shows regardless of how the
+        // modal was opened - a card passes it in the prop, but the executive
+        // summary and search do not. The stored value wins; fall back to the
+        // prop (e.g. a computed UNID label a card may pass when none is stored).
+        setAdversary((prev) => r.attribution.adversary ?? prev);
+        setCountry((prev) => r.attribution.country ?? prev);
+        setConfidence((prev) => r.attribution.confidence ?? prev);
       }
     });
     return () => {
