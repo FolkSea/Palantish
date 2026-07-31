@@ -102,6 +102,12 @@ export type IngestResult = {
 // (dedup skips what was already inserted). Override with INGEST_RUN_BUDGET_MS.
 const RUN_BUDGET_MS = Number(process.env.INGEST_RUN_BUDGET_MS) || 230000;
 
+// How many candidates are enriched concurrently. Each is one LLM call that
+// fetches and analyses the article, so this is I/O-bound - the ceiling is the
+// Anthropic rate limit, not local CPU. BATCH_SIZE defaults to this so a batch is
+// exactly one wave. Override with INGEST_ENRICH_CONCURRENCY.
+const ENRICH_CONCURRENCY = Number(process.env.INGEST_ENRICH_CONCURRENCY) || 6;
+
 export async function runIngest(
   options?: { sourceIds?: string[] },
 ): Promise<IngestResult> {
@@ -249,7 +255,13 @@ export async function runIngest(
     // inserted is kept instead of the whole run being lost - important under
     // llm-first, where every item costs an LLM call. Items also appear on the
     // dashboard as the run progresses.
-    const BATCH_SIZE = 25;
+    //
+    // Sized to ONE enrichment wave (see the concurrency below): the run-budget
+    // check only runs between batches, so the first batch always completes and
+    // must fit inside maxDuration on its own. Web-fetch triage takes ~60-100s
+    // per item, so a batch of one wave is bounded by a single item's worst case
+    // rather than a multiple of it. Override with INGEST_BATCH_SIZE.
+    const BATCH_SIZE = Number(process.env.INGEST_BATCH_SIZE) || ENRICH_CONCURRENCY;
 
     // A source's own domain is never an IOC; compute the exclusion set once, and
     // fold in the operator-configurable allowlist (vendor / press / TI domains).
@@ -365,9 +377,12 @@ export async function runIngest(
       }
       const batch = fresh.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
 
-      // Enrich this batch (concurrency 6; llm-first makes each an LLM call).
-      const enrichedNullable = await mapWithConcurrency(batch, 6, (c) =>
-        enricher.enrich(c),
+      // Enrich this batch - one wave by default; llm-first makes each an LLM
+      // call that web-fetches and analyses the article.
+      const enrichedNullable = await mapWithConcurrency(
+        batch,
+        ENRICH_CONCURRENCY,
+        (c) => enricher.enrich(c),
       );
       // Per-feed keep/drop tally: a null result was dropped, else kept.
       for (let i = 0; i < batch.length; i++) {
