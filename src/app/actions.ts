@@ -989,6 +989,7 @@ export type SearchBreach = {
   source_name: string | null;
   event_date: string | null;
   event_date_label: string | null;
+  raw_hash: string;
 };
 export type SearchVuln = {
   id: string;
@@ -998,6 +999,7 @@ export type SearchVuln = {
   detail: string | null;
   status: "confirmed" | "suspected" | "poc";
   source_name: string | null;
+  raw_hash: string;
 };
 export type SearchResults = {
   query: string;
@@ -1148,6 +1150,7 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
       source_name: b.source_name,
       event_date: b.published_at,
       event_date_label: b.date_label,
+      raw_hash: b.raw_hash,
     }));
   const vulns: SearchVuln[] = rows
     .filter((v) => v.kind === "exploit" && !hidden.has(v.raw_hash))
@@ -1160,6 +1163,7 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
       detail: v.description,
       status: (v.exploit_status ?? "suspected") as SearchVuln["status"],
       source_name: v.source_name,
+      raw_hash: v.raw_hash,
     }));
 
   return { query: q, reports, breaches, vulns };

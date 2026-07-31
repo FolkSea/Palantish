@@ -13,6 +13,7 @@ import {
 } from "chart.js";
 import "chartjs-adapter-date-fns";
 import { createClient } from "@/lib/supabase/client";
+import { ReportModal, type ReportModalData } from "@/components/ReportModal";
 import {
   eventVisible,
   KIND_LABEL,
@@ -65,6 +66,11 @@ type PlotPoint = {
   title: string;
   lines: string[];
   url: string | null;
+  // Enough to open the report modal (which fetches attribution by rawHash).
+  description: string | null;
+  source: string | null;
+  date: string;
+  rawHash: string | null;
 };
 
 export default function ActivityTimeline({
@@ -77,6 +83,7 @@ export default function ActivityTimeline({
   initialFilters: TimelineFilters;
 }) {
   const [filters, setFilters] = useState<TimelineFilters>(initialFilters);
+  const [openReport, setOpenReport] = useState<ReportModalData | null>(null);
 
   function toggle(key: keyof TimelineFilters) {
     const next = { ...filters, [key]: !filters[key] };
@@ -111,6 +118,10 @@ export default function ActivityTimeline({
           e.source ? `Source: ${e.source}` : "",
         ].filter(Boolean),
         url: e.url,
+        description: e.description,
+        source: e.source,
+        date: e.date,
+        rawHash: e.rawHash,
       }));
       return {
         label: lane.actor,
@@ -148,7 +159,15 @@ export default function ActivityTimeline({
       if (!elements.length) return;
       const el = elements[0];
       const p = datasets[el.datasetIndex].data[el.index] as PlotPoint;
-      if (p.url) window.open(p.url, "_blank", "noopener,noreferrer");
+      // Open the report modal editor (attribution + all fields), not the source.
+      setOpenReport({
+        title: p.title,
+        url: p.url,
+        description: p.description,
+        sourceName: p.source,
+        date: p.date,
+        rawHash: p.rawHash,
+      });
     },
     onHover: (evt, elements) => {
       const target = evt.native?.target as HTMLElement | undefined;
@@ -200,7 +219,7 @@ export default function ActivityTimeline({
       <p className="mt-0.5 text-[11px] text-slate-500">
         One lane per adversary; shape denotes the record type. Red marks PoC
         exploits and amber breaches; reports take the actor colour (grey when
-        unattributed). Click a point to open the source.
+        unattributed). Click a point to open the report.
       </p>
 
       <div className="mt-3 flex flex-col gap-4 sm:flex-row">
@@ -241,6 +260,10 @@ export default function ActivityTimeline({
           );
         })}
       </div>
+
+      {openReport ? (
+        <ReportModal report={openReport} onClose={() => setOpenReport(null)} />
+      ) : null}
     </section>
   );
 }

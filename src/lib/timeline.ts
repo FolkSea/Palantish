@@ -26,6 +26,7 @@ export type TimelineEvent = {
   description: string | null;
   source: string | null;
   url: string | null;
+  rawHash: string | null; // opens the report modal (attribution + all fields)
 };
 
 /** One swimlane: an actor (or "Exploits"), its category and colour. */
@@ -131,6 +132,7 @@ function intelEvent(
     description: i.description,
     source: i.source_name,
     url: i.url,
+    rawHash: i.raw_hash,
   };
 }
 
@@ -149,6 +151,7 @@ function breachEvent(
     description: i.description,
     source: i.source_name,
     url: i.url,
+    rawHash: i.raw_hash,
   };
 }
 
@@ -182,6 +185,7 @@ export function buildTimeline(
         description: i.target ? `Target: ${i.target}` : i.description,
         source: i.source_name,
         url: i.url,
+        rawHash: i.raw_hash,
       });
       continue;
     }

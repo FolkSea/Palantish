@@ -8,7 +8,6 @@ import {
   type SearchBreach,
   type SearchVuln,
 } from "@/app/actions";
-import { ExtLink } from "@/components/ExtLink";
 import { ReportTitle } from "@/components/ReportModal";
 import { SourceBadge, VulnStatusBadge } from "@/components/Badges";
 import { formatDate } from "@/lib/format";
@@ -182,7 +181,16 @@ function BreachRow({ b }: { b: SearchBreach }) {
   return (
     <li className="flex items-start gap-2 text-[12px]">
       <span className="flex-1">
-        <ExtLink href={b.url}>{b.org_name}</ExtLink>
+        <ReportTitle
+          report={{
+            title: b.org_name,
+            url: b.url,
+            description: b.summary,
+            sourceName: b.source_name,
+            date: b.event_date,
+            rawHash: b.raw_hash,
+          }}
+        />
         {b.summary ? (
           <span className="block truncate text-slate-500">{b.summary}</span>
         ) : null}
@@ -201,7 +209,16 @@ function VulnRow({ v }: { v: SearchVuln }) {
         <VulnStatusBadge value={v.status} />
       </span>
       <span className="flex-1">
-        <ExtLink href={v.url}>{v.cve_id}</ExtLink>
+        <ReportTitle
+          report={{
+            title: v.cve_id,
+            url: v.url,
+            description: v.detail,
+            sourceName: v.source_name,
+            date: null,
+            rawHash: v.raw_hash,
+          }}
+        />
         {v.target ? (
           <span className="block truncate text-slate-500">{v.target}</span>
         ) : null}

@@ -202,7 +202,7 @@ describe("buildTimeline", () => {
 });
 
 describe("eventVisible", () => {
-  const base = { id: "x", date: "2026-07-20", title: "t", description: null, source: null, url: null };
+  const base = { id: "x", date: "2026-07-20", title: "t", description: null, source: null, url: null, rawHash: null };
   const off = (k: keyof TimelineFilters): TimelineFilters => ({ ...DEFAULT_FILTERS, [k]: false });
 
   it("shows everything by default", () => {
