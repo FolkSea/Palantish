@@ -234,15 +234,13 @@ export async function loadDashboard(): Promise<DashboardData> {
   const nsGroups = sortGroups(
     buildGroupsFromAdversaries(allAdv.filter((a) => a.nexus !== "other")),
   );
-  // Research items feed the actor sections + timeline. Cards show the last 7d.
+  // Research items feed the actor sections + timeline. Cards show the last 30d
+  // (the section components paginate each card to 5 items).
   const research30 = (researchRes.data ?? []).filter(keep);
-  const researchRecent = research30.filter(
-    (i) => (i.published_at ?? "") >= recentCutoff,
-  );
   // Nation-state activity grouped into one card per country, plus a
   // "Non Attributed" card for nation-state items without a country.
   const nsByCountry = new Map<string, ActorItem[]>();
-  for (const i of researchRecent) {
+  for (const i of research30) {
     if (i.motivation !== "nation_state") continue;
     const item: ActorItem = {
       ...i,
@@ -356,7 +354,7 @@ export async function loadDashboard(): Promise<DashboardData> {
   // and per-actor eCrime and hacktivism cards. All three carry research
   // (intelligence) reports only; breach/leak posts stay in the Breaches list.
   const { ecrimeCards, hacktivismCards } = buildActorSectionCards(
-    researchRecent,
+    research30,
     ecrimeGroups,
     hacktivismGroups,
     labelsById,

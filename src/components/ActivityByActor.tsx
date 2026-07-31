@@ -11,6 +11,7 @@ import {
 import { ItemActions } from "@/components/ItemActions";
 import { LabelChips } from "@/components/LabelChips";
 import { ReportTitle } from "@/components/ReportModal";
+import { usePaginated, type Paged } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
 
 /** Event dates are ISO; breach labels ("27 Jul") pass through unformatted. */
@@ -160,6 +161,8 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 function ActorCardView({ card }: { card: ActorCard }) {
+  // Each card shows the 30-day set 5 at a time.
+  const p = usePaginated(card.items, 5);
   return (
     <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
       <div
@@ -182,9 +185,45 @@ function ActorCardView({ card }: { card: ActorCard }) {
       </div>
 
       <div className="flex-1 space-y-3 px-4 py-3">
-        {card.items.map((item) => (
+        {p.pageItems.map((item) => (
           <ActorEntry key={item.id} item={item} />
         ))}
+      </div>
+
+      {card.items.length > 5 ? <CardPager p={p} /> : null}
+    </div>
+  );
+}
+
+/** Compact prev/next pager shown at the foot of a card with >5 items. */
+function CardPager({ p }: { p: Paged<ActorItem> }) {
+  const btn =
+    "rounded border border-[#e5e7eb] bg-white px-1.5 py-0.5 font-medium text-slate-600 enabled:hover:bg-slate-50 disabled:opacity-40";
+  return (
+    <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-[10px] text-slate-400">
+      <span>
+        {p.start + 1}-{p.end} of {p.total}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className={btn}
+          disabled={p.page <= 0}
+          onClick={() => p.setPage(p.page - 1)}
+        >
+          Prev
+        </button>
+        <span>
+          {p.page + 1}/{p.pageCount}
+        </span>
+        <button
+          type="button"
+          className={btn}
+          disabled={p.page >= p.pageCount - 1}
+          onClick={() => p.setPage(p.page + 1)}
+        >
+          Next
+        </button>
       </div>
     </div>
   );
