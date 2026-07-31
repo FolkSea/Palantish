@@ -4,6 +4,7 @@ import {
   deriveAdversaryFromText,
   computeAdversaryLabel,
   classifyItemType,
+  classifyExploitStatus,
   isVulnAdvisory,
   type GroupEntry,
 } from "@/lib/ingest/enrich/rules";
@@ -220,6 +221,29 @@ describe("deriveAdversaryFromText", () => {
 
   it("returns null when nothing matches", () => {
     expect(deriveAdversaryFromText("Ordinary security update", null, groups)).toBeNull();
+  });
+});
+
+describe("classifyExploitStatus", () => {
+  it("grades a released proof-of-concept as poc", () => {
+    for (const t of [
+      "CVE-2026-16232 - Public PoC Released for Exploited Check Point SmartConsole Authentication Bypass",
+      "Researchers publish a proof of concept for the flaw",
+      "Working exploit code is now available",
+    ])
+      expect(classifyExploitStatus(t)).toBe("poc");
+  });
+
+  it("grades confirmed / government advisories as confirmed, else suspected", () => {
+    expect(classifyExploitStatus("Vendor confirmed the flaw is actively exploited")).toBe(
+      "confirmed",
+    );
+    expect(classifyExploitStatus("A security advisory for the product", "government")).toBe(
+      "confirmed",
+    );
+    expect(classifyExploitStatus("A newly reported vulnerability in a product")).toBe(
+      "suspected",
+    );
   });
 });
 

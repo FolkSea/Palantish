@@ -46,7 +46,8 @@ const RESEARCH_RE =
 const CONFIRMED_RE =
   /\b(confirmed|disclosed|acknowledged|patched|actively exploited|exploited in the wild|advisory)\b/i;
 
-const POC_RE = /\b(proof.of.concept|\bpoc\b|not yet (exploited|observed))\b/i;
+const POC_RE =
+  /\b(proof.?of.?concept|\bpoc\b|exploit code|not yet (exploited|observed))\b/i;
 
 function haystack(c: RawCandidate): string {
   return `${c.title} ${c.description ?? ""}`.toLowerCase();
@@ -159,9 +160,23 @@ export function classifyItemType(
 }
 
 export function classifyConfidence(c: RawCandidate): Confidence {
-  const hay = haystack(c);
+  return classifyExploitStatus(haystack(c), c.sourceCategory);
+}
+
+/**
+ * The exploit status shown in the Exploits section, derived deterministically
+ * from the report text (not the enricher's `confidence` - the LLM does not map
+ * "a PoC was released" onto "poc" reliably): a mentioned proof-of-concept /
+ * exploit code -> "poc"; a government advisory or confirmed/patched/exploited
+ * language -> "confirmed"; otherwise "suspected".
+ */
+export function classifyExploitStatus(
+  text: string,
+  sourceCategory?: string | null,
+): Confidence {
+  const hay = text.toLowerCase();
   if (POC_RE.test(hay)) return "poc";
-  if (c.sourceCategory === "government" || CONFIRMED_RE.test(hay))
+  if (sourceCategory === "government" || CONFIRMED_RE.test(hay))
     return "confirmed";
   return "suspected";
 }

@@ -197,12 +197,36 @@ async function main() {
     }
   }
 
+  // Regrade stored exploits to "poc" when their text mentions a proof-of-concept
+  // or exploit code. The LLM classifier under-reports "poc"; PoC availability is
+  // a fact in the text, so this is safe and only ever upgrades (never downgrades).
+  const { data: exploits } = await db
+    .from("intel_items")
+    .select("id, target, description, exploit_status")
+    .eq("kind", "exploit")
+    .neq("exploit_status", "poc");
+  let regraded = 0;
+  for (const e of exploits ?? []) {
+    if (!POC_RE.test(`${e.target ?? ""} ${e.description ?? ""}`)) continue;
+    regraded++;
+    console.log(
+      `${apply ? "regrade" : "would regrade"} ${e.exploit_status} -> poc: ${(e.target ?? "").slice(0, 56)}`,
+    );
+    if (apply) {
+      const { error } = await db
+        .from("intel_items")
+        .update({ exploit_status: "poc" })
+        .eq("id", e.id);
+      if (error) console.error(`  ! failed: ${error.message}`);
+    }
+  }
+
   console.log(
     `\n${apply ? "Re-filed" : "Would re-file"} ${(rows ?? []).length} candidates: ` +
-      `${promoted} -> exploit, ${moved} -> research` +
+      `${promoted} -> exploit, ${moved} -> research; ${regraded} exploit(s) regraded -> poc` +
       (moved ? ` (research from ${Object.entries(from).map(([k, n]) => `${k}: ${n}`).join(", ")}).` : "."),
   );
-  if (!apply && (moved || promoted))
+  if (!apply && (moved || promoted || regraded))
     console.log("Dry run - re-run with --apply to write the changes.");
   process.exit(0);
 }

@@ -7,6 +7,7 @@ import { selectEnricher } from "./enrich/select";
 import { selectSearchProvider } from "./search";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import {
+  classifyExploitStatus,
   computeAdversaryLabel,
   hasHacktivismKeyword,
   isVulnAdvisory,
@@ -33,8 +34,6 @@ import type { Database } from "@/lib/supabase/database.types";
 type IntelInsert = Database["public"]["Tables"]["intel_items"]["Insert"];
 
 const CVE_RE = /\bCVE-\d{4}-\d{3,7}\b/i;
-// PoC/exploit-code signal used to grade a promoted advisory (poc vs confirmed).
-const POC_RE = /\b(proof.?of.?concept|\bpoc\b|exploit code|proof-of-concept)\b/i;
 
 /** Report kind: which dashboard section an item belongs to. */
 export type ReportKind = "research" | "breach" | "exploit" | "other";
@@ -147,6 +146,10 @@ export async function runIngest(
 
     const sourceIdByName = new Map(
       (sources ?? []).map((s) => [s.name, s.id]),
+    );
+    // Source category drives the "government advisory -> confirmed" exploit rule.
+    const sourceCategoryByName = new Map(
+      (sources ?? []).map((s) => [s.name, s.category]),
     );
     // Adversary name -> its stored classification, to attribute matched items.
     const advByName = new Map(
@@ -297,7 +300,14 @@ export async function runIngest(
         ),
         cve_id: isExploit ? cveMatch![0].toUpperCase() : null,
         target: isExploit ? item.title.slice(0, 200) : null,
-        exploit_status: isExploit ? item.confidence ?? "suspected" : null,
+        // Deterministic from the report text, not the LLM's confidence, so a
+        // released PoC is graded "poc" regardless of the enricher in use.
+        exploit_status: isExploit
+          ? classifyExploitStatus(
+              `${item.title} ${item.description ?? ""}`,
+              sourceCategoryByName.get(item.sourceName),
+            )
+          : null,
         source_name: item.sourceName,
         source_id: sourceId,
         item_type: item.itemType,
@@ -364,12 +374,13 @@ export async function runIngest(
         title: string;
         description: string | null;
         kind: string;
+        source_name: string | null;
       }[] = [];
       if (batchRows.length > 0) {
         const { data, error } = await db
           .from("intel_items")
           .upsert(batchRows, { onConflict: "raw_hash", ignoreDuplicates: true })
-          .select("id, url, title, description, kind");
+          .select("id, url, title, description, kind, source_name");
         if (error) errors.push(`intel_items insert: ${error.message}`);
         else {
           insertedIntel = data ?? [];
@@ -413,7 +424,10 @@ export async function runIngest(
                   item_type: "vuln",
                   cve_id: indicators.cves[0].toUpperCase(),
                   target: item.title.slice(0, 200),
-                  exploit_status: POC_RE.test(text) ? "poc" : "confirmed",
+                  exploit_status: classifyExploitStatus(
+                    text,
+                    sourceCategoryByName.get(item.source_name ?? ""),
+                  ),
                   confidence: null,
                 })
                 .eq("id", item.id);
