@@ -402,6 +402,30 @@ export type Database = {
           },
         ]
       }
+      ioc_allowlist: {
+        Row: {
+          created_at: string
+          id: string
+          ioc_type: string
+          note: string | null
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ioc_type?: string
+          note?: string | null
+          value: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ioc_type?: string
+          note?: string | null
+          value?: string
+        }
+        Relationships: []
+      }
       iocs: {
         Row: {
           comment: string | null

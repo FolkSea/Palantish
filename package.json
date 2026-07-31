@@ -11,6 +11,7 @@
     "load:adversaries": "NODE_OPTIONS='--conditions=react-server' tsx scripts/load-adversaries.ts",
     "reclassify": "NODE_OPTIONS='--conditions=react-server' tsx scripts/reclassify.ts",
     "backfill:iocs": "NODE_OPTIONS='--conditions=react-server' tsx scripts/backfill-ioc-domains.ts",
+    "prune-iocs": "NODE_OPTIONS='--conditions=react-server' tsx scripts/prune-iocs.ts",
     "summary": "NODE_OPTIONS='--conditions=react-server' tsx scripts/generate-summary.ts",
     "sanitize": "NODE_OPTIONS='--conditions=react-server' tsx scripts/sanitize-existing.ts",
     "feeds:health": "NODE_OPTIONS='--conditions=react-server' tsx scripts/refresh-feed-health.ts",

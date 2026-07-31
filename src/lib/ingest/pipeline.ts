@@ -24,6 +24,7 @@ import {
 import { ilog } from "./log";
 import { fetchArticleText } from "./scrape";
 import { indicatorRows, linkIocsToItem } from "./iocs";
+import { loadIocAllowlist } from "./allowlist";
 import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
@@ -247,8 +248,11 @@ export async function runIngest(
     // dashboard as the run progresses.
     const BATCH_SIZE = 25;
 
-    // A source's own domain is never an IOC; compute the exclusion set once.
-    const sourceDomains = new Set<string>();
+    // A source's own domain is never an IOC; compute the exclusion set once, and
+    // fold in the operator-configurable allowlist (vendor / press / TI domains).
+    const allowlist = await loadIocAllowlist(db);
+    const allowIps = allowlist.ips;
+    const sourceDomains = new Set<string>(allowlist.domains);
     for (const s of sources ?? []) {
       for (const d of [sourceDomain(s.url), sourceDomain(s.feed_url)]) {
         if (d) sourceDomains.add(d);
@@ -402,6 +406,7 @@ export async function runIngest(
             const indicators = extractIndicators(
               `${item.title} ${item.description ?? ""} ${body}`,
               exclude,
+              allowIps,
             );
             const rows = indicatorRows(indicators);
             if (rows.length > 0)

@@ -4,6 +4,8 @@ import {
   normalizeIndicator,
   validIndicator,
   normalizeIndicatorValue,
+  isNonRoutableIp,
+  shouldExcludeIp,
 } from "@/lib/report-indicators";
 
 describe("extractIndicators", () => {
@@ -115,5 +117,52 @@ describe("normalizeIndicator", () => {
     expect(normalizeIndicator("8.8.8[.]8")).toBe("8.8.8.8");
     expect(normalizeIndicator("hxxps://bad[.]tld/x")).toBe("https://bad.tld/x");
     expect(normalizeIndicator("  1.2.3.4  ")).toBe("1.2.3.4");
+  });
+});
+
+describe("isNonRoutableIp", () => {
+  it("flags loopback, private, link-local, CGNAT and reserved ranges", () => {
+    for (const ip of [
+      "127.0.0.1", "0.0.0.0", "10.0.0.1", "172.16.5.4", "172.31.9.9",
+      "192.168.1.1", "169.254.1.2", "100.64.0.1", "224.0.0.1",
+      "255.255.255.255", "255.255.255.0",
+    ])
+      expect(isNonRoutableIp(ip), ip).toBe(true);
+  });
+  it("keeps routable (and documentation) addresses", () => {
+    for (const ip of ["8.8.8.8", "203.0.113.42", "45.86.230.12", "172.15.0.1", "172.32.0.1"])
+      expect(isNonRoutableIp(ip), ip).toBe(false);
+  });
+});
+
+describe("shouldExcludeIp", () => {
+  it("drops non-routable IPs and allowlisted public IPs", () => {
+    expect(shouldExcludeIp("127.0.0.1")).toBe(true);
+    expect(shouldExcludeIp("1.1.1.1")).toBe(false);
+    expect(shouldExcludeIp("1.1.1.1", ["8.8.8.8", "1.1.1.1"])).toBe(true);
+    expect(shouldExcludeIp("45.86.230.12", ["8.8.8.8"])).toBe(false);
+  });
+});
+
+describe("extractIndicators allowlisting", () => {
+  it("drops loopback/private IPs but keeps routable ones", () => {
+    const i = extractIndicators(
+      "beacons to 45.86.230.12 and 127.0.0.1, gateway 192.168.1.1",
+    );
+    expect(i.ips).toContain("45.86.230.12");
+    expect(i.ips).not.toContain("127.0.0.1");
+    expect(i.ips).not.toContain("192.168.1.1");
+  });
+
+  it("drops allowlisted vendor domains (incl. subdomains) and IPs", () => {
+    const i = extractIndicators(
+      "See blog.crowdstrike.com and evil.example.com; resolver 1.1.1.1 vs 45.86.230.12",
+      ["crowdstrike.com"],
+      ["1.1.1.1"],
+    );
+    expect(i.domains).toContain("evil.example.com");
+    expect(i.domains).not.toContain("blog.crowdstrike.com");
+    expect(i.ips).toContain("45.86.230.12");
+    expect(i.ips).not.toContain("1.1.1.1");
   });
 });

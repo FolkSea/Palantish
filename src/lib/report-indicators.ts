@@ -58,6 +58,28 @@ function validIpv4(ip: string): boolean {
     })
   );
 }
+
+/**
+ * IPv4 addresses that are never a reportable IOC: unspecified (0/8), private
+ * (10/8, 172.16/12, 192.168/16), loopback (127/8), CGNAT (100.64/10), link-local
+ * (169.254/16), and multicast / reserved / broadcast (>= 224). These are dropped
+ * in-code, so the allowlist table only needs specific public IPs. Documentation
+ * ranges (192.0.2/24, ...) are left alone - they read as example addresses that
+ * a reviewer may still want to see, and belong in the allowlist if unwanted.
+ */
+export function isNonRoutableIp(ip: string): boolean {
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255))
+    return false;
+  const [a, b] = p;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a >= 224) return true; // multicast (224/4), reserved (240/4), broadcast
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
 function isFileExt(domain: string): boolean {
   return EXT_ONLY_RE.test(domain.split(".").pop() ?? "");
 }
@@ -144,14 +166,29 @@ export function shouldExcludeDomain(
 }
 
 /**
+ * Whether an IP should be dropped as non-IOC: the built-in non-routable ranges
+ * (loopback / private / link-local / documentation / ...) plus any `extra`
+ * allowlisted public IPs. Exported for the IOC prune script.
+ */
+export function shouldExcludeIp(ip: string, extra?: Iterable<string>): boolean {
+  const v = (ip ?? "").trim();
+  if (!v) return false;
+  if (isNonRoutableIp(v)) return true;
+  if (extra) for (const e of extra) if ((e ?? "").trim() === v) return true;
+  return false;
+}
+
+/**
  * Extract indicators from text. `excludeDomains` (plus a built-in benign list)
  * are dropped from the domain and URI results - pass the report's own source
  * domain and the known blog/source domains so site chrome is not mistaken for
- * an IOC.
+ * an IOC. `excludeIps` drops specific allowlisted public IPs; non-routable IPs
+ * (loopback, private, ...) are always dropped.
  */
 export function extractIndicators(
   text: string,
   excludeDomains?: Iterable<string>,
+  excludeIps?: Iterable<string>,
 ): Indicators {
   const t = defang(text ?? "");
 
@@ -162,11 +199,20 @@ export function extractIndicators(
       if (v) excluded.add(v);
     }
   }
+  const ipExcluded = new Set<string>();
+  if (excludeIps) {
+    for (const ip of excludeIps) {
+      const v = (ip ?? "").trim();
+      if (v) ipExcluded.add(v);
+    }
+  }
 
   const uris = uniq(matchAll(t, URI_RE)).filter(
     (u) => !isExcludedDomain(hostOf(u), excluded),
   );
-  const ips = uniq(matchAll(t, IPV4_RE).filter(validIpv4));
+  const ips = uniq(matchAll(t, IPV4_RE).filter(validIpv4)).filter(
+    (ip) => !isNonRoutableIp(ip) && !ipExcluded.has(ip),
+  );
   const ipSet = new Set(ips);
   const uriHosts = new Set(uris.map(hostOf));
 
