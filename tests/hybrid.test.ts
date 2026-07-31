@@ -119,6 +119,36 @@ describe("HybridEnricher (llm-first)", () => {
     expect(out).toBe(item);
   });
 
+  it("pre-gates obvious marketing without paying for an LLM call", async () => {
+    const spy = vi.fn(async () => llmItem());
+    const h = new HybridEnricher({ classify: spy }, groups, undefined, "llm-first");
+    const out = await h.enrich(
+      candidate({ title: "Register now for our product webinar" }),
+    );
+    expect(out).toBeNull();
+    // The whole point of the gate: no fetch-and-analyse call was made.
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("pre-gates a candidate missing a title or URL", async () => {
+    const spy = vi.fn(async () => llmItem());
+    const h = new HybridEnricher({ classify: spy }, groups, undefined, "llm-first");
+    expect(await h.enrich(candidate({ title: "" }))).toBeNull();
+    expect(await h.enrich(candidate({ url: "" }))).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("does not pre-gate genuine reporting - it still reaches the LLM", async () => {
+    const item = llmItem();
+    const spy = vi.fn(async () => item);
+    const h = new HybridEnricher({ classify: spy }, groups, undefined, "llm-first");
+    const out = await h.enrich(
+      candidate({ title: "Volt Typhoon targets critical infrastructure" }),
+    );
+    expect(spy).toHaveBeenCalledOnce();
+    expect(out).toBe(item);
+  });
+
   it("honours an LLM drop", async () => {
     const h = new HybridEnricher(
       { classify: vi.fn(async () => "drop" as const) },

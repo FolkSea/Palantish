@@ -1,6 +1,7 @@
 import type { Enricher, EnrichedItem, RawCandidate } from "@/lib/ingest/types";
 import {
   buildReport,
+  isMarketing,
   matchGroup,
   rulesClassify,
   sortGroups,
@@ -85,6 +86,19 @@ export class HybridEnricher implements Enricher {
 
   /** LLM leads; the rules are the fallback when it is unavailable. */
   private async enrichLlmFirst(c: RawCandidate): Promise<EnrichedItem | null> {
+    // Cheap deterministic pre-gate. Under web-fetch triage every candidate that
+    // reaches the LLM costs a full fetch-and-analyse call, so the unambiguous
+    // junk the rules can already recognise is dropped here rather than paying
+    // for a verdict that is always the same. Only clear-cut cases are gated -
+    // anything requiring judgement still goes to the LLM.
+    if (!c.title || !c.url) {
+      this.reportDrop("rules", c, "missing title or URL");
+      return null;
+    }
+    if (isMarketing(c)) {
+      this.reportDrop("rules", c, "marketing / product (pre-gate)");
+      return null;
+    }
     if (this.llm) {
       const decided = await this.consultLlm(c, false);
       if (decided !== "fallthrough") return decided;

@@ -87,6 +87,9 @@ export type IngestResult = {
   status: "success" | "error";
   itemsAdded: number;
   candidates: number;
+  /** Candidates left unprocessed when the run stopped on its time budget; the
+   * caller chains another run while this is above zero. */
+  deferred: number;
   errors: string[];
 };
 
@@ -360,14 +363,20 @@ export async function runIngest(
     // Per-feed keep/drop tally, accumulated into the sources table after the run.
     const perSource = new Map<string, { kept: number; dropped: number }>();
 
+    // Candidates left unprocessed when the run stops on its time budget. The
+    // caller uses this to chain another run (the cron fires only once a day, so
+    // one invocation cannot drain a full backlog).
+    let deferred = 0;
+
     const batches = Math.ceil(fresh.length / BATCH_SIZE);
     for (let b = 0; b < batches; b++) {
       // Stop starting new batches once the budget is spent (but always do at
       // least one). The unprocessed candidates are simply picked up next run.
       if (b > 0 && Date.now() - runStartMs > RUN_BUDGET_MS) {
+        deferred = fresh.length - b * BATCH_SIZE;
         errors.push(
           `time budget reached: ${b} of ${batches} batches processed, ` +
-            `${fresh.length - b * BATCH_SIZE} candidates deferred to the next run`,
+            `${deferred} candidates deferred to the next run`,
         );
         ilog(
           `run budget reached after ${b}/${batches} batches; ${added} added, ` +
@@ -648,6 +657,7 @@ export async function runIngest(
       status: "success",
       itemsAdded: added,
       candidates: allCandidates.length,
+      deferred,
       errors,
     };
   } catch (err) {
@@ -666,6 +676,7 @@ export async function runIngest(
       status: "error",
       itemsAdded: 0,
       candidates: 0,
+      deferred: 0,
       errors: [message, ...errors],
     };
   }
