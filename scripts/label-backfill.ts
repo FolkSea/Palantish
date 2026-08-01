@@ -28,13 +28,12 @@ const limit = limitArg
 const positional = args.filter((a) => !a.startsWith("--") && !/^\d+$/.test(a));
 const [argUrl, argKey] = positional;
 
-let SUPABASE_URL = argUrl || process.env.NEXT_PUBLIC_SUPABASE_URL;
-let SERVICE_ROLE_KEY = argKey || process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-  config({ path: ".env.local" });
-  SUPABASE_URL = SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  SERVICE_ROLE_KEY = SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-}
+// Always load .env.local first: even when the Supabase target is given as
+// arguments (e.g. pointing at production), the run still needs ANTHROPIC_API_KEY
+// from there. Existing environment values win, and the arguments win over both.
+config({ path: ".env.local" });
+const SUPABASE_URL = argUrl || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SERVICE_ROLE_KEY = argKey || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 async function mapPool<T>(
   items: T[],
