@@ -22,7 +22,6 @@ export type BrowseResult = {
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
-/** intel_items ids carrying a label, matched case-insensitively by name. */
 async function idsForLabel(db: Db, name: string): Promise<string[] | null> {
   const { data: labelRows } = await db
     .from("labels")
@@ -37,7 +36,6 @@ async function idsForLabel(db: Db, name: string): Promise<string[] | null> {
   return [...new Set((data ?? []).map((r) => r.intel_item_id))];
 }
 
-/** The labels on each of the given items, for the chips on every row. */
 async function labelsById(
   db: Db,
   ids: string[],
@@ -138,7 +136,6 @@ export async function loadBrowse(filter: BrowseFilter): Promise<BrowseResult> {
   };
 }
 
-/** The fields a report's own page needs to render its detail view. */
 export type ItemDetail = {
   title: string;
   url: string | null;

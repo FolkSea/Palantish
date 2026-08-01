@@ -10,11 +10,6 @@ import { formatDate } from "@/lib/format";
 import { adversaryHref, sourceHref } from "@/lib/browse-links";
 import type { LabeledIntelRow } from "@/lib/data";
 
-/**
- * The /reports browse table: every report matching the chosen label, adversary
- * or source, newest first. Rows behave like the dashboard's - the title opens
- * the report modal, and the badges are themselves links into other filters.
- */
 export function BrowseList({ items }: { items: LabeledIntelRow[] }) {
   const p = usePaginated(items, 20);
   return (

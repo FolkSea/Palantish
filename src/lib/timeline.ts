@@ -4,10 +4,8 @@ import { matchGroup, hasHacktivismKeyword } from "@/lib/ingest/enrich/rules";
 
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
 
-/** Marker type -> icon (chart point shape). */
 export type TimelineKind = "report" | "breach" | "exploit";
 
-/** Stream grouping / filter bucket. */
 export type TimelineCategory =
   | "nation_state"
   | "ecrime"
@@ -15,7 +13,6 @@ export type TimelineCategory =
   | "breach"
   | "exploit";
 
-/** One dot on the unified timeline: a report, breach or exploit. */
 export type TimelineEvent = {
   id: string;
   date: string; // ISO (yyyy-mm-dd or full)
@@ -29,14 +26,12 @@ export type TimelineEvent = {
   rawHash: string | null; // opens the report modal (attribution + all fields)
 };
 
-/** One swimlane: an actor (or "Exploits"), its category and colour. */
 export type TimelineStream = {
   actor: string;
   category: TimelineCategory;
   color: string;
 };
 
-/** The five filter toggles; every event is gated by category and/or kind. */
 export type TimelineFilters = {
   nation_state: boolean;
   ecrime: boolean;
@@ -108,7 +103,6 @@ export const KIND_LABEL: Record<TimelineKind, string> = {
   exploit: "Exploit",
 };
 
-/** A real actor name (CS cryptonym or a stored non-UNID label), or null. */
 function namedActor(cs: string | null, label: string | null): string | null {
   const fromCs = cs?.trim();
   if (fromCs) return fromCs;
@@ -267,7 +261,6 @@ function buildStreams(events: TimelineEvent[]): TimelineStream[] {
   });
 }
 
-/** Whether an event passes the current filter toggles. */
 export function eventVisible(e: TimelineEvent, f: TimelineFilters): boolean {
   if (e.category === "exploit") return f.exploits;
   // The neutral Breaches lane is gated solely by the Breaches toggle.

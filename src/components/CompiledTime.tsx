@@ -16,7 +16,6 @@ function formatTimestamp(iso: string | null): string {
   });
 }
 
-/** Renders a timestamp client-side in the viewer's locale, prefixed by label. */
 export default function CompiledTime({
   iso,
   label = "Compiled",

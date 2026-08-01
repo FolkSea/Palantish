@@ -9,7 +9,6 @@ import { parseLabels } from "./labels";
 export type FetchStatus = "full" | "feed_only" | "failed";
 export type DashboardKind = "research" | "breach" | "exploit" | "other";
 
-/** Indicators as the model returns them - distinct arrays, one per type. */
 export type LlmIndicators = {
   ipv4: string[];
   ipv6: string[];
@@ -19,7 +18,6 @@ export type LlmIndicators = {
   cves: string[];
 };
 
-/** One extracted indicator with the supporting excerpt the model cited. */
 export type IndicatorEvidence = { value: string; excerpt: string };
 
 /** What AnalystAgent.triageWithFetch returns: the parsed classification plus the
@@ -154,10 +152,6 @@ export function buildTriageUserMessage(c: {
   ].join("\n");
 }
 
-// ---------------------------------------------------------------------------
-// Response parsing
-// ---------------------------------------------------------------------------
-
 type Block = {
   type: string;
   name?: string;
@@ -215,7 +209,6 @@ export function parseFetchOutcome(content: Block[]): {
   return { fetchedUrl, succeeded, text, errorCode };
 }
 
-/** Concatenate the assistant text blocks (the final JSON lives here). */
 export function textOfBlocks(content: Block[]): string {
   return (content ?? [])
     .filter((b) => b.type === "text" && typeof b.text === "string")

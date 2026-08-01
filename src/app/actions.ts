@@ -100,7 +100,6 @@ export async function hideItemAction(
   return { ok: true };
 }
 
-/** Unhide an item the current user previously hid (per-user; RLS-scoped). */
 export async function unhideItemAction(
   rawHash: string,
 ): Promise<ItemMutationResult> {
@@ -156,7 +155,6 @@ export async function importPostAction(url: string): Promise<ImportResult> {
   return result;
 }
 
-/** Fallback import: read the page with the LLM, then ingest. */
 export async function importPostWithAIAction(url: string): Promise<ImportResult> {
   if (!url || !url.trim()) return { ok: false, error: "Enter a URL to import." };
   const unauth = await ensureAuthenticated();
@@ -180,7 +178,6 @@ export async function importPostWithAIAction(url: string): Promise<ImportResult>
   return result;
 }
 
-/** Fallback import: ingest a pasted title + body. */
 export async function importPostManualAction(
   url: string,
   title: string,
@@ -208,8 +205,6 @@ export async function importPostManualAction(
   if (result.ok) refreshDashboard();
   return result;
 }
-
-/* --- Report view ----------------------------------------------------------- */
 
 export type ReportViewResult =
   | {
@@ -246,8 +241,6 @@ export async function fetchReportViewAction(
     };
   }
 }
-
-/* --- Persist report indicators --------------------------------------------- */
 
 /**
  * Upsert a report's extracted IOCs (deduped by value) and link them to the
@@ -526,8 +519,6 @@ export async function updateReportIocAction(
   return { ok: true, value: normalized };
 }
 
-/* --- Report attribution (adversary) --------------------------------------- */
-
 const UNID_FAMILY_OPTIONS = [
   "PANDA",
   "BEAR",
@@ -553,7 +544,6 @@ const FAMILY_COUNTRIES = [
   "Pakistan",
 ];
 
-/** Autocomplete options for the modal's Attribution + Country inputs. */
 export async function getAttributionOptionsAction(): Promise<{
   adversaries: string[];
   countries: string[];
@@ -594,7 +584,6 @@ export type UpdateAdversaryResult =
 
 type AdminDb = ReturnType<typeof createAdminClient>;
 
-/** Resolve a rawHash to its intel_items row (id + current kind), or null. */
 async function resolveReport(
   db: AdminDb,
   rawHash: string,
@@ -794,7 +783,6 @@ export async function updateReportCountryAction(
 
 const CONFIDENCE_VALUES = ["high", "medium", "low"];
 
-/** Set a report's attribution confidence (high / medium / low). */
 export async function updateReportConfidenceAction(
   rawHash: string,
   confidence: string,
@@ -822,7 +810,6 @@ export async function updateReportConfidenceAction(
   return { ok: true, confidence: c || null, moved: false };
 }
 
-/** Save a report's analyst commentary or visibility-gaps note (markdown). */
 export async function updateReportNoteAction(
   rawHash: string,
   field: "analyst_comments" | "visibility_gaps",
@@ -879,7 +866,6 @@ export async function updateReportLabelsAction(
   }
   const names = [...seen.values()];
 
-  // Find-or-create each label, collecting its id.
   const labelIds: string[] = [];
   for (const name of names) {
     const existing = await db
@@ -910,7 +896,6 @@ export async function updateReportLabelsAction(
     }
   }
 
-  // Replace the report's links with the new set: clear then re-link.
   const del = await db
     .from("intel_item_labels")
     .delete()
@@ -926,8 +911,6 @@ export async function updateReportLabelsAction(
   revalidatePath("/");
   return { ok: true, labels: names.sort((a, b) => a.localeCompare(b)) };
 }
-
-/* --- MITRE ATT&CK discovery ------------------------------------------------ */
 
 export type DiscoverTechniquesResult =
   | { ok: true; techniques: DiscoveredTechnique[] }
@@ -968,8 +951,6 @@ export async function discoverTechniquesAction(
 
   return { ok: true, techniques };
 }
-
-/* --- Search ---------------------------------------------------------------- */
 
 export type SearchReport = {
   id: string;
@@ -1035,7 +1016,6 @@ async function reportsByIndicator(
   const value = normalizeIndicator(query);
   if (value.length < 3) return [];
 
-  // ilike without wildcards is a case-insensitive exact match on the value.
   const iocRes = await supabase.from("iocs").select("id").ilike("value", value);
   const iocIds = (iocRes.data ?? []).map((r) => r.id);
   if (iocIds.length === 0) return [];
@@ -1077,7 +1057,6 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
   const like = `%${safe}%`;
 
   const [searchRes, hiddenRes] = await Promise.all([
-    // Every report lives in intel_items now; partition by kind below.
     supabase
       .from("intel_items")
       .select(

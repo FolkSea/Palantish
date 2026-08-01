@@ -9,7 +9,6 @@ export function findCve(item: Pick<EnrichedItem, "title" | "description">) {
   return `${item.title} ${item.description ?? ""}`.match(CVE_RE)?.[0].toUpperCase() ?? null;
 }
 
-/** Resolve the single dashboard section for an enriched report. */
 export function resolveReportKind(
   item: EnrichedItem,
   attributed: boolean,

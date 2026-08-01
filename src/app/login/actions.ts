@@ -40,7 +40,6 @@ export async function signInWithMagicLink(
   return { message: `If ${email} has an account, a magic link is on its way.` };
 }
 
-/** Email + password sign-in. Accounts are managed in Supabase Auth. */
 export async function signInWithPassword(
   _prev: ActionResult,
   formData: FormData,

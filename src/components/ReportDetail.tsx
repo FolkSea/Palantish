@@ -181,7 +181,6 @@ export function ReportDetail({
 
   const rawHash = report.rawHash;
 
-  // Locally-tracked attribution + country so edits reflect immediately.
   const [adversary, setAdversary] = useState<string | null>(
     report.adversary ?? null,
   );
@@ -190,7 +189,6 @@ export function ReportDetail({
     report.confidence ?? null,
   );
 
-  // Autocomplete options for the Attribution + Country inputs.
   const [options, setOptions] = useState<{
     adversaries: string[];
     countries: string[];
@@ -251,7 +249,6 @@ export function ReportDetail({
     };
   }
 
-  // Add an unrecognised name to the catalogue, then attribute this report to it.
   async function addActorAndAttribute(
     input: ActorInput,
   ): Promise<{ ok: boolean; error?: string }> {
@@ -274,8 +271,6 @@ export function ReportDetail({
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   }
 
-  // User-defined labels + analyst notes (markdown), loaded with the indicators
-  // below.
   const [labels, setLabels] = useState<string[]>([]);
   const [analystComments, setAnalystComments] = useState<string | null>(null);
   const [visibilityGaps, setVisibilityGaps] = useState<string | null>(null);
@@ -315,7 +310,6 @@ export function ReportDetail({
   const [allowlist, setAllowlist] = useState<{ domains: string[]; ips: string[] }>(
     { domains: [], ips: [] },
   );
-  // What the rawHash resolves to: an intel report, a breach, or neither.
   const [kind, setKind] = useState<"intel" | "breach" | null>(null);
   // rawHash changes can reuse the mounted details panel, so clear stale data
   // before the replacement query resolves.
@@ -427,7 +421,6 @@ export function ReportDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawHash, detailsText, stored, hasStoredIocs, extractedCount, kind]);
 
-  // MITRE ATT&CK discovery (LLM). Only runs when the user clicks Discover.
   const [techniques, setTechniques] = useState<DiscoveredTechnique[] | null>(
     null,
   );
@@ -477,7 +470,6 @@ export function ReportDetail({
       }`}
       onClick={asPage ? undefined : (e) => e.stopPropagation()}
     >
-        {/* Left: title + the imported report */}
         <div
           className="flex min-w-0 flex-col"
           style={{ width: `${leftPct}%` }}
@@ -548,7 +540,6 @@ export function ReportDetail({
           </div>
         </div>
 
-        {/* Draggable divider: drag to change the column widths */}
         <div
           role="separator"
           aria-orientation="vertical"
@@ -558,7 +549,6 @@ export function ReportDetail({
           <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
         </div>
 
-        {/* Right: collapsible information cards */}
         <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
           <div className="flex shrink-0 items-center justify-between border-b border-[#e5e7eb] px-3 py-2">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">

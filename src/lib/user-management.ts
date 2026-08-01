@@ -5,7 +5,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { AccountRole } from "@/lib/account-role";
 import type { ManagedUser } from "@/lib/user-management-types";
 
-/** List all Supabase Auth accounts with their application access level. */
 export async function listManagedUsers(): Promise<ManagedUser[]> {
   if (!(await getAdministratorClient())) return [];
 

@@ -145,7 +145,6 @@ export function ImportPostButton({
         </button>
       )}
 
-      {/* URL entry modal */}
       {panel === "url" ? (
         <Modal onClose={closePanels}>
           <h2 className="text-[14px] font-semibold text-slate-900">
@@ -198,7 +197,6 @@ export function ImportPostButton({
         </Modal>
       ) : null}
 
-      {/* Choice overlay: scrape failed, pick a fallback */}
       {panel === "choice" ? (
         <Modal onClose={closePanels}>
           <h2 className="text-[14px] font-semibold text-slate-900">
@@ -252,7 +250,6 @@ export function ImportPostButton({
         </Modal>
       ) : null}
 
-      {/* Paste modal: title + body */}
       {panel === "paste" ? (
         <Modal onClose={closePanels}>
           <h2 className="text-[14px] font-semibold text-slate-900">

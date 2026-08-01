@@ -14,8 +14,8 @@ function isPublicPath(pathname: string): boolean {
 
 /**
  * Refreshes the Supabase session cookie and gates access. Unauthenticated users
- * are redirected to /login for any non-public path; access is otherwise managed
- * entirely in Supabase Auth.
+ * are redirected to /login for any non-public path. Feature-level role checks
+ * are enforced by pages, server actions, and RLS after authentication.
  */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });

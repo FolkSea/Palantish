@@ -30,9 +30,8 @@ export const publicEnv = {
   },
 };
 
-// Access control is managed entirely in Supabase Auth: any user that exists in
-// the project (created/invited via the Supabase dashboard) may sign in. There
-// is no application-level email allow-list.
+// Supabase Auth determines who may sign in. Application roles separately govern
+// administrator-only capabilities; there is no email allow-list.
 
 /** Server-only secrets. Throws if accessed where they are undefined. */
 export const serverEnv = {

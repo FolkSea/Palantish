@@ -2,10 +2,6 @@
 // of the "use server" actions file, which may only export async server actions -
 // importing a plain const from there breaks the client.
 
-/* --- Actors (adversaries catalogue) --------------------------------------- */
-
-/** What an actor is. Determines its dashboard grouping; for nation-state
- * actors, a country is also set. (Replaces the old actor "family" focus.) */
 export type Motivation = "nation_state" | "ecrime" | "hacktivism";
 
 export const MOTIVATIONS: Motivation[] = [

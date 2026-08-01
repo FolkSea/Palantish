@@ -87,7 +87,7 @@ export type DashboardData = {
 
 /**
  * Loads every section of the dashboard in parallel. All queries run under the
- * caller's RLS context, so only allow-listed authenticated users see data.
+ * caller's RLS context.
  */
 // Timeline tabs look back 30 days; every non-timeline section shows 7 days.
 const RECENT_DAYS = 7;
@@ -213,17 +213,12 @@ export async function loadDashboard(): Promise<DashboardData> {
   // and drop anything this user has hidden.
   const keep = (i: { title: string | null; description?: string | null; raw_hash: string }) =>
     isThreatIntel(i.title, i.description) && !hidden.has(i.raw_hash);
-  // Labels for every report shown on the page (actor cards, breaches, other
-  // reporting), fetched once and looked up by intel_items id.
   const labelsById = await loadLabelsById(supabase, [
     ...(researchRes.data ?? []).map((r) => r.id),
     ...(breachRes.data ?? []).map((r) => r.id),
     ...(otherRes.data ?? []).map((r) => r.id),
   ]);
 
-  // Split the adversary catalogue into the three matchers the dashboard needs.
-  // "other" nexus is eCrime or hacktivism, told apart by the actor's motivation;
-  // everything else is nation-state / rest-of-world.
   const allAdv = (advRes.data ?? []) as AdversaryGroupInput[];
   const hasMotivation = (a: AdversaryGroupInput, m: string) =>
     (a.motivation ?? []).includes(m);
@@ -294,7 +289,6 @@ export async function loadDashboard(): Promise<DashboardData> {
       }
     : null;
 
-  // eCrime attribution matcher: catalogue actors whose motivation is eCrime.
   const ecrimeGroups = sortGroups(
     buildGroupsFromAdversaries(allAdv.filter((a) => hasMotivation(a, "ecrime"))),
   );
@@ -313,7 +307,6 @@ export async function loadDashboard(): Promise<DashboardData> {
     (v) => (v.published_at ?? "") >= recentCutoff,
   );
 
-  // Other reporting: 7-day list of unattributed general reporting.
   const reports = (otherRes.data ?? []).filter(keep).map(withLabels);
 
   // Breaking ticker: PoC exploits and breaches observed in the last ~24h only,
@@ -343,7 +336,6 @@ export async function loadDashboard(): Promise<DashboardData> {
       })),
   ].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
-  // Hacktivism matcher: catalogue actors whose motivation is hacktivism.
   const hacktivismGroups = sortGroups(
     buildGroupsFromAdversaries(
       allAdv.filter((a) => hasMotivation(a, "hacktivism")),

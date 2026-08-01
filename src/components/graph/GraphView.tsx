@@ -229,7 +229,6 @@ export default function GraphView({
     <div className="relative flex-1">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* Legend + expansion type filter */}
       <div className="absolute left-3 top-3 w-52 rounded-[10px] border border-[#e5e7eb] bg-white/95 p-3 text-[11px] shadow-sm">
         <div className="mb-1.5 font-semibold text-slate-700">Expand into</div>
         <ul className="space-y-1">
@@ -283,7 +282,6 @@ export default function GraphView({
         </div>
       </div>
 
-      {/* Selected-node details */}
       {selected ? (
         <div className="absolute right-3 top-3 w-64 rounded-[10px] border border-[#e5e7eb] bg-white/95 p-3 text-[12px] shadow-sm">
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">

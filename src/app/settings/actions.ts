@@ -181,12 +181,10 @@ export async function ingestAllSources(): Promise<IngestActionResult> {
   return { ok: true, started: true };
 }
 
-/** Ingest a single feed on demand (the row "Update" action). */
 export async function ingestSource(id: string): Promise<IngestActionResult> {
   return triggerIngest({ sourceIds: [id] });
 }
 
-/** Regenerate the executive summary from current data (no ingest). */
 export async function refreshSummaryAction(): Promise<{
   ok: boolean;
   error?: string;

@@ -131,7 +131,6 @@ export function AccountPanel({
 
   return (
     <div className="space-y-4">
-      {/* Account details */}
       <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
         <h2 className="text-[13px] font-semibold text-slate-900">
           Account details
@@ -186,7 +185,6 @@ export function AccountPanel({
         </div>
       </section>
 
-      {/* Password reset */}
       <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
         <h2 className="text-[13px] font-semibold text-slate-900">
           Reset password

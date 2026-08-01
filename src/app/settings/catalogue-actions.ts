@@ -23,8 +23,6 @@ function toList(csv: string): string[] {
     .filter(Boolean);
 }
 
-/* --- Actors (adversaries catalogue) --------------------------------------- */
-
 const ACTOR_SELECT =
   "id, name, motivation, country, community_identifiers, description";
 

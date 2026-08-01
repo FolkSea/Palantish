@@ -33,7 +33,6 @@ const REQUEST_TIMEOUT_MS = Number(process.env.INGEST_LLM_TIMEOUT_MS) || 20000;
 const LONG_CALL_TIMEOUT_MS =
   Number(process.env.INGEST_LLM_LONG_TIMEOUT_MS) || 60000;
 
-/** The agent's identity, shared across triage, summarising, and reflection. */
 export const ANALYST_PERSONA = `You are a cybersecurity analyst, whose task is to triage and classify industry open-source reports for a nation-state and eCrime cyber-intelligence dashboard, and to write its executive summaries.
 You reason only from the open-source reporting in front of you: stay evidence-based, prefer precise attribution over speculation, and never invent threat actors, victims, malware, or numbers.
 You maintain a running memory of adversaries and cross-report trends. When a memory brief is provided, use it to inform attribution and context - but the report in front of you always overrides stale memory.`;
@@ -57,7 +56,6 @@ Return ONLY strict JSON of this shape:
   "trends": [ { "subject": string, "content": string } ]
 }`;
 
-/** A compact observation about one kept report, fed into reflection. */
 export type ReflectionInput = {
   title: string;
   kind: string;
@@ -163,7 +161,6 @@ export class AnalystAgent {
     };
   }
 
-  /** Write the executive summary from the aggregates; empty on failure. */
   async summarize(
     references: string,
     counts: unknown,
@@ -172,12 +169,9 @@ export class AnalystAgent {
     const message = await this.client.messages.create(
       {
         model,
-        // Same thinking-plus-text budget as the reflection above: the summary
-        // itself is short, but the cap has to leave room for the reasoning that
-        // precedes it or the response comes back empty.
+        // This covers reasoning and final prose; too small a budget can yield no
+        // text, while low effort keeps generation within its timeout.
         max_tokens: 4000,
-        // Narrative synthesis should spend its budget on prose, not prolonged
-        // reasoning that can time out and trigger a fallback.
         output_config: { effort: "low" },
         system: this.system(SUMMARY_INSTRUCTIONS, true),
         messages: [

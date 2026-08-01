@@ -53,7 +53,6 @@ function oneLine(value: string | null | undefined, max = 520): string {
   return (value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 }
 
-/** Rich report evidence supplied to the narrative-summary model. */
 export function formatSummaryEvidence(items: LinkableItem[]): string {
   return items
     .map((item) => {
@@ -70,7 +69,6 @@ export function formatSummaryEvidence(items: LinkableItem[]): string {
     .join("\n");
 }
 
-/** Compute the 24h / 7d / 30d evidence used by the executive summary. */
 export async function computeAggregates(db: Db): Promise<Aggregates> {
   const cut30 = isoDaysAgo(30);
   const cut7 = isoDaysAgo(7);

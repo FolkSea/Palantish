@@ -113,7 +113,6 @@ export async function runIngest(
   );
 
   try {
-    // Reference data ---------------------------------------------------------
     // A scoped run (the single-feed "Update" action) targets the given source
     // ids regardless of their active flag; a full run pulls all active sources.
     const sourcesSelect = db
@@ -154,7 +153,6 @@ export async function runIngest(
       .map((s) => ({ name: s.name, feed_url: s.feed_url, category: s.category }));
     ilog(`pulling ${feedSources.length} active feeds...`);
 
-    // Existing dedup hashes (all reports live in intel_items now) ------------
     const [intelHashes, deletedHashes] = await Promise.all([
       db.from("intel_items").select("raw_hash"),
       // Blocklist: items an operator permanently deleted must not return.
@@ -165,7 +163,6 @@ export async function runIngest(
       ...(deletedHashes.data ?? []).map((r) => r.raw_hash),
     ]);
 
-    // Pull + augment ---------------------------------------------------------
     const {
       candidates: feedCandidates,
       errors: feedErrors,
@@ -199,7 +196,6 @@ export async function runIngest(
       `${allCandidates.length} candidates, ${fresh.length} new after dedup; enriching (concurrency 6)...`,
     );
 
-    // Enrich (drop nulls) ----------------------------------------------------
     // Per-item logging: which items the rules classify locally vs escalate to
     // the LLM, and whether each is kept or dropped.
     const tally = { rulesKeep: 0, rulesDrop: 0, llmKeep: 0, llmDrop: 0 };
@@ -599,7 +595,7 @@ export async function runIngest(
     }
 
     // Recalculate the executive summary on every completed run so it always
-    // reflects the latest data and the current 24h / 7d windows. Non-fatal.
+    // reflects the latest data and the current 24h / 7-30d windows. Non-fatal.
     ilog("recalculating executive summary...");
     try {
       await generateAndStoreSummary(db);

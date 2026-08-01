@@ -8,7 +8,8 @@ import { serverEnv } from "@/lib/env";
 /**
  * Service-role Supabase client. Bypasses RLS and can write to every table.
  * SERVER-ONLY: the `server-only` import makes bundling this into client code a
- * build error. Used exclusively by the ingest pipeline.
+ * build error. Callers must enforce authentication and role checks before using
+ * it from user-triggered server actions.
  */
 export function createAdminClient() {
   return createSupabaseClient<Database>(

@@ -62,7 +62,6 @@ export function SourcesPanel({
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
-  // Filters
   const [nameFilter, setNameFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<"all" | SourceCategory>(
     "all",
@@ -180,7 +179,6 @@ export function SourcesPanel({
         />
       ) : null}
 
-      {/* Filters */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input
           className={`${filterCls} w-44`}

@@ -8,7 +8,6 @@ type Db = SupabaseClient<Database>;
 
 export type IocRow = { value: string; ioc_type: string };
 
-/** IOC rows for the IP / domain / URI / file-hash indicators in a set. */
 export function indicatorRows(indicators: Indicators): IocRow[] {
   return [
     ...indicators.ips.map((value) => ({ value, ioc_type: "ip" })),

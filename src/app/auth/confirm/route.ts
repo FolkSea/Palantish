@@ -2,7 +2,6 @@ import { type EmailOtpType } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-/** Magic-link callback: verifies the OTP token and establishes a session. */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const token_hash = searchParams.get("token_hash");
@@ -25,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   if (error) return redirectTo("/login", "invalid_link");
 
-  // Any user Supabase issued a valid link to is allowed in; access is managed
-  // entirely in Supabase Auth.
+  // Supabase controls sign-in eligibility; application roles are enforced after
+  // the session is established.
   return redirectTo(next);
 }

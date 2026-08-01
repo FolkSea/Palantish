@@ -9,7 +9,6 @@ import type {
   GraphNodeType,
 } from "./types";
 
-/** Node colour per type (adversary is tinted by nexus in the view). */
 export const NODE_COLOR: Record<GraphNodeType, string> = {
   item: "#2563eb",
   ioc: "#0d9488",
@@ -18,7 +17,6 @@ export const NODE_COLOR: Record<GraphNodeType, string> = {
   adversary: "#f59e0b",
 };
 
-/** Map an iocs.ioc_type to its graph node type. */
 export function nodeTypeForIoc(iocType: string): GraphNodeType {
   if (iocType === "mitre") return "ttp";
   if (iocType === "cve") return "cve";
@@ -72,7 +70,6 @@ export function iocNode(value: string, iocType: string): GraphNode {
   };
 }
 
-/** A CVE node from a bare CVE id (intel_items.cve_id). */
 export function cveNode(cveId: string): GraphNode {
   return iocNode(cveId, "cve");
 }
@@ -107,7 +104,6 @@ export function parseNodeId(id: string): { type: GraphNodeType; key: string } {
   return { type: id.slice(0, i) as GraphNodeType, key: id.slice(i + 1) };
 }
 
-/** Merge graphs, deduping nodes and edges by id (first occurrence wins). */
 export function mergeGraph(...parts: GraphData[]): GraphData {
   const nodes = new Map<string, GraphNode>();
   const edges = new Map<string, GraphEdge>();

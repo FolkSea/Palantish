@@ -1,4 +1,3 @@
-/** Format a YYYY-MM-DD date string as "Mon D, YYYY" without timezone shifts. */
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "";
   // date-only values: parse as UTC noon to avoid off-by-one from local tz.

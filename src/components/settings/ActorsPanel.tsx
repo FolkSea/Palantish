@@ -20,7 +20,6 @@ const inputCls =
 
 const list = (v: string[] | null) => (v ?? []).join(", ");
 
-/** Human label for the stored motivation value (e.g. "nation_state" -> "Nation State"). */
 function motivationLabel(v: string[] | null): string {
   const m = v?.[0];
   return m && m in MOTIVATION_LABEL

@@ -27,7 +27,6 @@ async function main() {
     return out;
   }
 
-  // Every known blog/source domain (active and inactive).
   const sources = await fetchAll<{ url: string | null; feed_url: string | null }>(
     "sources",
     "url, feed_url",
@@ -39,7 +38,6 @@ async function main() {
     }
   }
 
-  // Domain IOCs that should be excluded (blog/source/benign/infra).
   const iocs = await fetchAll<{ id: string; value: string; ioc_type: string }>(
     "iocs",
     "id, value, ioc_type",

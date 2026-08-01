@@ -3,7 +3,6 @@
 // Adversary/FancyBear, Target/Zimbra. No DB or server imports, so it is
 // unit-tested directly and shared by the agent and the ingest pipeline.
 
-/** The four label categories and their canonical prefixes. */
 export const LABEL_PREFIX = {
   ai: "AI",
   malware: "Malware",

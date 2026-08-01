@@ -11,8 +11,7 @@ import type { ActorRecord } from "@/lib/actor-catalogue";
 import { listManagedUsers } from "@/lib/user-management";
 
 export const dynamic = "force-dynamic";
-// The on-demand ingest actions (Update / Update all feeds) run the pipeline
-// inline, so allow them the same 5-minute budget as the cron route.
+// A single-feed update can run inline, so allow the same budget as the cron.
 export const maxDuration = 300;
 
 export default async function SettingsPage() {
@@ -36,8 +35,6 @@ export default async function SettingsPage() {
     .select("id, name, motivation, country, community_identifiers, description")
     .order("name");
 
-  // Recently dropped candidates (last 30 days) for the audit view.
-  // Dynamic server render; this is a database cutoff, not component state.
   const droppedCutoff = new Date(
     // eslint-disable-next-line react-hooks/purity
     Date.now() - 30 * 24 * 60 * 60 * 1000,
@@ -59,7 +56,6 @@ export default async function SettingsPage() {
     droppedAt: d.created_at,
   }));
 
-  // The analyst agent's memory (adversary knowledge + tracked trends).
   const { data: memoryRows } = administrator
     ? await supabase
         .from("analyst_memory")
@@ -80,7 +76,6 @@ export default async function SettingsPage() {
   const focus = ((user?.user_metadata?.focus as string | undefined) ??
     "all") as Focus;
 
-  // Current user's hidden posts (RLS-scoped), joined with the item details.
   const { data: hiddenRows } = await supabase
     .from("hidden_items")
     .select("raw_hash, created_at")
@@ -98,7 +93,6 @@ export default async function SettingsPage() {
     }
   >();
   if (hashes.length) {
-    // All reports live in intel_items now.
     const { data: intelRows } = await supabase
       .from("intel_items")
       .select("raw_hash, title, url, source_name, published_at")

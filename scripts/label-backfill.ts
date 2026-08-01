@@ -75,7 +75,6 @@ async function main() {
   const { loadMemoryBrief, recordLabels } = await import("@/lib/agent/memory");
   const { linkLabelsToItem } = await import("@/lib/ingest/labels");
 
-  // Skip already-labelled items unless --all.
   const skip = new Set<string>();
   if (!all) {
     const { data } = await db
@@ -84,7 +83,6 @@ async function main() {
     for (const r of data ?? []) skip.add(r.intel_item_id);
   }
 
-  // Source categories sharpen the triage prompt.
   const { data: sources } = await db.from("sources").select("name, category");
   const categoryByName = new Map(
     (sources ?? []).map((s) => [s.name, s.category ?? null]),

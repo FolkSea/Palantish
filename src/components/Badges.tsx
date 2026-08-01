@@ -11,7 +11,6 @@ import {
 const base =
   "inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none";
 
-/** Report attribution confidence: HIGH / MEDIUM / LOW. */
 export function ConfidenceBadge({ value }: { value: string | null }) {
   if (!value) return null;
   const s = REPORT_CONFIDENCE_STYLE[value as ReportConfidence];
