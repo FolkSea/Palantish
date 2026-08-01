@@ -3,6 +3,11 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { toAscii } from "@/lib/text";
 import { serverEnv } from "@/lib/env";
+import {
+  htmlToArticleMarkdown,
+  plainFromMarkdown,
+  unwrapLinkedImages,
+} from "@/lib/article-extract";
 
 export type ScrapedArticle = {
   title: string;
@@ -405,7 +410,7 @@ async function fetchViaReader(rawUrl: string): Promise<string | null> {
     );
     // Blank lines are kept (collapsed to one): they are what separates markdown
     // paragraphs, so dropping them would fuse the article into a single block.
-    const text = toAscii(body, true)
+    const text = unwrapLinkedImages(toAscii(body, true))
       .replace(/[ \t]+/g, " ")
       .split("\n")
       .map((l) => l.trim())
@@ -420,32 +425,56 @@ async function fetchViaReader(rawUrl: string): Promise<string | null> {
   }
 }
 
-export type ArticleView = { frameable: boolean; html: string; text: string };
+export type ArticleView = {
+  frameable: boolean;
+  html: string;
+  text: string;
+  /** The clean reading view: the article as markdown, ads and chrome stripped. */
+  markdown: string;
+};
 
 /**
- * Fetch a report URL once (as a browser) and return everything the details
- * modal needs to display it: whether the page's headers allow embedding the
- * live URL, a self-contained HTML snapshot for a sandboxed `srcdoc` render when
- * they do not, and the scraped article text as a final fallback. Throws on
- * fetch / non-HTML failures so the caller can fall back to the source link.
+ * Fetch a report URL once (as a browser) and return everything the details view
+ * needs to display it: the clean reading view it shows by default, plus - for
+ * the "original page" toggle - whether the page's headers allow framing the
+ * live URL and a self-contained HTML snapshot to embed when they do not. `text`
+ * is the same body as plain paragraphs, which drives IOC extraction (markdown
+ * link targets would otherwise be scraped as URI indicators). Throws on fetch /
+ * non-HTML failures so the caller can fall back to the source link.
  */
 export async function fetchArticleView(rawUrl: string): Promise<ArticleView> {
   try {
     const { html, frameable, finalUrl } = await fetchPage(rawUrl);
     const text = articleParagraphs(html);
     const snapshot = prepareEmbedHtml(html, finalUrl);
-    // A real page: show it (live frame or snapshot) as before.
-    if (text.length >= MIN_BODY_CHARS) return { frameable, html: snapshot, text };
+    const markdown = htmlToArticleMarkdown(html, finalUrl);
+    // A real page: the reading view renders it, and the original stays available.
+    if (text.length >= MIN_BODY_CHARS) {
+      return { frameable, html: snapshot, text, markdown };
+    }
     // Fetched OK but the body reads as empty (a challenge or JS-only shell). The
-    // reader may recover better text, but the page itself was retrieved, so keep
-    // the snapshot: dropping it would downgrade a viewable page to text only.
+    // reader may recover the article - it returns markdown already - but the page
+    // itself was retrieved, so keep the snapshot: dropping it would downgrade a
+    // viewable page to text only.
     const reader = await fetchViaReader(rawUrl);
-    return { frameable, html: snapshot, text: reader ?? text };
+    return {
+      frameable,
+      html: snapshot,
+      text: reader ? plainFromMarkdown(reader) : text,
+      markdown: reader ?? markdown,
+    };
   } catch (err) {
     // Blocked outright (e.g. Cloudflare 403): recover text via the reader if one
     // is configured, else rethrow so the modal shows "could not load".
     const reader = await fetchViaReader(rawUrl);
-    if (reader) return { frameable: false, html: "", text: reader };
+    if (reader) {
+      return {
+        frameable: false,
+        html: "",
+        text: plainFromMarkdown(reader),
+        markdown: reader,
+      };
+    }
     throw err;
   }
 }
@@ -460,10 +489,11 @@ export async function fetchArticleText(rawUrl: string): Promise<string> {
     const { html } = await fetchPage(rawUrl);
     const text = articleParagraphs(html);
     if (text.length >= MIN_BODY_CHARS) return text;
-    return (await fetchViaReader(rawUrl)) ?? text;
+    const reader = await fetchViaReader(rawUrl);
+    return reader ? plainFromMarkdown(reader) : text;
   } catch (err) {
     const reader = await fetchViaReader(rawUrl);
-    if (reader) return reader;
+    if (reader) return plainFromMarkdown(reader);
     throw err;
   }
 }

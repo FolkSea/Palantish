@@ -59,9 +59,21 @@ export type ReportModalData = {
 
 type ViewState =
   | { status: "loading" }
-  | { status: "frame"; url: string }
-  | { status: "embed"; html: string }
-  | { status: "fallback"; text: string | null; error?: string };
+  | {
+      status: "ready";
+      /** The article as markdown, ads and site chrome stripped. */
+      markdown: string;
+      /** Whether the source's headers permit framing the live URL. */
+      frameable: boolean;
+      /** Self-contained snapshot to embed when they do not. */
+      html: string;
+    }
+  | { status: "error"; error?: string };
+
+// Below this, the extracted article is too thin to be worth showing (a
+// challenge page or a template the extractor could not read), so the view opens
+// on the original page instead.
+const MIN_READING_CHARS = 200;
 
 /**
  * Renders a report title as a button that opens an ~80% details modal instead
@@ -96,10 +108,12 @@ export function ReportDetail({
   asPage?: boolean;
 }) {
   const router = useRouter();
-  // Show the live page when its headers allow framing; otherwise embed a
-  // server-fetched HTML snapshot (bypasses X-Frame-Options); and only if even
-  // that fails, fall back to scraped text under a notice bar.
+  // Every report renders in the same clean reading view: the article extracted
+  // from the fetched page, ads and site chrome removed, illustrations kept. The
+  // original page stays one click away - live in a frame where the source's
+  // headers allow it, else as a server-fetched snapshot.
   const [view, setView] = useState<ViewState>({ status: "loading" });
+  const [showOriginal, setShowOriginal] = useState(false);
 
   // Draggable divider: left column width as a percentage of the modal width.
   const containerRef = useRef<HTMLDivElement>(null);
@@ -131,7 +145,7 @@ export function ReportDetail({
 
   useEffect(() => {
     if (!report.url) {
-      setView({ status: "fallback", text: null, error: "No report link available." });
+      setView({ status: "error", error: "No report link available." });
       setDetailsText("");
       return;
     }
@@ -139,12 +153,21 @@ export function ReportDetail({
     let active = true;
     setView({ status: "loading" });
     setDetailsText("");
+    setShowOriginal(false);
     fetchReportViewAction(url).then((r) => {
       if (!active) return;
-      if (r.ok && r.frameable) setView({ status: "frame", url });
-      else if (r.ok && r.html) setView({ status: "embed", html: r.html });
-      else if (r.ok) setView({ status: "fallback", text: r.text || null });
-      else setView({ status: "fallback", text: null, error: r.error });
+      if (r.ok) {
+        setView({
+          status: "ready",
+          markdown: r.markdown,
+          frameable: r.frameable,
+          html: r.html,
+        });
+        // Nothing readable was extracted: open on the original page instead.
+        if (r.markdown.length < MIN_READING_CHARS) setShowOriginal(true);
+      } else {
+        setView({ status: "error", error: r.error });
+      }
       setDetailsText(r.ok ? r.text : "");
     });
     return () => {
@@ -507,7 +530,12 @@ export function ReportDetail({
           </header>
           <div className="flex-1 overflow-hidden p-3">
             <div className="h-full overflow-hidden rounded-md border border-[#e5e7eb]">
-              <ReportBody view={view} url={report.url} />
+              <ReportBody
+                view={view}
+                url={report.url}
+                showOriginal={showOriginal}
+                onToggleOriginal={() => setShowOriginal((o) => !o)}
+              />
             </div>
           </div>
         </div>
@@ -705,9 +733,23 @@ export function ReportDetail({
   );
 }
 
-/** The imported report body: live frame, server-fetched snapshot, or scraped
- * text (with a notice bar), depending on what the server could retrieve. */
-function ReportBody({ view, url }: { view: ViewState; url: string | null }) {
+/**
+ * The imported report body. Every source renders the same way by default - the
+ * article extracted into a clean reading view - with a toggle to the original
+ * page (a live frame where the source permits it, else a fetched snapshot) for
+ * anything the extractor reads poorly.
+ */
+function ReportBody({
+  view,
+  url,
+  showOriginal,
+  onToggleOriginal,
+}: {
+  view: ViewState;
+  url: string | null;
+  showOriginal: boolean;
+  onToggleOriginal: () => void;
+}) {
   if (view.status === "loading") {
     return (
       <div className="flex h-full items-center justify-center bg-slate-50">
@@ -715,63 +757,98 @@ function ReportBody({ view, url }: { view: ViewState; url: string | null }) {
       </div>
     );
   }
-  if (view.status === "frame") {
+  if (view.status === "error") {
     return (
-      <iframe
-        src={view.url}
-        title="Full report"
-        className="h-full w-full"
-        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-        referrerPolicy="no-referrer"
-        loading="lazy"
-      />
+      <div className="flex h-full flex-col">
+        <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12px] font-medium text-amber-800">
+          Unable to retrieve the web page.
+        </div>
+        <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-3 text-[12px] text-slate-500">
+          <p>
+            Could not load the report text
+            {view.error ? ` (${view.error})` : ""}.
+          </p>
+          {url ? (
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#1d4ed8] hover:underline"
+            >
+              Open the report at the source
+            </a>
+          ) : null}
+        </div>
+      </div>
     );
   }
-  if (view.status === "embed") {
-    return (
-      <iframe
-        srcDoc={view.html}
-        title="Full report"
-        className="h-full w-full"
-        sandbox="allow-scripts allow-popups"
-        referrerPolicy="no-referrer"
-      />
-    );
-  }
+
+  const hasReading = view.markdown.length >= MIN_READING_CHARS;
+  const hasOriginal = view.frameable || !!view.html;
+  const original = showOriginal && hasOriginal;
+
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12px] font-medium text-amber-800">
-        {view.text
-          ? "The source would not load in place, so the article is shown as recovered text."
-          : "Unable to retrieve the web page."}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#e5e7eb] bg-slate-50 px-4 py-1.5 text-[11px]">
+        <span className="text-slate-500">
+          {original
+            ? "Original page, as published."
+            : hasReading
+              ? "Reading view: adverts and site furniture removed."
+              : "Little readable text could be extracted from this page."}
+        </span>
+        {hasOriginal && hasReading ? (
+          <button
+            type="button"
+            onClick={onToggleOriginal}
+            className="shrink-0 rounded border border-[#e5e7eb] bg-white px-2 py-0.5 font-medium text-[#1d4ed8] hover:bg-slate-100"
+          >
+            {original ? "Reading view" : "Original page"}
+          </button>
+        ) : null}
       </div>
-      <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-3">
-        {view.text ? (
-          // Reader-recovered bodies come back as markdown, so headings, links
-          // and images render as themselves rather than as a wall of prose.
-          // Plain scraped text passes through as ordinary paragraphs.
-          <div className="max-w-3xl space-y-2">
-            <Markdown text={view.text} />
-          </div>
+      {original ? (
+        view.frameable ? (
+          <iframe
+            src={url ?? "about:blank"}
+            title="Full report"
+            className="h-full w-full flex-1"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            referrerPolicy="no-referrer"
+            loading="lazy"
+          />
         ) : (
-          <div className="text-[12px] text-slate-500">
-            <p>
-              Could not load the report text
-              {view.error ? ` (${view.error})` : ""}.
-            </p>
-            {url ? (
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#1d4ed8] hover:underline"
-              >
-                Open the report at the source
-              </a>
-            ) : null}
-          </div>
-        )}
-      </div>
+          <iframe
+            srcDoc={view.html}
+            title="Full report"
+            className="h-full w-full flex-1"
+            sandbox="allow-scripts allow-popups"
+            referrerPolicy="no-referrer"
+          />
+        )
+      ) : (
+        <div className="flex-1 overflow-y-auto bg-white px-4 py-3">
+          {hasReading ? (
+            <div className="max-w-3xl space-y-2">
+              <Markdown text={view.markdown} />
+            </div>
+          ) : (
+            <div className="text-[12px] text-slate-500">
+              <p>The page returned no article text.</p>
+              {url ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#1d4ed8] hover:underline"
+                >
+                  Open the report at the source
+                </a>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -227,14 +227,22 @@ export async function importPostManualAction(
 /* --- Report view ----------------------------------------------------------- */
 
 export type ReportViewResult =
-  | { ok: true; frameable: boolean; html: string; text: string }
+  | {
+      ok: true;
+      frameable: boolean;
+      html: string;
+      text: string;
+      markdown: string;
+    }
   | { ok: false; error: string };
 
 /**
- * Fetch a report URL server-side (as a browser) and tell the details modal how
- * to show it: `frameable` reports whether the page's framing headers permit
- * embedding the live URL; `html` is a sandboxed snapshot to render via `srcdoc`
- * when they do not; and `text` is the scraped article body as a final fallback.
+ * Fetch a report URL server-side (as a browser) and tell the details view how to
+ * show it: `markdown` is the clean reading view it renders by default; for the
+ * "original page" toggle, `frameable` reports whether the page's framing headers
+ * permit embedding the live URL and `html` is a sandboxed snapshot to render via
+ * `srcdoc` when they do not; and `text` is the plain article body, which drives
+ * IOC extraction.
  */
 export async function fetchReportViewAction(
   url: string,
@@ -244,8 +252,8 @@ export async function fetchReportViewAction(
   if (unauth) return { ok: false, error: unauth };
   try {
     assertPublicHttpUrl(url.trim());
-    const { frameable, html, text } = await fetchArticleView(url.trim());
-    return { ok: true, frameable, html, text };
+    const { frameable, html, text, markdown } = await fetchArticleView(url.trim());
+    return { ok: true, frameable, html, text, markdown };
   } catch (err) {
     return {
       ok: false,
