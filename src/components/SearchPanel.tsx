@@ -20,10 +20,7 @@ export function SearchPanel() {
 
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2) {
-      setResults(null);
-      return;
-    }
+    if (q.length < 2) return;
     const timer = setTimeout(() => {
       startTransition(async () => {
         setResults(await searchDashboard(q));

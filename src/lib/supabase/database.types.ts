@@ -112,6 +112,27 @@ export type Database = {
         }
         Relationships: []
       }
+      account_roles: {
+        Row: {
+          created_at: string
+          role: Database["public"]["Enums"]["account_role"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          role?: Database["public"]["Enums"]["account_role"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          role?: Database["public"]["Enums"]["account_role"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       analyst_memory: {
         Row: {
           content: string
@@ -564,9 +585,11 @@ export type Database = {
     }
     Functions: {
       bump_source_stats: { Args: { stats: Json }; Returns: undefined }
+      is_administrator: { Args: never; Returns: boolean }
       is_allowed_user: { Args: never; Returns: boolean }
     }
     Enums: {
+      account_role: "administrator" | "user"
       actor_nexus:
         | "china"
         | "russia"
@@ -727,4 +750,3 @@ export const Constants = {
     },
   },
 } as const
-

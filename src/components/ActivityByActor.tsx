@@ -15,7 +15,6 @@ import { ReportTitle } from "@/components/ReportDetail";
 import { usePaginated, type Paged } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
 
-/** Event dates are ISO; breach labels ("27 Jul") pass through unformatted. */
 function displayDate(d: string | null): string {
   if (!d) return "";
   return /^\d{4}-\d{2}-\d{2}/.test(d) ? formatDate(d) : d;
@@ -36,7 +35,6 @@ export function ActivityByActor({
   const ecCount = ecrimeCards.reduce((n, c) => n + c.items.length, 0);
   const hkCount = hacktivismCards.reduce((n, c) => n + c.items.length, 0);
 
-  // A section starts expanded when the user's focus is "all" or that section.
   const startsOpen = (which: Focus) => focus === "all" || focus === which;
 
   return (
@@ -162,7 +160,6 @@ function Empty({ children }: { children: React.ReactNode }) {
 }
 
 function ActorCardView({ card }: { card: ActorCard }) {
-  // Each card shows the 30-day set 5 at a time.
   const p = usePaginated(card.items, 5);
   return (
     <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
@@ -196,7 +193,6 @@ function ActorCardView({ card }: { card: ActorCard }) {
   );
 }
 
-/** Compact prev/next pager shown at the foot of a card with >5 items. */
 function CardPager({ p }: { p: Paged<ActorItem> }) {
   const btn =
     "rounded border border-[#e5e7eb] bg-white px-1.5 py-0.5 font-medium text-slate-600 enabled:hover:bg-slate-50 disabled:opacity-40";

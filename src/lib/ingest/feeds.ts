@@ -30,7 +30,6 @@ function clean(html: string | undefined): string | null {
   return text ? text.slice(0, 500) : null;
 }
 
-/** Freshness result for one feed after a pull. */
 export type FeedHealth = {
   name: string;
   latestItemAt: Date | null; // newest item date seen, or null on error/empty
@@ -87,7 +86,6 @@ export async function pullFeed(
   }
 }
 
-/** Pull all feeds concurrently, returning candidates, errors, and health. */
 export async function pullAllFeeds(sources: FeedSource[]): Promise<{
   candidates: RawCandidate[];
   errors: string[];

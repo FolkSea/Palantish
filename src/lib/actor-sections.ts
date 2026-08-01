@@ -30,10 +30,8 @@ export type ActorItem = {
   labels: string[];
 };
 
-/** Map of intel_items.id -> its user-defined labels, for card/list rendering. */
 export type LabelsById = Map<string, string[]>;
 
-/** One actor's card: the actor (or "Non Attributed"), accent/flag and items. */
 export type ActorCard = {
   key: string;
   label: string;
@@ -58,7 +56,6 @@ function intelToItem(i: IntelItemRow, labels: string[]): ActorItem {
   };
 }
 
-/** A real actor name (CS cryptonym or a stored non-UNID label), else null. */
 function namedActor(cs: string | null, label: string | null): string | null {
   const fromCs = cs?.trim();
   if (fromCs) return fromCs;

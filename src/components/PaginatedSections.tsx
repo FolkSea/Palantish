@@ -20,7 +20,6 @@ import type {
   VulnerabilityRow,
 } from "@/lib/data";
 
-/* --- Trending exploits & vulnerabilities ---------------------------------- */
 export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
   // Collapse to one row per CVE, assign a priority from the statuses present,
   // sort by priority (then recency), and drop Low-priority CVEs.
@@ -100,7 +99,6 @@ export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
   );
 }
 
-/* --- Reported breaches ----------------------------------------------------- */
 export function BreachTable({ rows }: { rows: BreachRow[] }) {
   const p = usePaginated(rows);
   return (
@@ -161,7 +159,6 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
   );
 }
 
-/* --- Other reporting ------------------------------------------------------- */
 export function ReportsList({ items }: { items: LabeledIntelRow[] }) {
   const p = usePaginated(items);
   return (

@@ -1,8 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
-/** Renders a timestamp client-side in the viewer's locale, prefixed by label. */
+const subscribe = () => () => {};
+
+function formatTimestamp(iso: string | null): string {
+  const d = iso ? new Date(iso) : new Date();
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
 export default function CompiledTime({
   iso,
   label = "Compiled",
@@ -10,21 +23,13 @@ export default function CompiledTime({
   iso: string | null;
   label?: string;
 }) {
-  const [text, setText] = useState<string>("");
-
-  useEffect(() => {
-    const d = iso ? new Date(iso) : new Date();
-    setText(
-      d.toLocaleString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZoneName: "short",
-      }),
-    );
-  }, [iso]);
+  // Render the locale-specific value only after hydration, avoiding a second
+  // state-setting render and avoiding server/client timezone mismatches.
+  const text = useSyncExternalStore(
+    subscribe,
+    () => formatTimestamp(iso),
+    () => "",
+  );
 
   return (
     <span suppressHydrationWarning>

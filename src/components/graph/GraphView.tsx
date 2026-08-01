@@ -64,11 +64,9 @@ function toElements(g: GraphData): ElementDefinition[] {
 
 export default function GraphView({
   initial,
-  seedId,
   error: initialError,
 }: {
   initial: GraphData | null;
-  seedId: string | null;
   error?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -88,7 +86,9 @@ export default function GraphView({
   );
   // Read the live filter inside cy event handlers without re-binding them.
   const typesRef = useRef(types);
-  typesRef.current = types;
+  useEffect(() => {
+    typesRef.current = types;
+  }, [types]);
 
   // Ring nodes whose rendered connections are fewer than their true degree - i.e.
   // they still have neighbours to expand (or a hub capped at first fetch).
@@ -229,7 +229,6 @@ export default function GraphView({
     <div className="relative flex-1">
       <div ref={containerRef} className="h-full w-full" />
 
-      {/* Legend + expansion type filter */}
       <div className="absolute left-3 top-3 w-52 rounded-[10px] border border-[#e5e7eb] bg-white/95 p-3 text-[11px] shadow-sm">
         <div className="mb-1.5 font-semibold text-slate-700">Expand into</div>
         <ul className="space-y-1">
@@ -242,7 +241,8 @@ export default function GraphView({
                   onChange={() =>
                     setTypes((prev) => {
                       const next = new Set(prev);
-                      next.has(t) ? next.delete(t) : next.add(t);
+                      if (next.has(t)) next.delete(t);
+                      else next.add(t);
                       return next;
                     })
                   }
@@ -282,7 +282,6 @@ export default function GraphView({
         </div>
       </div>
 
-      {/* Selected-node details */}
       {selected ? (
         <div className="absolute right-3 top-3 w-64 rounded-[10px] border border-[#e5e7eb] bg-white/95 p-3 text-[12px] shadow-sm">
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">

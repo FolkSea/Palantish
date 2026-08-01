@@ -10,10 +10,8 @@ export default async function GraphPage({
   searchParams: Promise<{ seed?: string }>;
 }) {
   const { seed } = await searchParams;
-  // Seed on the server (RLS-scoped) so the first paint has the depth-1 graph.
   const result = seed ? await seedGraphAction(seed) : null;
   const initial = result?.ok ? result.graph : null;
-  const seedId = result?.ok ? result.seedId ?? null : null;
   const error = result && !result.ok ? result.error : undefined;
 
   return (
@@ -36,7 +34,7 @@ export default async function GraphPage({
         </Link>
       </header>
       <div className="flex min-h-0 flex-1">
-        <GraphView initial={initial} seedId={seedId} error={error} />
+        <GraphView initial={initial} error={error} />
       </div>
     </div>
   );

@@ -9,10 +9,10 @@ import { buildGroupsFromAdversaries } from "./adversaries";
 import {
   classifyExploitStatus,
   computeAdversaryLabel,
-  hasHacktivismKeyword,
   isVulnAdvisory,
   sortGroups,
 } from "./enrich/rules";
+import { findCve, resolveReportKind } from "./routing";
 import { updateFeedHealth } from "./feed-health";
 import { serverEnv } from "@/lib/env";
 import { AnalystAgent } from "@/lib/agent/analyst";
@@ -36,34 +36,6 @@ import type { EnrichedItem } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 
 type IntelInsert = Database["public"]["Tables"]["intel_items"]["Insert"];
-
-const CVE_RE = /\bCVE-\d{4}-\d{3,7}\b/i;
-
-/** Report kind: which dashboard section an item belongs to. */
-export type ReportKind = "research" | "breach" | "exploit" | "other";
-
-/**
- * Classify an enriched item into its `kind`. Exploits need a CVE id; breaches
- * come from the classifier; anything attributed to (or reading as) a threat
- * actor is research; the rest is other reporting. Pure, exported for testing.
- */
-export function kindFor(
-  item: EnrichedItem,
-  attributed: boolean,
-  hasCve: boolean,
-): ReportKind {
-  if (item.itemType === "vuln" && hasCve) return "exploit";
-  if (item.itemType === "breach") return "breach";
-  const text = `${item.title} ${item.description ?? ""}`;
-  if (
-    attributed ||
-    item.crowdstrikeAdversary ||
-    item.itemType === "actor_activity" ||
-    hasHacktivismKeyword(text)
-  )
-    return "research";
-  return "other";
-}
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -141,7 +113,6 @@ export async function runIngest(
   );
 
   try {
-    // Reference data ---------------------------------------------------------
     // A scoped run (the single-feed "Update" action) targets the given source
     // ids regardless of their active flag; a full run pulls all active sources.
     const sourcesSelect = db
@@ -182,7 +153,6 @@ export async function runIngest(
       .map((s) => ({ name: s.name, feed_url: s.feed_url, category: s.category }));
     ilog(`pulling ${feedSources.length} active feeds...`);
 
-    // Existing dedup hashes (all reports live in intel_items now) ------------
     const [intelHashes, deletedHashes] = await Promise.all([
       db.from("intel_items").select("raw_hash"),
       // Blocklist: items an operator permanently deleted must not return.
@@ -193,7 +163,6 @@ export async function runIngest(
       ...(deletedHashes.data ?? []).map((r) => r.raw_hash),
     ]);
 
-    // Pull + augment ---------------------------------------------------------
     const {
       candidates: feedCandidates,
       errors: feedErrors,
@@ -227,7 +196,6 @@ export async function runIngest(
       `${allCandidates.length} candidates, ${fresh.length} new after dedup; enriching (concurrency 6)...`,
     );
 
-    // Enrich (drop nulls) ----------------------------------------------------
     // Per-item logging: which items the rules classify locally vs escalate to
     // the LLM, and whether each is kept or dropped.
     const tally = { rulesKeep: 0, rulesDrop: 0, llmKeep: 0, llmDrop: 0 };
@@ -239,8 +207,11 @@ export async function runIngest(
       reason: string | null;
     }[] = [];
     const report: EnrichReport = (r) => {
-      if (r.via === "rules") r.outcome === "keep" ? tally.rulesKeep++ : tally.rulesDrop++;
-      else r.outcome === "keep" ? tally.llmKeep++ : tally.llmDrop++;
+      if (r.via === "rules") {
+        if (r.outcome === "keep") tally.rulesKeep++;
+        else tally.rulesDrop++;
+      } else if (r.outcome === "keep") tally.llmKeep++;
+      else tally.llmDrop++;
       if (r.outcome === "drop") {
         dropped.push({
           title: r.title,
@@ -301,20 +272,15 @@ export async function runIngest(
         country = NEXUS_COUNTRY[item.nexus] ?? null;
       }
 
-      const cveMatch = `${item.title} ${item.description ?? ""}`.match(CVE_RE);
-      let kind = kindFor(item, motivation !== null, !!cveMatch);
-      // Prefer the LLM's chosen section when it is more specific than "other" and
-      // does not contradict the CVE-driven exploit rule (exploit needs a CVE).
-      const llmKind = item.dashboardKind;
-      if (llmKind && llmKind !== "exploit" && kind === "other") kind = llmKind;
-      if (llmKind === "exploit" && cveMatch) kind = "exploit";
-      const isExploit = kind === "exploit" && !!cveMatch;
+      const cveId = findCve(item);
+      const kind = resolveReportKind(item, motivation !== null, !!cveId);
+      const isExploit = kind === "exploit" && !!cveId;
 
       return {
         kind,
         motivation,
         country,
-        title: isExploit ? cveMatch![0].toUpperCase() : item.title,
+        title: isExploit ? cveId! : item.title,
         description: item.description,
         url: item.url,
         published_at: publishedDate,
@@ -330,7 +296,7 @@ export async function runIngest(
           item.description,
           labelGroups,
         ),
-        cve_id: isExploit ? cveMatch![0].toUpperCase() : null,
+        cve_id: isExploit ? cveId : null,
         target: isExploit ? item.title.slice(0, 200) : null,
         // Deterministic from the report text, not the LLM's confidence, so a
         // released PoC is graded "poc" regardless of the enricher in use.
@@ -629,7 +595,7 @@ export async function runIngest(
     }
 
     // Recalculate the executive summary on every completed run so it always
-    // reflects the latest data and the current 24h / 7d windows. Non-fatal.
+    // reflects the latest data and the current 24h / 7-30d windows. Non-fatal.
     ilog("recalculating executive summary...");
     try {
       await generateAndStoreSummary(db);
@@ -686,4 +652,3 @@ export async function runIngest(
     };
   }
 }
-

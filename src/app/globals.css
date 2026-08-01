@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* Palantish brand system - fixed light theme ("light surfaces"). */
 :root {
   --page-bg: #f3f6fb; /* Fog */
   --card-bg: #ffffff;

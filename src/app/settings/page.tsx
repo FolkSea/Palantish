@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { getAuthenticatedClient, isAdministrator } from "@/lib/auth";
 import {
   SettingsView,
   type SettingsSource,
@@ -7,40 +8,45 @@ import {
 import type { HiddenPost } from "@/components/settings/HiddenPanel";
 import type { Focus } from "@/components/settings/AccountPanel";
 import type { ActorRecord } from "@/lib/actor-catalogue";
+import { listManagedUsers } from "@/lib/user-management";
 
 export const dynamic = "force-dynamic";
-// The on-demand ingest actions (Update / Update all feeds) run the pipeline
-// inline, so allow them the same 5-minute budget as the cron route.
+// A single-feed update can run inline, so allow the same budget as the cron.
 export const maxDuration = 300;
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await getAuthenticatedClient();
+  if (!auth) redirect("/login");
+  const { supabase, user, role } = auth;
+  const administrator = isAdministrator(role);
+  const users = administrator ? await listManagedUsers() : [];
 
-  const { data: sources } = await supabase
-    .from("sources")
-    .select(
-      "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped",
-    )
-    .order("name");
+  const { data: sources } = administrator
+    ? await supabase
+        .from("sources")
+        .select(
+          "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped",
+        )
+        .order("name")
+    : { data: [] };
 
   const { data: actors } = await supabase
     .from("adversaries")
     .select("id, name, motivation, country, community_identifiers, description")
     .order("name");
 
-  // Recently dropped candidates (last 30 days) for the audit view.
   const droppedCutoff = new Date(
+    // eslint-disable-next-line react-hooks/purity
     Date.now() - 30 * 24 * 60 * 60 * 1000,
   ).toISOString();
-  const { data: droppedRows } = await supabase
-    .from("dropped_items")
-    .select("raw_hash, title, url, source_name, reason, created_at")
-    .gte("created_at", droppedCutoff)
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const { data: droppedRows } = administrator
+    ? await supabase
+        .from("dropped_items")
+        .select("raw_hash, title, url, source_name, reason, created_at")
+        .gte("created_at", droppedCutoff)
+        .order("created_at", { ascending: false })
+        .limit(500)
+    : { data: [] };
   const dropped = (droppedRows ?? []).map((d) => ({
     rawHash: d.raw_hash,
     title: d.title,
@@ -50,12 +56,13 @@ export default async function SettingsPage() {
     droppedAt: d.created_at,
   }));
 
-  // The analyst agent's memory (adversary knowledge + tracked trends).
-  const { data: memoryRows } = await supabase
-    .from("analyst_memory")
-    .select("kind, subject, content, mentions, last_seen")
-    .order("last_seen", { ascending: false })
-    .limit(500);
+  const { data: memoryRows } = administrator
+    ? await supabase
+        .from("analyst_memory")
+        .select("kind, subject, content, mentions, last_seen")
+        .order("last_seen", { ascending: false })
+        .limit(500)
+    : { data: [] };
   const memory = (memoryRows ?? []).map((m) => ({
     kind: m.kind as "adversary" | "trend",
     subject: m.subject,
@@ -69,7 +76,6 @@ export default async function SettingsPage() {
   const focus = ((user?.user_metadata?.focus as string | undefined) ??
     "all") as Focus;
 
-  // Current user's hidden posts (RLS-scoped), joined with the item details.
   const { data: hiddenRows } = await supabase
     .from("hidden_items")
     .select("raw_hash, created_at")
@@ -87,7 +93,6 @@ export default async function SettingsPage() {
     }
   >();
   if (hashes.length) {
-    // All reports live in intel_items now.
     const { data: intelRows } = await supabase
       .from("intel_items")
       .select("raw_hash, title, url, source_name, published_at")
@@ -118,7 +123,7 @@ export default async function SettingsPage() {
         <div>
           <h1 className="text-[18px] font-semibold text-slate-900">Settings</h1>
           <p className="mt-0.5 text-[12px] text-slate-500">
-            Manage your account and the intelligence sources.
+            Manage your account, users, and intelligence sources.
           </p>
         </div>
         <Link
@@ -131,9 +136,11 @@ export default async function SettingsPage() {
 
       <SettingsView
         email={user?.email ?? ""}
+        role={role}
         displayName={displayName}
         focus={focus}
         sources={(sources ?? []) as SettingsSource[]}
+        users={users}
         actors={(actors ?? []) as ActorRecord[]}
         hidden={hidden}
         dropped={dropped}

@@ -6,7 +6,6 @@ import { ReportDetail } from "@/components/ReportDetail";
 // Always render fresh intel; never cache the authenticated view.
 export const dynamic = "force-dynamic";
 
-/** Share/preview text, so a link pasted elsewhere shows the report, not the app. */
 export async function generateMetadata({
   params,
 }: {

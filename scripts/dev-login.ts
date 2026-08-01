@@ -38,7 +38,6 @@ async function main() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // Ensure the dev user exists (idempotent - ignore "already registered").
   await db.auth.admin
     .createUser({ email: EMAIL, email_confirm: true, password: randomUUID() })
     .catch(() => {});

@@ -14,7 +14,6 @@ async function main() {
   const db = createAdminClient();
   const changed = { intel_items: 0, summaries: 0 };
 
-  // intel_items (all reports): title + description; raw_hash from title + url.
   const { data: intel } = await db
     .from("intel_items")
     .select("id, title, description, url, raw_hash");
@@ -32,7 +31,6 @@ async function main() {
     else console.error("intel_items", r.id, error.message);
   }
 
-  // executive_summaries: preserve paragraph breaks.
   const { data: summaries } = await db
     .from("executive_summaries")
     .select("id, summary");

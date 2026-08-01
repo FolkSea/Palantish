@@ -143,7 +143,7 @@ export class HybridEnricher implements Enricher {
       return null;
     }
     if (r !== "unavailable") {
-      const item = this.canonicalise(r, c);
+      const item = this.canonicalise(r);
       this.reportKeep("llm", c, item);
       return item;
     }
@@ -158,7 +158,7 @@ export class HybridEnricher implements Enricher {
    * actor's canonical cryptonym (and fill an empty nexus from it). Leaves an
    * unrecognised name untouched, and never invents attribution.
    */
-  private canonicalise(item: EnrichedItem, c: RawCandidate): EnrichedItem {
+  private canonicalise(item: EnrichedItem): EnrichedItem {
     if (!item.crowdstrikeAdversary) return item;
     const g = matchGroup(item.crowdstrikeAdversary.toLowerCase(), this.groups);
     if (!g?.cs) return item;

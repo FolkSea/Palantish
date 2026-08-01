@@ -1,6 +1,6 @@
 /**
  * Generate + store the executive summary now: `pnpm summary`.
- * Uses Anthropic when ANTHROPIC_API_KEY is set, otherwise the rules fallback.
+ * Requires Anthropic because the dashboard summary is a narrative briefing.
  * The ingest pipeline also runs this on every refresh.
  */
 import { config } from "dotenv";

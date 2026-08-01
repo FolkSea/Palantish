@@ -14,7 +14,7 @@ type Toast = { kind: "ok" | "err"; text: string };
  * ImportPostButton is rendered outside the dropdown (kept mounted) and opened
  * via a signal so its import modal survives the menu closing.
  */
-export function HeaderMenu() {
+export function HeaderMenu({ isAdministrator }: { isAdministrator: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [importSignal, setImportSignal] = useState(0);
@@ -134,16 +134,18 @@ export function HeaderMenu() {
           >
             <MenuIcon d="M12 5v14M5 12h14" /> Import Single Report
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={itemCls}
-            disabled={pending}
-            onClick={refreshFeeds}
-          >
-            <MenuIcon d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
-            Refresh all Feeds
-          </button>
+          {isAdministrator ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={itemCls}
+              disabled={pending}
+              onClick={refreshFeeds}
+            >
+              <MenuIcon d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
+              Refresh all Feeds
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"

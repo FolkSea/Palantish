@@ -6,7 +6,6 @@
 // we do not control, and the existing scrape helpers already work this way, so
 // it adds no dependency and no parser to keep in step.
 
-/** Rough visible-text length of a fragment, for comparing candidate blocks. */
 function textLength(fragment: string): number {
   return fragment
     .replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, " ")
@@ -84,7 +83,6 @@ function attr(tag: string, name: string): string | null {
   return m ? (m[2] ?? m[3] ?? "").trim() : null;
 }
 
-/** Resolve a possibly-relative URL against the page it came from. */
 function absolute(url: string, baseUrl: string): string | null {
   try {
     const u = new URL(url, baseUrl);

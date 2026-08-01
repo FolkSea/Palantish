@@ -6,7 +6,6 @@ export type Db = SupabaseClient<Database>;
 
 export type MemoryKind = "adversary" | "trend" | "label";
 
-/** One note in the analyst's memory. */
 export type MemoryNote = {
   kind: MemoryKind;
   subject: string;
@@ -15,7 +14,6 @@ export type MemoryNote = {
   lastSeen: string;
 };
 
-/** An upsert the agent proposes after reflecting on a run's reports. */
 export type MemoryUpdate = {
   kind: MemoryKind;
   subject: string;
@@ -29,7 +27,6 @@ const BRIEF_TRENDS = 6;
 const BRIEF_LABELS = 40;
 const BRIEF_MAX_CHARS = 2600;
 
-/** Read all memory notes, most recently-seen first. */
 export async function readMemory(db: Db): Promise<MemoryNote[]> {
   const { data } = await db
     .from("analyst_memory")
@@ -101,7 +98,6 @@ export function composeBrief(notes: MemoryNote[]): string {
   return toAscii(lines.join("\n"), true).slice(0, BRIEF_MAX_CHARS);
 }
 
-/** Read memory and compose the brief in one step. */
 export async function loadMemoryBrief(db: Db): Promise<string> {
   return composeBrief(await readMemory(db));
 }

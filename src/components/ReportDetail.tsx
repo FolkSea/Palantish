@@ -143,6 +143,9 @@ export function ReportDetail({
   // Details pane is rendered (live frame, snapshot, or text).
   const [detailsText, setDetailsText] = useState("");
 
+  // A different report can reuse this mounted modal; reset the prior report's
+  // async view before starting the next fetch.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!report.url) {
       setView({ status: "error", error: "No report link available." });
@@ -174,10 +177,10 @@ export function ReportDetail({
       active = false;
     };
   }, [report.url]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const rawHash = report.rawHash;
 
-  // Locally-tracked attribution + country so edits reflect immediately.
   const [adversary, setAdversary] = useState<string | null>(
     report.adversary ?? null,
   );
@@ -186,7 +189,6 @@ export function ReportDetail({
     report.confidence ?? null,
   );
 
-  // Autocomplete options for the Attribution + Country inputs.
   const [options, setOptions] = useState<{
     adversaries: string[];
     countries: string[];
@@ -247,7 +249,6 @@ export function ReportDetail({
     };
   }
 
-  // Add an unrecognised name to the catalogue, then attribute this report to it.
   async function addActorAndAttribute(
     input: ActorInput,
   ): Promise<{ ok: boolean; error?: string }> {
@@ -270,8 +271,6 @@ export function ReportDetail({
     return res.ok ? { ok: true } : { ok: false, error: res.error };
   }
 
-  // User-defined labels + analyst notes (markdown), loaded with the indicators
-  // below.
   const [labels, setLabels] = useState<string[]>([]);
   const [analystComments, setAnalystComments] = useState<string | null>(null);
   const [visibilityGaps, setVisibilityGaps] = useState<string | null>(null);
@@ -311,8 +310,10 @@ export function ReportDetail({
   const [allowlist, setAllowlist] = useState<{ domains: string[]; ips: string[] }>(
     { domains: [], ips: [] },
   );
-  // What the rawHash resolves to: an intel report, a breach, or neither.
   const [kind, setKind] = useState<"intel" | "breach" | null>(null);
+  // rawHash changes can reuse the mounted details panel, so clear stale data
+  // before the replacement query resolves.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!rawHash) {
       setStored(null);
@@ -347,6 +348,7 @@ export function ReportDetail({
       active = false;
     };
   }, [rawHash]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const extracted = useMemo(() => {
     const own = sourceDomain(report.url);
@@ -419,7 +421,6 @@ export function ReportDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawHash, detailsText, stored, hasStoredIocs, extractedCount, kind]);
 
-  // MITRE ATT&CK discovery (LLM). Only runs when the user clicks Discover.
   const [techniques, setTechniques] = useState<DiscoveredTechnique[] | null>(
     null,
   );
@@ -469,7 +470,6 @@ export function ReportDetail({
       }`}
       onClick={asPage ? undefined : (e) => e.stopPropagation()}
     >
-        {/* Left: title + the imported report */}
         <div
           className="flex min-w-0 flex-col"
           style={{ width: `${leftPct}%` }}
@@ -540,7 +540,6 @@ export function ReportDetail({
           </div>
         </div>
 
-        {/* Draggable divider: drag to change the column widths */}
         <div
           role="separator"
           aria-orientation="vertical"
@@ -550,7 +549,6 @@ export function ReportDetail({
           <span className="absolute inset-y-0 -left-1.5 -right-1.5" />
         </div>
 
-        {/* Right: collapsible information cards */}
         <div className="flex min-w-0 flex-1 flex-col bg-slate-50">
           <div className="flex shrink-0 items-center justify-between border-b border-[#e5e7eb] px-3 py-2">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -1424,11 +1422,6 @@ function LabelEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep the draft in sync when labels load/change while not editing.
-  useEffect(() => {
-    if (!editing) setDraft(labels.join(", "));
-  }, [labels, editing]);
-
   async function save() {
     setBusy(true);
     setError(null);
@@ -1546,11 +1539,6 @@ function EditableMarkdown({
   const [draft, setDraft] = useState(value ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Keep the draft in sync when the value loads/changes while not editing.
-  useEffect(() => {
-    if (!editing) setDraft(value ?? "");
-  }, [value, editing]);
 
   async function save() {
     setBusy(true);

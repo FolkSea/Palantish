@@ -7,8 +7,11 @@ import { HiddenPanel, type HiddenPost } from "./HiddenPanel";
 import { ActorsPanel } from "./ActorsPanel";
 import { DroppedPanel, type DroppedItem } from "./DroppedPanel";
 import { AgentMemoryPanel, type AgentMemoryNote } from "./AgentMemoryPanel";
+import { UsersPanel } from "./UsersPanel";
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
 import type { ActorRecord } from "@/lib/actor-catalogue";
+import type { AccountRole } from "@/lib/account-role";
+import type { ManagedUser } from "@/lib/user-management-types";
 
 export type SettingsSource = {
   id: string;
@@ -22,11 +25,19 @@ export type SettingsSource = {
   posts_dropped: number;
 };
 
-type Tab = "account" | "sources" | "actors" | "hidden" | "dropped" | "memory";
+type Tab =
+  | "account"
+  | "users"
+  | "sources"
+  | "actors"
+  | "hidden"
+  | "dropped"
+  | "memory";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "account", label: "Account", hint: "Display name and password" },
-  { id: "sources", label: "Sources", hint: "Add, edit, or delete feeds" },
+  { id: "users", label: "Users", hint: "Accounts and access levels" },
+  { id: "sources", label: "Feeds", hint: "Add, edit, or delete feeds" },
   { id: "actors", label: "Actors", hint: "Threat actor catalogue" },
   { id: "hidden", label: "Hidden posts", hint: "Unhide posts you hid" },
   { id: "dropped", label: "Dropped", hint: "Review filtered-out candidates" },
@@ -35,30 +46,40 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
 
 export function SettingsView({
   email,
+  role,
   displayName,
   focus,
   sources,
+  users,
   actors,
   hidden,
   dropped,
   memory,
 }: {
   email: string;
+  role: AccountRole;
   displayName: string;
   focus: Focus;
   sources: SettingsSource[];
+  users: ManagedUser[];
   actors: ActorRecord[];
   hidden: HiddenPost[];
   dropped: DroppedItem[];
   memory: AgentMemoryNote[];
 }) {
   const [tab, setTab] = useState<Tab>("account");
+  const tabs =
+    role === "administrator"
+      ? TABS
+      : TABS.filter((item) =>
+          !["users", "sources", "dropped", "memory"].includes(item.id),
+        );
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-[200px_1fr]">
       <nav className="rounded-[10px] border border-[#e5e7eb] bg-white p-2">
         <ul className="space-y-1">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <li key={t.id}>
               <button
                 type="button"
@@ -85,20 +106,23 @@ export function SettingsView({
         {tab === "account" ? (
           <AccountPanel
             email={email}
+            role={role}
             displayName={displayName}
             focus={focus}
           />
-        ) : tab === "sources" ? (
+        ) : tab === "users" && role === "administrator" ? (
+          <UsersPanel initialUsers={users} />
+        ) : tab === "sources" && role === "administrator" ? (
           <SourcesPanel initialSources={sources} />
         ) : tab === "actors" ? (
           <ActorsPanel initialActors={actors} />
         ) : tab === "hidden" ? (
           <HiddenPanel initialHidden={hidden} />
-        ) : tab === "dropped" ? (
+        ) : tab === "dropped" && role === "administrator" ? (
           <DroppedPanel initial={dropped} />
-        ) : (
+        ) : tab === "memory" && role === "administrator" ? (
           <AgentMemoryPanel notes={memory} />
-        )}
+        ) : null}
       </div>
     </div>
   );

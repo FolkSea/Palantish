@@ -5,7 +5,6 @@ import type { Database } from "@/lib/supabase/database.types";
 
 type Db = SupabaseClient<Database>;
 
-/** Operator-configurable indicators that must never be scraped as IOCs. */
 export type IocAllowlist = { domains: string[]; ips: string[] };
 
 /**

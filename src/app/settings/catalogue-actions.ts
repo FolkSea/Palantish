@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureAuthenticated } from "@/lib/auth";
 import { toAscii } from "@/lib/text";
 import {
   MOTIVATIONS,
@@ -16,23 +16,12 @@ import type { Nexus } from "@/lib/badges";
 import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
 import { sortGroups, matchGroup } from "@/lib/ingest/enrich/rules";
 
-async function requireAllowed(): Promise<string | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return "Not authorized.";
-  return null;
-}
-
 function toList(csv: string): string[] {
   return csv
     .split(",")
     .map((s) => toAscii(s).trim())
     .filter(Boolean);
 }
-
-/* --- Actors (adversaries catalogue) --------------------------------------- */
 
 const ACTOR_SELECT =
   "id, name, motivation, country, community_identifiers, description";
@@ -126,7 +115,7 @@ async function rescanUnattributed(
 }
 
 export async function addActor(input: ActorInput): Promise<ActorResult> {
-  const unauth = await requireAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   const row = actorRow(input);
   if (!row.name) return { ok: false, error: "Name is required." };
@@ -148,7 +137,7 @@ export async function updateActor(
   id: string,
   input: ActorInput,
 ): Promise<ActorResult> {
-  const unauth = await requireAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   const row = actorRow(input);
   if (!row.name) return { ok: false, error: "Name is required." };
@@ -169,7 +158,7 @@ export async function updateActor(
 export async function deleteActor(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const unauth = await requireAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   const db = createAdminClient();
   const { error } = await db.from("adversaries").delete().eq("id", id);

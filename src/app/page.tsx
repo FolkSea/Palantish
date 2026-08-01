@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedClient, isAdministrator } from "@/lib/auth";
 import { loadDashboard } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
 import { HeaderMenu } from "@/components/HeaderMenu";
@@ -20,12 +20,14 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await getAuthenticatedClient();
+  const user = auth?.user;
 
   const data = await loadDashboard();
+  // Dynamic server render: capture one clock value and pass it into the client
+  // chart so its memoised bounds stay deterministic across re-renders.
+  // eslint-disable-next-line react-hooks/purity
+  const timelineNow = Date.now();
 
   const displayName = (
     user?.user_metadata?.display_name as string | undefined
@@ -40,7 +42,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      {/* Header */}
       <header className="mb-4 rounded-lg bg-[#2855D9] px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -74,7 +75,7 @@ export default async function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#90A9FF]">{identityLabel}</span>
-            <HeaderMenu />
+            <HeaderMenu isAdministrator={auth ? isAdministrator(auth.role) : false} />
           </div>
         </div>
         <p className="mt-2 text-[11px] text-[#90A9FF]">
@@ -82,32 +83,28 @@ export default async function DashboardPage() {
         </p>
       </header>
 
-      {/* Search */}
       <div className="mb-4">
         <SearchPanel />
       </div>
 
-      {/* Breaking ticker (last 24h only; hidden when empty) */}
       {data.breaking.length > 0 ? (
         <div className="mb-4">
           <Ticker items={data.breaking} />
         </div>
       ) : null}
 
-      {/* Executive summary */}
       <div className="mb-4">
         <ExecutiveSummaryPanel summary={data.executiveSummary} />
       </div>
 
       <div className="space-y-4">
-        {/* Unified activity timeline (one lane per adversary) */}
         <ActivityTimeline
           events={data.timeline.events}
           streams={data.timeline.streams}
           initialFilters={timelineFilters}
+          now={timelineNow}
         />
 
-        {/* Actor cards */}
         <ActivityByActor
           nationStateCards={data.nationStateCards}
           ecrimeCards={data.ecrimeCards}
@@ -115,15 +112,12 @@ export default async function DashboardPage() {
           focus={focus}
         />
 
-        {/* Paginated sections, each full width */}
         <VulnTable rows={data.vulnerabilities} />
         <BreachTable rows={data.breaches} />
         <ReportsList items={data.reports} />
 
-        {/* Footnote */}
         <Footnote />
 
-        {/* Potentially stale feeds warning */}
         <StaleFeedsPanel feeds={data.staleFeeds} />
       </div>
     </div>

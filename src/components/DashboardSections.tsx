@@ -2,10 +2,7 @@ import { ExtLink } from "@/components/ExtLink";
 import { formatDate } from "@/lib/format";
 import type { TickerItem } from "@/lib/data";
 
-/* --- Breaking news ticker -------------------------------------------------- */
 export function Ticker({ items }: { items: TickerItem[] }) {
-  // Only rendered when there are last-24h items; the caller passes an already
-  // filtered list, and an empty list hides the whole section.
   if (!items.length) return null;
 
   const row = items.map((i) => (
@@ -39,7 +36,6 @@ export function Ticker({ items }: { items: TickerItem[] }) {
   );
 }
 
-/* --- Footnote / methodology legend ---------------------------------------- */
 export function Footnote() {
   return (
     <footer className="rounded-[10px] border border-[#e5e7eb] bg-white p-4 text-[11px] leading-relaxed text-slate-500">

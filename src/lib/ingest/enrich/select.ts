@@ -6,11 +6,6 @@ import { LlmEnricher } from "./llm";
 import { RulesEnricher, type GroupEntry } from "./rules";
 import { serverEnv } from "@/lib/env";
 
-/**
- * Chooses the enricher for the pipeline: rules-first, with the LLM used only
- * for edge cases and configured from the environment. When no API key is set,
- * ambiguous items are kept as reports (no LLM to consult).
- */
 export function selectEnricher(
   extraGroups: GroupEntry[] = [],
   report?: EnrichReport,
@@ -18,7 +13,7 @@ export function selectEnricher(
 ): Enricher {
   const key = serverEnv.anthropicApiKey;
   return new HybridEnricher(
-    key ? new LlmEnricher(key, extraGroups, memoryBrief) : null,
+    key ? new LlmEnricher(key, memoryBrief) : null,
     extraGroups,
     report,
     serverEnv.enrichStrategy,

@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureAuthenticated, getAuthenticatedClient } from "@/lib/auth";
 import {
   ingestArticle,
   importBlogPostWithAI,
@@ -27,15 +27,6 @@ import { familyForAnimal } from "@/lib/ingest/adversaries";
 import { discoverTechniques } from "@/lib/mitre/discover";
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 
-async function ensureAllowed(): Promise<string | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return "Not authorized.";
-  return null;
-}
-
 function refreshDashboard() {
   // Refresh the dashboard (and settings source list) without touching the
   // cached executive summary.
@@ -54,13 +45,11 @@ export async function deleteItemAction(
   rawHash: string,
 ): Promise<ItemMutationResult> {
   if (!rawHash) return { ok: false, error: "Missing item reference." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const auth = await getAuthenticatedClient();
+  if (!auth) {
     return { ok: false, error: "Not authorized." };
   }
+  const { user } = auth;
 
   const db = createAdminClient();
 
@@ -95,13 +84,11 @@ export async function hideItemAction(
   rawHash: string,
 ): Promise<ItemMutationResult> {
   if (!rawHash) return { ok: false, error: "Missing item reference." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const auth = await getAuthenticatedClient();
+  if (!auth) {
     return { ok: false, error: "Not authorized." };
   }
+  const { supabase, user } = auth;
 
   const { error } = await supabase.from("hidden_items").upsert(
     { user_id: user.id, raw_hash: rawHash },
@@ -113,18 +100,15 @@ export async function hideItemAction(
   return { ok: true };
 }
 
-/** Unhide an item the current user previously hid (per-user; RLS-scoped). */
 export async function unhideItemAction(
   rawHash: string,
 ): Promise<ItemMutationResult> {
   if (!rawHash) return { ok: false, error: "Missing item reference." };
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const auth = await getAuthenticatedClient();
+  if (!auth) {
     return { ok: false, error: "Not authorized." };
   }
+  const { supabase, user } = auth;
 
   const { error } = await supabase
     .from("hidden_items")
@@ -145,7 +129,7 @@ export async function unhideItemAction(
  */
 export async function importPostAction(url: string): Promise<ImportResult> {
   if (!url || !url.trim()) return { ok: false, error: "Enter a URL to import." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
 
   try {
@@ -171,10 +155,9 @@ export async function importPostAction(url: string): Promise<ImportResult> {
   return result;
 }
 
-/** Fallback import: read the page with the LLM, then ingest. */
 export async function importPostWithAIAction(url: string): Promise<ImportResult> {
   if (!url || !url.trim()) return { ok: false, error: "Enter a URL to import." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   try {
     assertPublicHttpUrl(url.trim());
@@ -195,7 +178,6 @@ export async function importPostWithAIAction(url: string): Promise<ImportResult>
   return result;
 }
 
-/** Fallback import: ingest a pasted title + body. */
 export async function importPostManualAction(
   url: string,
   title: string,
@@ -203,7 +185,7 @@ export async function importPostManualAction(
 ): Promise<ImportResult> {
   if (!url || !url.trim()) return { ok: false, error: "Enter a URL to import." };
   if (!title || !title.trim()) return { ok: false, error: "A title is required." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   try {
     assertPublicHttpUrl(url.trim());
@@ -223,8 +205,6 @@ export async function importPostManualAction(
   if (result.ok) refreshDashboard();
   return result;
 }
-
-/* --- Report view ----------------------------------------------------------- */
 
 export type ReportViewResult =
   | {
@@ -248,7 +228,7 @@ export async function fetchReportViewAction(
   url: string,
 ): Promise<ReportViewResult> {
   if (!url || !url.trim()) return { ok: false, error: "No report URL." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   try {
     assertPublicHttpUrl(url.trim());
@@ -262,8 +242,6 @@ export async function fetchReportViewAction(
   }
 }
 
-/* --- Persist report indicators --------------------------------------------- */
-
 /**
  * Upsert a report's extracted IOCs (deduped by value) and link them to the
  * report via the intel_item_iocs join table, so indicators become searchable.
@@ -275,7 +253,7 @@ export async function persistReportIndicatorsAction(
   indicators: Indicators,
 ): Promise<{ ok: boolean; linked?: number; error?: string }> {
   if (!rawHash) return { ok: false, error: "Missing item reference." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
 
   const rows = indicatorRows(indicators);
@@ -371,13 +349,11 @@ export async function getReportIndicatorsAction(
       allowlist: noAllow,
     };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const auth = await getAuthenticatedClient();
+  if (!auth) {
     return { ok: false, error: "Not authorized." };
   }
+  const { supabase } = auth;
   const allowlist = await loadIocAllowlist(supabase);
 
   const item = await supabase
@@ -463,7 +439,7 @@ export async function deleteReportIocAction(
   value: string,
 ): Promise<{ ok: boolean; error?: string }> {
   if (!rawHash || !value) return { ok: false, error: "Missing input." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
 
   const db = createAdminClient();
@@ -503,7 +479,7 @@ export async function updateReportIocAction(
   iocType: string,
 ): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
   if (!rawHash) return { ok: false, error: "Missing report." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   if (!validIndicator(newValue, iocType)) {
     return { ok: false, error: `Not a valid ${iocType.replace("_", " ")}.` };
@@ -543,8 +519,6 @@ export async function updateReportIocAction(
   return { ok: true, value: normalized };
 }
 
-/* --- Report attribution (adversary) --------------------------------------- */
-
 const UNID_FAMILY_OPTIONS = [
   "PANDA",
   "BEAR",
@@ -570,7 +544,6 @@ const FAMILY_COUNTRIES = [
   "Pakistan",
 ];
 
-/** Autocomplete options for the modal's Attribution + Country inputs. */
 export async function getAttributionOptionsAction(): Promise<{
   adversaries: string[];
   countries: string[];
@@ -578,7 +551,7 @@ export async function getAttributionOptionsAction(): Promise<{
   // Never cache: suggestions must reflect the current actors table, so edits in
   // Settings show up the next time the modal is opened.
   noStore();
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { adversaries: [], countries: [] };
   const db = createAdminClient();
   const { data } = await db.from("adversaries").select("name, country");
@@ -611,7 +584,6 @@ export type UpdateAdversaryResult =
 
 type AdminDb = ReturnType<typeof createAdminClient>;
 
-/** Resolve a rawHash to its intel_items row (id + current kind), or null. */
 async function resolveReport(
   db: AdminDb,
   rawHash: string,
@@ -636,7 +608,7 @@ export async function updateReportAdversaryAction(
   input: string,
 ): Promise<UpdateAdversaryResult> {
   if (!rawHash) return { ok: false, error: "Missing report." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   const raw = input.trim();
 
@@ -774,7 +746,7 @@ export async function updateReportCountryAction(
   | { ok: false; error: string }
 > {
   if (!rawHash) return { ok: false, error: "Missing report." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   const c = country.trim();
 
@@ -811,7 +783,6 @@ export async function updateReportCountryAction(
 
 const CONFIDENCE_VALUES = ["high", "medium", "low"];
 
-/** Set a report's attribution confidence (high / medium / low). */
 export async function updateReportConfidenceAction(
   rawHash: string,
   confidence: string,
@@ -820,7 +791,7 @@ export async function updateReportConfidenceAction(
   | { ok: false; error: string }
 > {
   if (!rawHash) return { ok: false, error: "Missing report." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   const c = confidence.trim().toLowerCase();
   if (c && !CONFIDENCE_VALUES.includes(c))
@@ -839,7 +810,6 @@ export async function updateReportConfidenceAction(
   return { ok: true, confidence: c || null, moved: false };
 }
 
-/** Save a report's analyst commentary or visibility-gaps note (markdown). */
 export async function updateReportNoteAction(
   rawHash: string,
   field: "analyst_comments" | "visibility_gaps",
@@ -848,7 +818,7 @@ export async function updateReportNoteAction(
   if (!rawHash) return { ok: false, error: "Missing report." };
   if (field !== "analyst_comments" && field !== "visibility_gaps")
     return { ok: false, error: "Invalid field." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
 
   const db = createAdminClient();
@@ -880,7 +850,7 @@ export async function updateReportLabelsAction(
   input: string,
 ): Promise<{ ok: true; labels: string[] } | { ok: false; error: string }> {
   if (!rawHash) return { ok: false, error: "Missing report." };
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
 
   const db = createAdminClient();
@@ -896,7 +866,6 @@ export async function updateReportLabelsAction(
   }
   const names = [...seen.values()];
 
-  // Find-or-create each label, collecting its id.
   const labelIds: string[] = [];
   for (const name of names) {
     const existing = await db
@@ -927,7 +896,6 @@ export async function updateReportLabelsAction(
     }
   }
 
-  // Replace the report's links with the new set: clear then re-link.
   const del = await db
     .from("intel_item_labels")
     .delete()
@@ -944,8 +912,6 @@ export async function updateReportLabelsAction(
   return { ok: true, labels: names.sort((a, b) => a.localeCompare(b)) };
 }
 
-/* --- MITRE ATT&CK discovery ------------------------------------------------ */
-
 export type DiscoverTechniquesResult =
   | { ok: true; techniques: DiscoveredTechnique[] }
   | { ok: false; error: string };
@@ -959,7 +925,7 @@ export async function discoverTechniquesAction(
   rawHash: string | null,
   text: string,
 ): Promise<DiscoverTechniquesResult> {
-  const unauth = await ensureAllowed();
+  const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
   if (!text || !text.trim()) {
     return { ok: false, error: "No report text to analyse yet." };
@@ -985,8 +951,6 @@ export async function discoverTechniquesAction(
 
   return { ok: true, techniques };
 }
-
-/* --- Search ---------------------------------------------------------------- */
 
 export type SearchReport = {
   id: string;
@@ -1026,7 +990,9 @@ export type SearchResults = {
 
 const SEARCH_LIMIT = 50;
 
-type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
+type SupabaseServerClient = NonNullable<
+  Awaited<ReturnType<typeof getAuthenticatedClient>>
+>["supabase"];
 
 type IntelSearchRow = {
   id: string;
@@ -1050,7 +1016,6 @@ async function reportsByIndicator(
   const value = normalizeIndicator(query);
   if (value.length < 3) return [];
 
-  // ilike without wildcards is a case-insensitive exact match on the value.
   const iocRes = await supabase.from("iocs").select("id").ilike("value", value);
   const iocIds = (iocRes.data ?? []).map((r) => r.id);
   if (iocIds.length === 0) return [];
@@ -1081,11 +1046,9 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
   const q = (query ?? "").trim();
   const empty: SearchResults = { query: q, reports: [], breaches: [], vulns: [] };
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return empty;
+  const auth = await getAuthenticatedClient();
+  if (!auth) return empty;
+  const { supabase } = auth;
 
   // Strip characters significant to PostgREST's or()/ilike grammar so the query
   // is a safe literal substring match.
@@ -1094,7 +1057,6 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
   const like = `%${safe}%`;
 
   const [searchRes, hiddenRes] = await Promise.all([
-    // Every report lives in intel_items now; partition by kind below.
     supabase
       .from("intel_items")
       .select(

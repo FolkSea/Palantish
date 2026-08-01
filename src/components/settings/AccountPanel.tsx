@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import type { AccountRole } from "@/lib/account-role";
 
 type Note = { kind: "ok" | "error"; text: string } | null;
 
@@ -36,10 +37,12 @@ export const FOCUS_OPTIONS: { value: Focus; label: string }[] = [
 
 export function AccountPanel({
   email,
+  role,
   displayName,
   focus,
 }: {
   email: string;
+  role: AccountRole;
   displayName: string;
   focus: Focus;
 }) {
@@ -128,13 +131,15 @@ export function AccountPanel({
 
   return (
     <div className="space-y-4">
-      {/* Account details */}
       <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
         <h2 className="text-[13px] font-semibold text-slate-900">
           Account details
         </h2>
         <p className="mt-0.5 text-[11px] text-slate-500">
           Signed in as {email}
+        </p>
+        <p className="mt-1 text-[11px] text-slate-500">
+          Security level: {role === "administrator" ? "Administrator" : "User"}
         </p>
         <form onSubmit={saveName} className="mt-3 max-w-sm space-y-2">
           <label className="block">
@@ -180,7 +185,6 @@ export function AccountPanel({
         </div>
       </section>
 
-      {/* Password reset */}
       <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
         <h2 className="text-[13px] font-semibold text-slate-900">
           Reset password
