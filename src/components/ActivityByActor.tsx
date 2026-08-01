@@ -10,6 +10,7 @@ import {
 } from "@/components/Badges";
 import { ItemActions } from "@/components/ItemActions";
 import { LabelChips } from "@/components/LabelChips";
+import { adversaryHref, sourceHref } from "@/lib/browse-links";
 import { ReportTitle } from "@/components/ReportModal";
 import { usePaginated, type Paged } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
@@ -253,8 +254,14 @@ function ActorEntry({ item }: { item: ActorItem }) {
       ) : null}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         <ConfidenceBadge value={item.confidence} />
-        <AdversaryBadge name={item.adversary} />
-        <SourceBadge name={item.source_name} />
+        <AdversaryBadge
+          name={item.adversary}
+          href={adversaryHref(item.adversary ?? "")}
+        />
+        <SourceBadge
+          name={item.source_name}
+          href={sourceHref(item.source_name ?? "")}
+        />
         {item.published_at ? (
           <span className="text-[10px] text-slate-400">
             {displayDate(item.published_at)}

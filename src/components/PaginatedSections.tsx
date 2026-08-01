@@ -12,6 +12,7 @@ import { ReportTitle } from "@/components/ReportModal";
 import { LabelChips } from "@/components/LabelChips";
 import { usePaginated, PaginationFooter } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
+import { sourceHref } from "@/lib/browse-links";
 import { prioritiseVulns } from "@/lib/vuln-priority";
 import type {
   BreachRow,
@@ -79,7 +80,7 @@ export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
                     <td className="py-2 text-slate-600">
                       {v.detail}{" "}
                       <span className="ml-1 inline-flex items-center gap-1 align-middle">
-                        <SourceBadge name={v.source_name} />
+                        <SourceBadge name={v.source_name} href={sourceHref(v.source_name ?? "")} />
                         {v.reportCount > 1 ? (
                           <span className="text-[10px] text-slate-400">
                             +{v.reportCount - 1} more
@@ -142,17 +143,10 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
                     <td className="py-2 text-slate-600">
                       {b.description}{" "}
                       <span className="ml-1 inline-block align-middle">
-                        {b.url ? (
-                          <a
-                            href={b.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <SourceBadge name={b.source_name} />
-                          </a>
-                        ) : (
-                          <SourceBadge name={b.source_name} />
-                        )}
+                        <SourceBadge
+                          name={b.source_name}
+                          href={sourceHref(b.source_name ?? "")}
+                        />
                       </span>
                     </td>
                   </tr>
@@ -209,17 +203,10 @@ export function ReportsList({ items }: { items: LabeledIntelRow[] }) {
                     <td className="py-2 text-slate-600">
                       {r.description}{" "}
                       <span className="ml-1 inline-flex items-center gap-2 align-middle">
-                        {r.url ? (
-                          <a
-                            href={r.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <SourceBadge name={r.source_name} />
-                          </a>
-                        ) : (
-                          <SourceBadge name={r.source_name} />
-                        )}
+                        <SourceBadge
+                          name={r.source_name}
+                          href={sourceHref(r.source_name ?? "")}
+                        />
                         <ItemActions rawHash={r.raw_hash} />
                       </span>
                     </td>

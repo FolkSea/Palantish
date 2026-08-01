@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   ADVERSARY_BADGE_CLASS,
   PRIORITY_STYLE,
@@ -36,24 +37,46 @@ export function PriorityBadge({ value }: { value: VulnPriority }) {
   return <span className={`${base} ${s.className}`}>{s.label}</span>;
 }
 
-export function AdversaryBadge({ name }: { name: string | null }) {
+export function AdversaryBadge({
+  name,
+  href,
+}: {
+  name: string | null;
+  /** When given, the badge links to this adversary's reports. */
+  href?: string;
+}) {
   if (!name) return null;
+  const cls = `${base} ${ADVERSARY_BADGE_CLASS}`;
+  if (href)
+    return (
+      <Link href={href} className={`${cls} hover:brightness-95`} title={`All reports for ${name}`}>
+        {name}
+      </Link>
+    );
   return (
-    <span className={`${base} ${ADVERSARY_BADGE_CLASS}`} title="Adversary">
+    <span className={cls} title="Adversary">
       {name}
     </span>
   );
 }
 
-export function SourceBadge({ name }: { name: string | null }) {
+export function SourceBadge({
+  name,
+  href,
+}: {
+  name: string | null;
+  /** When given, the badge links to this source's reports. */
+  href?: string;
+}) {
   if (!name) return null;
-  return (
-    <span
-      className={`${base} border-slate-300 bg-slate-50 text-slate-600 normal-case tracking-normal`}
-    >
-      {name}
-    </span>
-  );
+  const cls = `${base} border-slate-300 bg-slate-50 text-slate-600 normal-case tracking-normal`;
+  if (href)
+    return (
+      <Link href={href} className={`${cls} hover:bg-slate-100`} title={`All reports from ${name}`}>
+        {name}
+      </Link>
+    );
+  return <span className={cls}>{name}</span>;
 }
 
 export function StatusPill({ status }: { status: "active" | "quiet" }) {

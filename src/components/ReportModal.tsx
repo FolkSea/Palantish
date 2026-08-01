@@ -31,6 +31,7 @@ import {
   type ReportConfidence,
 } from "@/lib/badges";
 import { countryFlag } from "@/lib/flags";
+import { adversaryHref } from "@/lib/browse-links";
 import { addActor } from "@/app/settings/catalogue-actions";
 import {
   MOTIVATIONS,
@@ -897,7 +898,7 @@ function EditableAttribution({
     return (
       <span className="inline-flex items-center gap-1">
         <span className="font-medium text-slate-400">Attribution:</span>
-        <AdversaryBadge name={value} />
+        <AdversaryBadge name={value} href={adversaryHref(value ?? "")} />
       </span>
     );
   }
@@ -950,7 +951,7 @@ function EditableAttribution({
     <span className="inline-flex items-center gap-1">
       <span className="font-medium text-slate-400">Attribution:</span>
       {value ? (
-        <AdversaryBadge name={value} />
+        <AdversaryBadge name={value} href={adversaryHref(value ?? "")} />
       ) : (
         <span className="italic text-slate-400">unattributed</span>
       )}

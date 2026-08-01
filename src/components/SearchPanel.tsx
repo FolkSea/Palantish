@@ -10,6 +10,7 @@ import {
 } from "@/app/actions";
 import { ReportTitle } from "@/components/ReportModal";
 import { SourceBadge, VulnStatusBadge } from "@/components/Badges";
+import { sourceHref } from "@/lib/browse-links";
 import { formatDate } from "@/lib/format";
 
 export function SearchPanel() {
@@ -153,7 +154,7 @@ function ReportRow({ r }: { r: SearchReport }) {
   return (
     <li className="flex items-start gap-2 text-[12px]">
       <span className="mt-0.5 shrink-0">
-        <SourceBadge name={r.source_name} />
+        <SourceBadge name={r.source_name} href={sourceHref(r.source_name ?? "")} />
       </span>
       <span className="flex-1">
         <ReportTitle
