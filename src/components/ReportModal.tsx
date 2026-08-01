@@ -28,6 +28,7 @@ import { AdversaryBadge } from "./Badges";
 import {
   REPORT_CONFIDENCES,
   REPORT_CONFIDENCE_LABEL,
+  labelChipClass,
   type ReportConfidence,
 } from "@/lib/badges";
 import { countryFlag } from "@/lib/flags";
@@ -1418,7 +1419,7 @@ function LabelEditor({
           {labels.map((l) => (
             <span
               key={l}
-              className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700"
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${labelChipClass(l)}`}
             >
               {l}
             </span>

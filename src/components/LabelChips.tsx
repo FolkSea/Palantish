@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { labelHref } from "@/lib/browse-links";
+import { labelChipClass } from "@/lib/badges";
 
 /**
  * Render a report's user-defined labels as small chips, each linking to every
- * report carrying that label. Nothing renders when the report has no labels, so
- * callers can drop it in unconditionally.
+ * report carrying that label and coloured by its category (adversary / target /
+ * malware / AI). Nothing renders when the report has no labels, so callers can
+ * drop it in unconditionally.
  */
 export function LabelChips({
   labels,
@@ -21,7 +23,7 @@ export function LabelChips({
           key={l}
           href={labelHref(l)}
           title={`All reports labelled ${l}`}
-          className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 hover:bg-slate-200 hover:text-slate-800"
+          className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${labelChipClass(l)}`}
         >
           {l}
         </Link>
