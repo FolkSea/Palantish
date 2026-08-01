@@ -41,9 +41,9 @@ You maintain a running memory of adversaries and cross-report trends. When a mem
 const SUMMARY_INSTRUCTIONS = `Write the executive summary panel for the dashboard.
 Write a flowing, narrative briefing in plain ASCII prose (no markdown, no headings, no bullet characters, no emoji).
 Paragraph 1: narrate the highlights of the last 24 hours - the most significant campaigns, intrusions, exploited vulnerabilities, and breaches, naming the threat actors, targets, and malware where the data provides them, and explaining why they matter.
-Paragraph 2: describe the trends across the past 7 days - how activity is shifting, which actors or themes recur, and where attention is concentrating; draw on your tracked-trends memory where it is corroborated by the data.
+Paragraph 2: explain the trends across the last 7-30 days. Compare the most recent week with the earlier portion of the 30-day evidence: identify recurring actors, malware, targets, sectors, vulnerability themes, or tradecraft; say what is persisting, emerging, or fading. Draw on tracked-trends memory only where the supplied reports corroborate it.
 Write for a reader who wants the story, not a scoreboard: favour description over statistics, and cite specific numbers only sparingly. Do not open with, or string together, lists of counts.
-The input includes reference items with numeric ids. When you mention one of those specific events, append its id in square brackets immediately after the mention, e.g. "targeting Minnesota water utilities [3]". Cite only ids present in the reference list, place the marker right after the relevant phrase, and never invent or renumber a citation. Do not add a separate references or sources list.
+The evidence is divided into last24h, days2to7, and days8to30 windows and includes report synopses. Base the narrative on those synopses, not on titles or counts alone. The input includes reference items with numeric ids. When you mention one of those specific events, append its id in square brackets immediately after the mention, e.g. "targeting Minnesota water utilities [3]". Cite only ids present in the reference list, place the marker right after the relevant phrase, and never invent or renumber a citation. Do not add a separate references or sources list.
 Use ONLY the data provided - do not invent actors, victims, malware, or numbers. Keep it under 180 words in two short paragraphs.`;
 
 const REFLECT_INSTRUCTIONS = `Update your long-term memory from this run's kept reports.
@@ -176,13 +176,16 @@ export class AnalystAgent {
         // itself is short, but the cap has to leave room for the reasoning that
         // precedes it or the response comes back empty.
         max_tokens: 4000,
+        // Narrative synthesis should spend its budget on prose, not prolonged
+        // reasoning that can time out and trigger a fallback.
+        output_config: { effort: "low" },
         system: this.system(SUMMARY_INSTRUCTIONS, true),
         messages: [
           {
             role: "user",
             content:
-              `Reference items (id: kind - title):\n${references}\n\n` +
-              `Aggregated counts (JSON):\n${JSON.stringify(counts, null, 2)}\n\n` +
+              `Report evidence:\n${references}\n\n` +
+              `Window context (supporting data, not the structure of the prose):\n${JSON.stringify(counts, null, 2)}\n\n` +
               `Write the executive summary, adding [id] citation markers after specific mentions.`,
           },
         ],
