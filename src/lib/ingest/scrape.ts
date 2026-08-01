@@ -384,7 +384,10 @@ async function fetchViaReader(rawUrl: string): Promise<string | null> {
   try {
     // Note: no browser User-Agent here - reader proxies (e.g. Jina) reject
     // browser-like UAs with 403; they expect an API-style caller.
-    const headers: Record<string, string> = { "X-Return-Format": "text" };
+    // Markdown (the default) rather than flat text: it keeps the article's
+    // headings, links and images, which the view renders instead of a wall of
+    // prose. Plain text still reads fine if a proxy returns that instead.
+    const headers: Record<string, string> = {};
     const key = serverEnv.readerProxyKey;
     if (key) headers.Authorization = `Bearer ${key}`;
     const res = await fetch(proxied, {
@@ -393,12 +396,21 @@ async function fetchViaReader(rawUrl: string): Promise<string | null> {
       headers,
     });
     if (!res.ok) return null;
-    const text = toAscii(await res.text(), true)
+    // Readers prefix a metadata block ("Title: ... / URL Source: ... /
+    // Markdown Content:"); the view already shows those fields, so start at the
+    // article itself.
+    const body = (await res.text()).replace(
+      /^[\s\S]*?^Markdown Content:\s*$/m,
+      "",
+    );
+    // Blank lines are kept (collapsed to one): they are what separates markdown
+    // paragraphs, so dropping them would fuse the article into a single block.
+    const text = toAscii(body, true)
       .replace(/[ \t]+/g, " ")
       .split("\n")
       .map((l) => l.trim())
-      .filter(Boolean)
       .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
       .trim();
     return text || null;
   } catch {

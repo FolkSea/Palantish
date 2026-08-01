@@ -4,7 +4,8 @@ import { type ReactNode } from "react";
  * Minimal, dependency-free markdown renderer for analyst notes. Renders to React
  * elements (text is never injected as raw HTML), covering the common cases:
  * headings (#..###), unordered/ordered lists, blockquotes, paragraphs, and the
- * inline styles **bold**, *italic* / _italic_, `code`, and [links](https://...).
+ * inline styles **bold**, *italic* / _italic_, `code`, [links](https://...) and
+ * ![images](https://...).
  */
 export function Markdown({ text }: { text: string }) {
   const lines = text.replace(/\r\n/g, "\n").split("\n");
@@ -108,8 +109,10 @@ export function Markdown({ text }: { text: string }) {
   return <div className="space-y-2">{blocks}</div>;
 }
 
+// Images come first so "![alt](url)" is not consumed by the link alternative,
+// which would leave a stray "!" and render the alt text as a hyperlink.
 const INLINE_RE =
-  /(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(_([^_]+)_)|(`([^`]+)`)|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))/g;
+  /(!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)|(_([^_]+)_)|(`([^`]+)`)|(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))/g;
 
 function renderInline(text: string, keyBase: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -120,28 +123,40 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
   while ((m = INLINE_RE.exec(text)) !== null) {
     if (m.index > last) nodes.push(text.slice(last, m.index));
     const key = `${keyBase}-i${idx}`;
-    if (m[2]) nodes.push(<strong key={key}>{m[2]}</strong>);
-    else if (m[4]) nodes.push(<em key={key}>{m[4]}</em>);
-    else if (m[6]) nodes.push(<em key={key}>{m[6]}</em>);
-    else if (m[8])
+    if (m[1])
+      nodes.push(
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={key}
+          src={m[3]}
+          alt={m[2] ?? ""}
+          className="my-2 max-w-full rounded border border-[#e5e7eb]"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />,
+      );
+    else if (m[5]) nodes.push(<strong key={key}>{m[5]}</strong>);
+    else if (m[7]) nodes.push(<em key={key}>{m[7]}</em>);
+    else if (m[9]) nodes.push(<em key={key}>{m[9]}</em>);
+    else if (m[11])
       nodes.push(
         <code
           key={key}
           className="rounded bg-slate-200 px-1 py-0.5 font-mono text-[11px]"
         >
-          {m[8]}
+          {m[11]}
         </code>,
       );
-    else if (m[10])
+    else if (m[13])
       nodes.push(
         <a
           key={key}
-          href={m[11]}
+          href={m[14]}
           target="_blank"
           rel="noopener noreferrer"
           className="text-[#1d4ed8] hover:underline"
         >
-          {m[10]}
+          {m[13]}
         </a>,
       );
     last = m.index + m[0].length;

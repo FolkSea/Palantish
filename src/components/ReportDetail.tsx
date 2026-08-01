@@ -741,14 +741,17 @@ function ReportBody({ view, url }: { view: ViewState; url: string | null }) {
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12px] font-medium text-amber-800">
-        Unable to retrieve web page. Attempting to scrape text.
+        {view.text
+          ? "The source would not load in place, so the article is shown as recovered text."
+          : "Unable to retrieve the web page."}
       </div>
       <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-3">
         {view.text ? (
-          <div className="space-y-2 leading-relaxed text-slate-700">
-            {view.text.split("\n").map((para, i) => (
-              <p key={i}>{para}</p>
-            ))}
+          // Reader-recovered bodies come back as markdown, so headings, links
+          // and images render as themselves rather than as a wall of prose.
+          // Plain scraped text passes through as ordinary paragraphs.
+          <div className="max-w-3xl space-y-2">
+            <Markdown text={view.text} />
           </div>
         ) : (
           <div className="text-[12px] text-slate-500">
