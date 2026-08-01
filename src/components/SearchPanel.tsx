@@ -104,22 +104,24 @@ export function SearchPanel() {
 
       {active ? (
         <div className="mt-3 rounded-[10px] border border-[#e5e7eb] bg-white p-4">
-          {results?.error ? (
+          {results?.error && !pending ? (
             <p className="text-[12px] font-medium text-red-600">{results.error}</p>
           ) : (
             <p className="text-[11px] uppercase tracking-wide text-slate-400">
-              {pending && !results
+              {/* While a search is in flight the previous count is stale, and
+                  pairing it with the new query text reads as a real answer. */}
+              {pending
                 ? "Searching..."
                 : `${total} result${total === 1 ? "" : "s"} for "${query.trim()}"`}
             </p>
           )}
-          {results?.truncated && !results.error ? (
+          {results?.truncated && !results.error && !pending ? (
             <p className="mt-1 text-[11px] text-amber-700">
               Searched the most recent reports only; older ones were not covered.
             </p>
           ) : null}
 
-          {results && !results.error ? (
+          {results && !results.error && !pending ? (
             <div className="mt-3 space-y-4">
               <Section title="Reports" count={results.reports.length}>
                 {results.reports.map((r) => (
