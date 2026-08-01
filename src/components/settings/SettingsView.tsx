@@ -9,6 +9,7 @@ import { DroppedPanel, type DroppedItem } from "./DroppedPanel";
 import { AgentMemoryPanel, type AgentMemoryNote } from "./AgentMemoryPanel";
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
 import type { ActorRecord } from "@/lib/actor-catalogue";
+import type { AccountRole } from "@/lib/account-role";
 
 export type SettingsSource = {
   id: string;
@@ -26,7 +27,7 @@ type Tab = "account" | "sources" | "actors" | "hidden" | "dropped" | "memory";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "account", label: "Account", hint: "Display name and password" },
-  { id: "sources", label: "Sources", hint: "Add, edit, or delete feeds" },
+  { id: "sources", label: "Feeds", hint: "Add, edit, or delete feeds" },
   { id: "actors", label: "Actors", hint: "Threat actor catalogue" },
   { id: "hidden", label: "Hidden posts", hint: "Unhide posts you hid" },
   { id: "dropped", label: "Dropped", hint: "Review filtered-out candidates" },
@@ -35,6 +36,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
 
 export function SettingsView({
   email,
+  role,
   displayName,
   focus,
   sources,
@@ -44,6 +46,7 @@ export function SettingsView({
   memory,
 }: {
   email: string;
+  role: AccountRole;
   displayName: string;
   focus: Focus;
   sources: SettingsSource[];
@@ -53,12 +56,16 @@ export function SettingsView({
   memory: AgentMemoryNote[];
 }) {
   const [tab, setTab] = useState<Tab>("account");
+  const tabs =
+    role === "administrator"
+      ? TABS
+      : TABS.filter((item) => !["sources", "dropped", "memory"].includes(item.id));
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-[200px_1fr]">
       <nav className="rounded-[10px] border border-[#e5e7eb] bg-white p-2">
         <ul className="space-y-1">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <li key={t.id}>
               <button
                 type="button"
@@ -85,20 +92,21 @@ export function SettingsView({
         {tab === "account" ? (
           <AccountPanel
             email={email}
+            role={role}
             displayName={displayName}
             focus={focus}
           />
-        ) : tab === "sources" ? (
+        ) : tab === "sources" && role === "administrator" ? (
           <SourcesPanel initialSources={sources} />
         ) : tab === "actors" ? (
           <ActorsPanel initialActors={actors} />
         ) : tab === "hidden" ? (
           <HiddenPanel initialHidden={hidden} />
-        ) : tab === "dropped" ? (
+        ) : tab === "dropped" && role === "administrator" ? (
           <DroppedPanel initial={dropped} />
-        ) : (
+        ) : tab === "memory" && role === "administrator" ? (
           <AgentMemoryPanel notes={memory} />
-        )}
+        ) : null}
       </div>
     </div>
   );

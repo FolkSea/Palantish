@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureAuthenticated } from "@/lib/auth";
+import { ensureAdministrator, ensureAuthenticated } from "@/lib/auth";
 import { toAscii } from "@/lib/text";
 import { runIngest } from "@/lib/ingest/pipeline";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
@@ -68,7 +68,7 @@ const SELECT =
   "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped";
 
 export async function addSource(input: SourceInput): Promise<SourceResult> {
-  const unauth = await ensureAuthenticated();
+  const unauth = await ensureAdministrator();
   if (unauth) return { ok: false, error: unauth };
   const invalid = clean(input);
   if (invalid) return invalid;
@@ -95,7 +95,7 @@ export async function updateSource(
   id: string,
   input: SourceInput,
 ): Promise<SourceResult> {
-  const unauth = await ensureAuthenticated();
+  const unauth = await ensureAdministrator();
   if (unauth) return { ok: false, error: unauth };
   const invalid = clean(input);
   if (invalid) return invalid;
@@ -113,7 +113,7 @@ export async function updateSource(
 }
 
 export async function deleteSource(id: string): Promise<SourceResult> {
-  const unauth = await ensureAuthenticated();
+  const unauth = await ensureAdministrator();
   if (unauth) return { ok: false, error: unauth };
 
   const db = createAdminClient();
@@ -136,7 +136,7 @@ export type IngestActionResult = {
 async function triggerIngest(
   options?: { sourceIds?: string[] },
 ): Promise<IngestActionResult> {
-  const unauth = await ensureAuthenticated();
+  const unauth = await ensureAdministrator();
   if (unauth) return { ok: false, error: unauth };
   try {
     const result = await runIngest(options);
@@ -167,7 +167,7 @@ async function triggerIngest(
  * trigger (or the cron).
  */
 export async function ingestAllSources(): Promise<IngestActionResult> {
-  const unauth = await ensureAuthenticated();
+  const unauth = await ensureAdministrator();
   if (unauth) return { ok: false, error: unauth };
   after(async () => {
     try {

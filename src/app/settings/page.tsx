@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { getAuthenticatedClient, isAdministrator } from "@/lib/auth";
 import {
   SettingsView,
   type SettingsSource,
@@ -14,17 +15,19 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export default async function SettingsPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await getAuthenticatedClient();
+  if (!auth) redirect("/login");
+  const { supabase, user, role } = auth;
+  const administrator = isAdministrator(role);
 
-  const { data: sources } = await supabase
-    .from("sources")
-    .select(
-      "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped",
-    )
-    .order("name");
+  const { data: sources } = administrator
+    ? await supabase
+        .from("sources")
+        .select(
+          "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped",
+        )
+        .order("name")
+    : { data: [] };
 
   const { data: actors } = await supabase
     .from("adversaries")
@@ -37,12 +40,14 @@ export default async function SettingsPage() {
     // eslint-disable-next-line react-hooks/purity
     Date.now() - 30 * 24 * 60 * 60 * 1000,
   ).toISOString();
-  const { data: droppedRows } = await supabase
-    .from("dropped_items")
-    .select("raw_hash, title, url, source_name, reason, created_at")
-    .gte("created_at", droppedCutoff)
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const { data: droppedRows } = administrator
+    ? await supabase
+        .from("dropped_items")
+        .select("raw_hash, title, url, source_name, reason, created_at")
+        .gte("created_at", droppedCutoff)
+        .order("created_at", { ascending: false })
+        .limit(500)
+    : { data: [] };
   const dropped = (droppedRows ?? []).map((d) => ({
     rawHash: d.raw_hash,
     title: d.title,
@@ -53,11 +58,13 @@ export default async function SettingsPage() {
   }));
 
   // The analyst agent's memory (adversary knowledge + tracked trends).
-  const { data: memoryRows } = await supabase
-    .from("analyst_memory")
-    .select("kind, subject, content, mentions, last_seen")
-    .order("last_seen", { ascending: false })
-    .limit(500);
+  const { data: memoryRows } = administrator
+    ? await supabase
+        .from("analyst_memory")
+        .select("kind, subject, content, mentions, last_seen")
+        .order("last_seen", { ascending: false })
+        .limit(500)
+    : { data: [] };
   const memory = (memoryRows ?? []).map((m) => ({
     kind: m.kind as "adversary" | "trend",
     subject: m.subject,
@@ -133,6 +140,7 @@ export default async function SettingsPage() {
 
       <SettingsView
         email={user?.email ?? ""}
+        role={role}
         displayName={displayName}
         focus={focus}
         sources={(sources ?? []) as SettingsSource[]}

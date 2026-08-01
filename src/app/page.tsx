@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getAuthenticatedClient, isAdministrator } from "@/lib/auth";
 import { loadDashboard } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
 import { HeaderMenu } from "@/components/HeaderMenu";
@@ -20,10 +20,8 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const auth = await getAuthenticatedClient();
+  const user = auth?.user;
 
   const data = await loadDashboard();
   // Dynamic server render: capture one clock value and pass it into the client
@@ -78,7 +76,7 @@ export default async function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#90A9FF]">{identityLabel}</span>
-            <HeaderMenu />
+            <HeaderMenu isAdministrator={auth ? isAdministrator(auth.role) : false} />
           </div>
         </div>
         <p className="mt-2 text-[11px] text-[#90A9FF]">
