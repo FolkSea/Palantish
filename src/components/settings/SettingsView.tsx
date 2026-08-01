@@ -7,9 +7,11 @@ import { HiddenPanel, type HiddenPost } from "./HiddenPanel";
 import { ActorsPanel } from "./ActorsPanel";
 import { DroppedPanel, type DroppedItem } from "./DroppedPanel";
 import { AgentMemoryPanel, type AgentMemoryNote } from "./AgentMemoryPanel";
+import { UsersPanel } from "./UsersPanel";
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
 import type { ActorRecord } from "@/lib/actor-catalogue";
 import type { AccountRole } from "@/lib/account-role";
+import type { ManagedUser } from "@/lib/user-management-types";
 
 export type SettingsSource = {
   id: string;
@@ -23,10 +25,18 @@ export type SettingsSource = {
   posts_dropped: number;
 };
 
-type Tab = "account" | "sources" | "actors" | "hidden" | "dropped" | "memory";
+type Tab =
+  | "account"
+  | "users"
+  | "sources"
+  | "actors"
+  | "hidden"
+  | "dropped"
+  | "memory";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "account", label: "Account", hint: "Display name and password" },
+  { id: "users", label: "Users", hint: "Accounts and access levels" },
   { id: "sources", label: "Feeds", hint: "Add, edit, or delete feeds" },
   { id: "actors", label: "Actors", hint: "Threat actor catalogue" },
   { id: "hidden", label: "Hidden posts", hint: "Unhide posts you hid" },
@@ -40,6 +50,7 @@ export function SettingsView({
   displayName,
   focus,
   sources,
+  users,
   actors,
   hidden,
   dropped,
@@ -50,6 +61,7 @@ export function SettingsView({
   displayName: string;
   focus: Focus;
   sources: SettingsSource[];
+  users: ManagedUser[];
   actors: ActorRecord[];
   hidden: HiddenPost[];
   dropped: DroppedItem[];
@@ -59,7 +71,9 @@ export function SettingsView({
   const tabs =
     role === "administrator"
       ? TABS
-      : TABS.filter((item) => !["sources", "dropped", "memory"].includes(item.id));
+      : TABS.filter((item) =>
+          !["users", "sources", "dropped", "memory"].includes(item.id),
+        );
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-[200px_1fr]">
@@ -96,6 +110,8 @@ export function SettingsView({
             displayName={displayName}
             focus={focus}
           />
+        ) : tab === "users" && role === "administrator" ? (
+          <UsersPanel initialUsers={users} />
         ) : tab === "sources" && role === "administrator" ? (
           <SourcesPanel initialSources={sources} />
         ) : tab === "actors" ? (

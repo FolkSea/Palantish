@@ -35,3 +35,8 @@ export async function ensureAdministrator(): Promise<string | null> {
   if (!auth) return "Not authorized.";
   return isAdministrator(auth.role) ? null : "Administrator access required.";
 }
+
+export async function getAdministratorClient() {
+  const auth = await getAuthenticatedClient();
+  return auth && isAdministrator(auth.role) ? auth : null;
+}

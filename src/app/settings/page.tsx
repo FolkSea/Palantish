@@ -8,6 +8,7 @@ import {
 import type { HiddenPost } from "@/components/settings/HiddenPanel";
 import type { Focus } from "@/components/settings/AccountPanel";
 import type { ActorRecord } from "@/lib/actor-catalogue";
+import { listManagedUsers } from "@/lib/user-management";
 
 export const dynamic = "force-dynamic";
 // The on-demand ingest actions (Update / Update all feeds) run the pipeline
@@ -19,6 +20,7 @@ export default async function SettingsPage() {
   if (!auth) redirect("/login");
   const { supabase, user, role } = auth;
   const administrator = isAdministrator(role);
+  const users = administrator ? await listManagedUsers() : [];
 
   const { data: sources } = administrator
     ? await supabase
@@ -127,7 +129,7 @@ export default async function SettingsPage() {
         <div>
           <h1 className="text-[18px] font-semibold text-slate-900">Settings</h1>
           <p className="mt-0.5 text-[12px] text-slate-500">
-            Manage your account and the intelligence sources.
+            Manage your account, users, and intelligence sources.
           </p>
         </div>
         <Link
@@ -144,6 +146,7 @@ export default async function SettingsPage() {
         displayName={displayName}
         focus={focus}
         sources={(sources ?? []) as SettingsSource[]}
+        users={users}
         actors={(actors ?? []) as ActorRecord[]}
         hidden={hidden}
         dropped={dropped}
