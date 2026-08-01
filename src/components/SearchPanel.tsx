@@ -16,6 +16,7 @@ import { formatDate } from "@/lib/format";
 export function SearchPanel() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -56,10 +57,24 @@ export function SearchPanel() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search reports, breaches, and vulnerabilities..."
+          placeholder="Search, or query: label:Malware AND adv:&quot;FANCY BEAR&quot;"
           aria-label="Search"
           className="w-full rounded-[10px] border border-[#e5e7eb] bg-white py-2 pl-9 pr-9 text-[13px] text-slate-900 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200"
         />
+        <button
+          type="button"
+          onClick={() => setShowHelp((h) => !h)}
+          aria-expanded={showHelp}
+          title="Query syntax"
+          aria-label="Query syntax"
+          className={`absolute ${query ? "right-8" : "right-2.5"} top-1/2 -translate-y-1/2 rounded px-1 text-[11px] font-semibold ${
+            showHelp
+              ? "bg-slate-200 text-slate-700"
+              : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          }`}
+        >
+          ?
+        </button>
         {query ? (
           <button
             type="button"
@@ -85,15 +100,26 @@ export function SearchPanel() {
         ) : null}
       </div>
 
+      {showHelp ? <QueryHelp onPick={(q) => setQuery(q)} /> : null}
+
       {active ? (
         <div className="mt-3 rounded-[10px] border border-[#e5e7eb] bg-white p-4">
-          <p className="text-[11px] uppercase tracking-wide text-slate-400">
-            {pending && !results
-              ? "Searching..."
-              : `${total} result${total === 1 ? "" : "s"} for "${query.trim()}"`}
-          </p>
+          {results?.error ? (
+            <p className="text-[12px] font-medium text-red-600">{results.error}</p>
+          ) : (
+            <p className="text-[11px] uppercase tracking-wide text-slate-400">
+              {pending && !results
+                ? "Searching..."
+                : `${total} result${total === 1 ? "" : "s"} for "${query.trim()}"`}
+            </p>
+          )}
+          {results?.truncated && !results.error ? (
+            <p className="mt-1 text-[11px] text-amber-700">
+              Searched the most recent reports only; older ones were not covered.
+            </p>
+          ) : null}
 
-          {results ? (
+          {results && !results.error ? (
             <div className="mt-3 space-y-4">
               <Section title="Reports" count={results.reports.length}>
                 {results.reports.map((r) => (
@@ -222,5 +248,62 @@ function VulnRow({ v }: { v: SearchVuln }) {
         ) : null}
       </span>
     </li>
+  );
+}
+
+/** The field reference, with runnable examples: clicking one fills the box. */
+function QueryHelp({ onPick }: { onPick: (query: string) => void }) {
+  const fields: [string, string][] = [
+    ["label:", "Malware/ZimReaper, Target/Zimbra, AI/Claude"],
+    ["adv: / actor:", "attributed adversary, either spelling"],
+    ["ttp: / mitre:", "ATT&CK technique, e.g. T1059.001"],
+    ["cve:", "CVE id, on the report or its indicators"],
+    ["ip: dom: url: hash:", "indicators by type; defanged input is fine"],
+    ["ioc:", "any indicator, whatever its type"],
+    ["src:", "source feed name"],
+    ["(bare words)", "title, summary and affected product"],
+  ];
+  const examples = [
+    'label:Target/Zimbra AND adv:"FANCY BEAR"',
+    "(ip:192.168 OR dom:evil) NOT label:AI/Claude",
+    "dom:~\\.(ru|su)$",
+    "zimbra -src:Reddit",
+  ];
+  return (
+    <div className="mt-2 rounded-[10px] border border-[#e5e7eb] bg-slate-50 p-3 text-[12px]">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        {fields.map(([name, hint]) => (
+          <div key={name} className="contents">
+            <dt className="font-mono text-[11px] text-slate-700">{name}</dt>
+            <dd className="text-slate-500">{hint}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-2 text-slate-500">
+        Combine with <Op>AND</Op> <Op>OR</Op> <Op>NOT</Op> (or <Op>-</Op>) and
+        brackets; adjacent terms are an implicit AND. Quote values with spaces.
+        Use <Op>:~</Op> instead of <Op>:</Op> to match a regular expression.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {examples.map((e) => (
+          <button
+            key={e}
+            type="button"
+            onClick={() => onPick(e)}
+            className="rounded border border-[#e5e7eb] bg-white px-1.5 py-0.5 font-mono text-[11px] text-[#1d4ed8] hover:bg-slate-100"
+          >
+            {e}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Op({ children }: { children: React.ReactNode }) {
+  return (
+    <code className="rounded bg-slate-200 px-1 font-mono text-[11px] text-slate-700">
+      {children}
+    </code>
   );
 }

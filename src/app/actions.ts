@@ -15,8 +15,10 @@ import {
   fetchArticleView,
 } from "@/lib/ingest/scrape";
 import { isThreatIntel } from "@/lib/relevance";
+import { parseQuery, fieldsUsed } from "@/lib/search/query";
+import { evaluateQuery } from "@/lib/search/evaluate";
+import { loadSearchCorpus } from "@/lib/search/corpus";
 import {
-  normalizeIndicator,
   validIndicator,
   normalizeIndicatorValue,
   type Indicators,
@@ -986,139 +988,67 @@ export type SearchResults = {
   reports: SearchReport[];
   breaches: SearchBreach[];
   vulns: SearchVuln[];
+  /** Set when the query could not be parsed; the box shows it as written. */
+  error?: string;
+  /** True when more reports exist than the search corpus covered. */
+  truncated: boolean;
 };
 
 const SEARCH_LIMIT = 50;
 
-type SupabaseServerClient = NonNullable<
-  Awaited<ReturnType<typeof getAuthenticatedClient>>
->["supabase"];
-
-type IntelSearchRow = {
-  id: string;
-  title: string;
-  url: string | null;
-  description: string | null;
-  source_name: string | null;
-  published_at: string | null;
-  raw_hash: string;
-};
-
 /**
- * Find reports linked to an IOC whose value matches the query. The query is
- * normalised to the stored (non-defanged) form first, so `evil[.]com`,
- * `hxxps://evil.com` and `evil.com` all resolve to the same indicator.
- */
-async function reportsByIndicator(
-  supabase: SupabaseServerClient,
-  query: string,
-): Promise<IntelSearchRow[]> {
-  const value = normalizeIndicator(query);
-  if (value.length < 3) return [];
-
-  const iocRes = await supabase.from("iocs").select("id").ilike("value", value);
-  const iocIds = (iocRes.data ?? []).map((r) => r.id);
-  if (iocIds.length === 0) return [];
-
-  const linkRes = await supabase
-    .from("intel_item_iocs")
-    .select("intel_item_id")
-    .in("ioc_id", iocIds);
-  const itemIds = [...new Set((linkRes.data ?? []).map((r) => r.intel_item_id))];
-  if (itemIds.length === 0) return [];
-
-  const itemsRes = await supabase
-    .from("intel_items")
-    .select("id, title, url, description, source_name, published_at, raw_hash")
-    .in("id", itemIds)
-    .order("published_at", { ascending: false })
-    .limit(SEARCH_LIMIT);
-  return itemsRes.data ?? [];
-}
-
-/**
- * Search intel items, breaches, and vulnerabilities by keyword and return the
- * matches grouped by section. Also matches reports by a linked indicator value
- * (fanged or defanged). Honours the same relevance filter and per-user hidden
- * list as the dashboard; deleted items are already gone from the DB.
+ * Search the dashboard with the query language: field terms (label:, adv:, ip:,
+ * dom:, cve:, ttp: ...), boolean logic, and regex via `:~`. A bare word is a
+ * keyword match on the report text, and adjacent terms are an implicit AND, so
+ * plain typing still works exactly as it reads.
+ *
+ * Honours the same per-user hidden list as the dashboard; deleted items are
+ * already gone from the DB.
  */
 export async function searchDashboard(query: string): Promise<SearchResults> {
   const q = (query ?? "").trim();
-  const empty: SearchResults = { query: q, reports: [], breaches: [], vulns: [] };
-
-  const auth = await getAuthenticatedClient();
-  if (!auth) return empty;
-  const { supabase } = auth;
-
-  // Strip characters significant to PostgREST's or()/ilike grammar so the query
-  // is a safe literal substring match.
-  const safe = q.replace(/[,()%_\\*]/g, " ").replace(/\s+/g, " ").trim();
-  if (safe.length < 2) return empty;
-  const like = `%${safe}%`;
-
-  const [searchRes, hiddenRes] = await Promise.all([
-    supabase
-      .from("intel_items")
-      .select(
-        "id, kind, title, url, description, source_name, published_at, raw_hash, cve_id, target, exploit_status, date_label",
-      )
-      .or(
-        `title.ilike.${like},description.ilike.${like},cve_id.ilike.${like},target.ilike.${like}`,
-      )
-      .order("published_at", { ascending: false })
-      .limit(SEARCH_LIMIT * 3),
-    supabase.from("hidden_items").select("raw_hash"),
-  ]);
-  const rows = searchRes.data ?? [];
-  const hidden = new Set((hiddenRes.data ?? []).map((r) => r.raw_hash));
-
-  // Indicator match: normalise the query (so it matches whether typed fanged or
-  // defanged) and pull any reports linked to an IOC with that exact value.
-  const indicatorItems = await reportsByIndicator(supabase, q);
-
-  const reportById = new Map<string, SearchReport>();
-  const addReports = (
-    rows: {
-      id: string;
-      title: string;
-      url: string | null;
-      description: string | null;
-      source_name: string | null;
-      published_at: string | null;
-      raw_hash: string;
-    }[],
-    requireRelevance: boolean,
-  ) => {
-    for (const r of rows) {
-      if (hidden.has(r.raw_hash)) continue;
-      if (requireRelevance && !isThreatIntel(r.title, r.description)) continue;
-      if (reportById.has(r.id)) continue;
-      reportById.set(r.id, {
-        id: r.id,
-        title: r.title,
-        url: r.url,
-        description: r.description,
-        source_name: r.source_name,
-        published_at: r.published_at,
-        raw_hash: r.raw_hash,
-      });
-    }
+  const empty: SearchResults = {
+    query: q,
+    reports: [],
+    breaches: [],
+    vulns: [],
+    truncated: false,
   };
-  // Indicator hits are shown even if the relevance heuristic would drop them -
-  // an explicit IOC search is a strong signal of intent.
-  addReports(indicatorItems, false);
-  addReports(
-    rows.filter((r) => r.kind === "research" || r.kind === "other"),
-    true,
+
+  // The corpus loader opens its own RLS-scoped client; this is the auth gate.
+  if (!(await getAuthenticatedClient())) return empty;
+
+  const parsed = parseQuery(q);
+  if (!parsed.ok) return { ...empty, error: parsed.error };
+
+  const { rows, docs, truncated } = await loadSearchCorpus(parsed.node);
+  const matchedIds = new Set(
+    evaluateQuery(parsed.node, docs).map((d) => d.id),
   );
-  const reports: SearchReport[] = [...reportById.values()];
-  const breaches: SearchBreach[] = rows
-    .filter(
-      (b) =>
-        b.kind === "breach" &&
-        !hidden.has(b.raw_hash) &&
-        isThreatIntel(b.title, b.description),
-    )
+  const matched = rows.filter((r) => matchedIds.has(r.id));
+
+  // The relevance heuristic keeps general news out of a plain keyword search.
+  // Naming a field is an explicit statement of intent, so it opts out - the
+  // same exception indicator searches have always had.
+  const fields = fieldsUsed(parsed.node);
+  const requireRelevance = fields.size === 1 && fields.has("text");
+
+  const reports: SearchReport[] = matched
+    .filter((r) => r.kind === "research" || r.kind === "other")
+    .filter((r) => !requireRelevance || isThreatIntel(r.title, r.description))
+    .slice(0, SEARCH_LIMIT)
+    .map((r) => ({
+      id: r.id,
+      title: r.title,
+      url: r.url,
+      description: r.description,
+      source_name: r.source_name,
+      published_at: r.published_at,
+      raw_hash: r.raw_hash,
+    }));
+  const breaches: SearchBreach[] = matched
+    .filter((b) => b.kind === "breach")
+    .filter((b) => !requireRelevance || isThreatIntel(b.title, b.description))
     .slice(0, SEARCH_LIMIT)
     .map((b) => ({
       id: b.id,
@@ -1130,8 +1060,8 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
       event_date_label: b.date_label,
       raw_hash: b.raw_hash,
     }));
-  const vulns: SearchVuln[] = rows
-    .filter((v) => v.kind === "exploit" && !hidden.has(v.raw_hash))
+  const vulns: SearchVuln[] = matched
+    .filter((v) => v.kind === "exploit")
     .slice(0, SEARCH_LIMIT)
     .map((v) => ({
       id: v.id,
@@ -1144,5 +1074,5 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
       raw_hash: v.raw_hash,
     }));
 
-  return { query: q, reports, breaches, vulns };
+  return { query: q, reports, breaches, vulns, truncated };
 }
