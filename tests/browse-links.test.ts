@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  itemHref,
   labelHref,
   adversaryHref,
   sourceHref,
@@ -69,5 +70,21 @@ describe("parseBrowseParams", () => {
     expect(parseBrowseParams({})).toBeNull();
     expect(parseBrowseParams({ label: "" })).toBeNull();
     expect(parseBrowseParams({ source: "   " })).toBeNull();
+  });
+});
+
+describe("itemHref", () => {
+  it("links to a report's own page by raw_hash", () => {
+    expect(itemHref("abc123")).toBe("/item/abc123");
+  });
+
+  it("encodes the key", () => {
+    expect(itemHref("a/b c")).toBe("/item/a%2Fb%20c");
+  });
+
+  it("falls back to the dashboard when there is no key", () => {
+    expect(itemHref(null)).toBe("/");
+    expect(itemHref(undefined)).toBe("/");
+    expect(itemHref("  ")).toBe("/");
   });
 });

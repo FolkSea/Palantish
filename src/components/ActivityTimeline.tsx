@@ -13,7 +13,8 @@ import {
 } from "chart.js";
 import "chartjs-adapter-date-fns";
 import { createClient } from "@/lib/supabase/client";
-import { ReportModal, type ReportModalData } from "@/components/ReportModal";
+import { useRouter } from "next/navigation";
+import { itemHref } from "@/lib/browse-links";
 import {
   eventVisible,
   KIND_LABEL,
@@ -83,7 +84,7 @@ export default function ActivityTimeline({
   initialFilters: TimelineFilters;
 }) {
   const [filters, setFilters] = useState<TimelineFilters>(initialFilters);
-  const [openReport, setOpenReport] = useState<ReportModalData | null>(null);
+  const router = useRouter();
 
   function toggle(key: keyof TimelineFilters) {
     const next = { ...filters, [key]: !filters[key] };
@@ -159,15 +160,8 @@ export default function ActivityTimeline({
       if (!elements.length) return;
       const el = elements[0];
       const p = datasets[el.datasetIndex].data[el.index] as PlotPoint;
-      // Open the report modal editor (attribution + all fields), not the source.
-      setOpenReport({
-        title: p.title,
-        url: p.url,
-        description: p.description,
-        sourceName: p.source,
-        date: p.date,
-        rawHash: p.rawHash,
-      });
+      // Go to the report's own page (attribution + all fields), not the source.
+      if (p.rawHash) router.push(itemHref(p.rawHash));
     },
     onHover: (evt, elements) => {
       const target = evt.native?.target as HTMLElement | undefined;
@@ -261,9 +255,6 @@ export default function ActivityTimeline({
         })}
       </div>
 
-      {openReport ? (
-        <ReportModal report={openReport} onClose={() => setOpenReport(null)} />
-      ) : null}
     </section>
   );
 }

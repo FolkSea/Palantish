@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   extractIndicators,
@@ -32,7 +33,7 @@ import {
   type ReportConfidence,
 } from "@/lib/badges";
 import { countryFlag } from "@/lib/flags";
-import { adversaryHref } from "@/lib/browse-links";
+import { adversaryHref, itemHref } from "@/lib/browse-links";
 import { addActor } from "@/app/settings/catalogue-actions";
 import {
   MOTIVATIONS,
@@ -67,39 +68,34 @@ type ViewState =
  * of navigating. Inside the modal the title is a hyperlink to the source.
  */
 export function ReportTitle({ report }: { report: ReportModalData }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
+  // A real link, so the report has its own URL: the browser back button works,
+  // it can be opened in a new tab, and it can be shared from outside the app.
+  if (!report.rawHash)
+    return (
+      <span className="text-left font-medium text-slate-700">{report.title}</span>
+    );
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-left font-medium text-[#1d4ed8] hover:underline"
-      >
-        {report.title}
-      </button>
-      {open ? (
-        <ReportModal
-          report={report}
-          onClose={() => {
-            setOpen(false);
-            // Refresh the dashboard on exit so any IOCs persisted while viewing
-            // are reflected.
-            router.refresh();
-          }}
-        />
-      ) : null}
-    </>
+    <Link
+      href={itemHref(report.rawHash)}
+      className="text-left font-medium text-[#1d4ed8] hover:underline"
+    >
+      {report.title}
+    </Link>
   );
 }
 
-export function ReportModal({
+export function ReportDetail({
   report,
   onClose,
+  asPage = false,
 }: {
   report: ReportModalData;
-  onClose: () => void;
+  /** Closes the overlay. Omitted on the standalone page, which navigates. */
+  onClose?: () => void;
+  /** Render as a full page (no dimmed overlay, no click-outside to close). */
+  asPage?: boolean;
 }) {
+  const router = useRouter();
   // Show the live page when its headers allow framing; otherwise embed a
   // server-fetched HTML snapshot (bypasses X-Frame-Options); and only if even
   // that fails, fall back to scraped text under a notice bar.
@@ -442,16 +438,14 @@ export function ReportModal({
     return info ? `${code} - ${info.description}` : `${code} - MITRE ATT&CK technique`;
   }
 
-  return (
+  const detail = (
     <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-[5px]"
-      onClick={onClose}
+      ref={containerRef}
+      className={`relative flex w-full overflow-hidden rounded-lg border border-[#e5e7eb] bg-white shadow-xl ${
+        asPage ? "h-full" : ""
+      }`}
+      onClick={asPage ? undefined : (e) => e.stopPropagation()}
     >
-      <div
-        ref={containerRef}
-        className="relative flex w-full overflow-hidden rounded-lg border border-[#e5e7eb] bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Left: title + the imported report */}
         <div
           className="flex min-w-0 flex-col"
@@ -562,11 +556,11 @@ export function ReportModal({
               ) : null}
               <button
                 type="button"
-                onClick={onClose}
-                aria-label="Close"
+                onClick={() => (onClose ? onClose() : router.back())}
+                aria-label={onClose ? "Close" : "Back"}
                 className="rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
               >
-                Close
+                {onClose ? "Close" : "Back"}
               </button>
             </div>
           </div>
@@ -694,10 +688,19 @@ export function ReportModal({
 
         {/* While dragging, this overlay captures the mouse so moves over the
             report iframe still reach the window listeners. */}
-        {dragging ? (
-          <div className="fixed inset-0 z-[60] cursor-col-resize select-none" />
-        ) : null}
-      </div>
+      {dragging ? (
+        <div className="fixed inset-0 z-[60] cursor-col-resize select-none" />
+      ) : null}
+    </div>
+  );
+
+  if (asPage) return detail;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/50 p-[5px]"
+      onClick={onClose}
+    >
+      {detail}
     </div>
   );
 }

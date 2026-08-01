@@ -12,7 +12,8 @@ import {
 } from "@/lib/graph/types";
 import { NEXUS_ACCENT, type Nexus } from "@/lib/badges";
 import { expandNodeAction } from "@/app/graph/actions";
-import { ReportModal, type ReportModalData } from "@/components/ReportModal";
+import Link from "next/link";
+import { itemHref } from "@/lib/browse-links";
 
 const SHAPE = {
   item: "round-rectangle",
@@ -79,9 +80,9 @@ export default function GraphView({
     id: string;
     type: GraphNodeType;
     label: string;
-    report: ReportModalData | null;
+    /** Set for item nodes: the report this node stands for. */
+    report: { title: string; rawHash: string | null } | null;
   } | null>(null);
-  const [openReport, setOpenReport] = useState<ReportModalData | null>(null);
   const [types, setTypes] = useState<Set<GraphNodeType>>(
     () => new Set(GRAPH_NODE_TYPES),
   );
@@ -202,16 +203,7 @@ export default function GraphView({
           type: d.type,
           label: d.label,
           report:
-            d.type === "item"
-              ? {
-                  title: d.label,
-                  url: d.url,
-                  description: d.description,
-                  sourceName: d.source,
-                  date: d.date,
-                  rawHash: d.rawHash,
-                }
-              : null,
+            d.type === "item" ? { title: d.label, rawHash: d.rawHash } : null,
         });
         void expand(d.id);
       });
@@ -303,14 +295,13 @@ export default function GraphView({
             Tapping a node expands its depth-1 connections (filtered by the types
             on the left).
           </p>
-          {selected.report ? (
-            <button
-              type="button"
-              onClick={() => setOpenReport(selected.report)}
-              className="mt-2 rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-slate-700"
+          {selected.report?.rawHash ? (
+            <Link
+              href={itemHref(selected.report.rawHash)}
+              className="mt-2 inline-block rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-slate-700"
             >
               Open report
-            </button>
+            </Link>
           ) : null}
         </div>
       ) : null}
@@ -327,9 +318,6 @@ export default function GraphView({
         </div>
       ) : null}
 
-      {openReport ? (
-        <ReportModal report={openReport} onClose={() => setOpenReport(null)} />
-      ) : null}
     </div>
   );
 }

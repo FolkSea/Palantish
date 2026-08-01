@@ -11,7 +11,7 @@ import {
 import { ItemActions } from "@/components/ItemActions";
 import { LabelChips } from "@/components/LabelChips";
 import { adversaryHref, sourceHref } from "@/lib/browse-links";
-import { ReportTitle } from "@/components/ReportModal";
+import { ReportTitle } from "@/components/ReportDetail";
 import { usePaginated, type Paged } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
 

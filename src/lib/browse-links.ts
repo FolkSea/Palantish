@@ -37,6 +37,16 @@ export function sourceHref(name: string): string {
 }
 
 /**
+ * A single report's own page. `key` is the report's raw_hash (what every call
+ * site already carries) - the route also accepts the intel_items uuid, so links
+ * made from either identifier resolve.
+ */
+export function itemHref(key: string | null | undefined): string {
+  const v = (key ?? "").trim();
+  return v ? `/item/${encodeURIComponent(v)}` : "/";
+}
+
+/**
  * Read the filter out of the route's search params. Exactly one filter applies;
  * when several are present they resolve in a fixed order so a URL always means
  * one thing. Returns null when nothing usable was supplied.

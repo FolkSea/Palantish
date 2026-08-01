@@ -8,7 +8,7 @@ import {
   SourceBadge,
   VulnStatusBadge,
 } from "@/components/Badges";
-import { ReportTitle } from "@/components/ReportModal";
+import { ReportTitle } from "@/components/ReportDetail";
 import { LabelChips } from "@/components/LabelChips";
 import { usePaginated, PaginationFooter } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";

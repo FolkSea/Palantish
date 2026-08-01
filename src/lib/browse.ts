@@ -137,3 +137,64 @@ export async function loadBrowse(filter: BrowseFilter): Promise<BrowseResult> {
     truncated,
   };
 }
+
+/** The fields a report's own page needs to render its detail view. */
+export type ItemDetail = {
+  title: string;
+  url: string | null;
+  description: string | null;
+  sourceName: string | null;
+  date: string | null;
+  adversary: string | null;
+  country: string | null;
+  confidence: string | null;
+  rawHash: string | null;
+};
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * One report for its own page, addressed by raw_hash (what the app's links use)
+ * or by the intel_items uuid, so a link built from either identifier resolves.
+ * Null when nothing matches, which the route turns into a 404.
+ */
+export async function loadItem(key: string): Promise<ItemDetail | null> {
+  const k = (key ?? "").trim();
+  if (!k) return null;
+  const db = await createClient();
+  const cols =
+    "title, url, description, source_name, published_at, country, confidence, " +
+    "adversary_label, crowdstrike_adversary, raw_hash";
+
+  // raw_hash first: every in-app link uses it, so this is the common path.
+  let { data } = await db.from("intel_items").select(cols).eq("raw_hash", k).maybeSingle();
+  if (!data && UUID_RE.test(k)) {
+    ({ data } = await db.from("intel_items").select(cols).eq("id", k).maybeSingle());
+  }
+  if (!data) return null;
+
+  const r = data as unknown as {
+    title: string;
+    url: string | null;
+    description: string | null;
+    source_name: string | null;
+    published_at: string | null;
+    country: string | null;
+    confidence: string | null;
+    adversary_label: string | null;
+    crowdstrike_adversary: string | null;
+    raw_hash: string | null;
+  };
+  return {
+    title: r.title,
+    url: r.url,
+    description: r.description,
+    sourceName: r.source_name,
+    date: r.published_at,
+    adversary: r.adversary_label ?? r.crowdstrike_adversary,
+    country: r.country,
+    confidence: r.confidence,
+    rawHash: r.raw_hash,
+  };
+}

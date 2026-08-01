@@ -8,7 +8,7 @@ import {
   type SearchBreach,
   type SearchVuln,
 } from "@/app/actions";
-import { ReportTitle } from "@/components/ReportModal";
+import { ReportTitle } from "@/components/ReportDetail";
 import { SourceBadge, VulnStatusBadge } from "@/components/Badges";
 import { sourceHref } from "@/lib/browse-links";
 import { formatDate } from "@/lib/format";
