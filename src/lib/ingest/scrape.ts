@@ -101,12 +101,42 @@ function metaPublished(html: string): Date | null {
   );
 }
 
-/** Extract the main body text (article scope if present, else body), tag-stripped. */
+/** Rough visible-text length of an HTML fragment, for comparing candidates. */
+function textLength(fragment: string): number {
+  return fragment
+    .replace(/<(script|style|noscript)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim().length;
+}
+
+/**
+ * The element most likely to hold the article. Sites often carry several
+ * <article> blocks that are teaser or promo cards - The Hacker News has five,
+ * none longer than 156 characters, with the real story in <main> - so the
+ * richest candidate wins rather than the first one found.
+ */
+function contentScope(html: string): string {
+  const candidates = [
+    ...(html.match(/<article\b[\s\S]*?<\/article>/gi) ?? []),
+    ...(html.match(/<main\b[\s\S]*?<\/main>/gi) ?? []),
+  ];
+  let best = "";
+  let bestLen = 0;
+  for (const c of candidates) {
+    const len = textLength(c);
+    if (len > bestLen) {
+      best = c;
+      bestLen = len;
+    }
+  }
+  if (bestLen > 0) return best;
+  return html.match(/<body\b[\s\S]*?<\/body>/i)?.[0] ?? html;
+}
+
+/** Main body text of the page, tag-stripped. */
 function bodyExcerpt(html: string): string | null {
-  const article = html.match(/<article\b[\s\S]*?<\/article>/i)?.[0];
-  const main = html.match(/<main\b[\s\S]*?<\/main>/i)?.[0];
-  const body = html.match(/<body\b[\s\S]*?<\/body>/i)?.[0];
-  const scope = article ?? main ?? body ?? html;
+  const scope = contentScope(html);
   const stripped = scope
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -290,11 +320,7 @@ export async function scrapeArticleWithAI(rawUrl: string): Promise<ScrapedArticl
 
 /** Extract the article body as newline-separated paragraphs (best-effort). */
 function articleParagraphs(html: string): string {
-  const scope =
-    html.match(/<article\b[\s\S]*?<\/article>/i)?.[0] ??
-    html.match(/<main\b[\s\S]*?<\/main>/i)?.[0] ??
-    html.match(/<body\b[\s\S]*?<\/body>/i)?.[0] ??
-    html;
+  const scope = contentScope(html);
   const withBreaks = scope
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -395,14 +421,14 @@ export async function fetchArticleView(rawUrl: string): Promise<ArticleView> {
   try {
     const { html, frameable, finalUrl } = await fetchPage(rawUrl);
     const text = articleParagraphs(html);
+    const snapshot = prepareEmbedHtml(html, finalUrl);
     // A real page: show it (live frame or snapshot) as before.
-    if (text.length >= MIN_BODY_CHARS)
-      return { frameable, html: prepareEmbedHtml(html, finalUrl), text };
-    // Fetched OK but effectively empty (challenge/JS shell): try the reader, and
-    // present its text via the modal's fallback pane (html empty => not embedded).
+    if (text.length >= MIN_BODY_CHARS) return { frameable, html: snapshot, text };
+    // Fetched OK but the body reads as empty (a challenge or JS-only shell). The
+    // reader may recover better text, but the page itself was retrieved, so keep
+    // the snapshot: dropping it would downgrade a viewable page to text only.
     const reader = await fetchViaReader(rawUrl);
-    if (reader) return { frameable: false, html: "", text: reader };
-    return { frameable, html: prepareEmbedHtml(html, finalUrl), text };
+    return { frameable, html: snapshot, text: reader ?? text };
   } catch (err) {
     // Blocked outright (e.g. Cloudflare 403): recover text via the reader if one
     // is configured, else rethrow so the modal shows "could not load".
