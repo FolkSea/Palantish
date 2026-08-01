@@ -178,19 +178,16 @@ export const NEXUS_ACCENT: Record<Nexus, string> = {
  * case-insensitive; a label with any other prefix - including one an analyst
  * typed by hand - falls back to the neutral slate chip.
  */
-// The text colours carry Tailwind's important suffix because a chip is usually a
-// link, and the global `a { color: var(--link) }` rule is unlayered CSS that
-// would otherwise beat the utility and paint every chip brand-blue.
 export const LABEL_CHIP_STYLE: Record<string, string> = {
-  adversary: "bg-red-100 text-red-700! hover:bg-red-200 hover:text-red-900!",
+  adversary: "bg-red-100 text-red-700 hover:bg-red-200 hover:text-red-900",
   target:
-    "bg-emerald-100 text-emerald-700! hover:bg-emerald-200 hover:text-emerald-900!",
-  malware: "bg-pink-100 text-pink-700! hover:bg-pink-200 hover:text-pink-900!",
-  ai: "bg-orange-100 text-orange-700! hover:bg-orange-200 hover:text-orange-900!",
+    "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 hover:text-emerald-900",
+  malware: "bg-pink-100 text-pink-700 hover:bg-pink-200 hover:text-pink-900",
+  ai: "bg-orange-100 text-orange-700 hover:bg-orange-200 hover:text-orange-900",
 };
 
 const LABEL_CHIP_DEFAULT =
-  "bg-slate-100 text-slate-600! hover:bg-slate-200 hover:text-slate-800!";
+  "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800";
 
 /** The chip classes for one label, chosen from its prefix. */
 export function labelChipClass(label: string): string {
