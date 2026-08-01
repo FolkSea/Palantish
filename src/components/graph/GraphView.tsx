@@ -64,11 +64,9 @@ function toElements(g: GraphData): ElementDefinition[] {
 
 export default function GraphView({
   initial,
-  seedId,
   error: initialError,
 }: {
   initial: GraphData | null;
-  seedId: string | null;
   error?: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -88,7 +86,9 @@ export default function GraphView({
   );
   // Read the live filter inside cy event handlers without re-binding them.
   const typesRef = useRef(types);
-  typesRef.current = types;
+  useEffect(() => {
+    typesRef.current = types;
+  }, [types]);
 
   // Ring nodes whose rendered connections are fewer than their true degree - i.e.
   // they still have neighbours to expand (or a hub capped at first fetch).
@@ -242,7 +242,8 @@ export default function GraphView({
                   onChange={() =>
                     setTypes((prev) => {
                       const next = new Set(prev);
-                      next.has(t) ? next.delete(t) : next.add(t);
+                      if (next.has(t)) next.delete(t);
+                      else next.add(t);
                       return next;
                     })
                   }

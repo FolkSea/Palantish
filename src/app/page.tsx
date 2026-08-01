@@ -26,6 +26,10 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
 
   const data = await loadDashboard();
+  // Dynamic server render: capture one clock value and pass it into the client
+  // chart so its memoised bounds stay deterministic across re-renders.
+  // eslint-disable-next-line react-hooks/purity
+  const timelineNow = Date.now();
 
   const displayName = (
     user?.user_metadata?.display_name as string | undefined
@@ -105,6 +109,7 @@ export default async function DashboardPage() {
           events={data.timeline.events}
           streams={data.timeline.streams}
           initialFilters={timelineFilters}
+          now={timelineNow}
         />
 
         {/* Actor cards */}

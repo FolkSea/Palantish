@@ -134,7 +134,7 @@ async function main() {
 
   await mapPool(batch, 4, async (item) => {
     try {
-      const r = await agent.triage({
+      const r = await agent.triageWithFetch({
         title: item.title,
         description: item.description,
         url: item.url ?? "",
@@ -142,7 +142,7 @@ async function main() {
         sourceName: item.source_name ?? "",
         sourceCategory: categoryByName.get(item.source_name ?? "") ?? null,
       });
-      const labels = r?.labels ?? [];
+      const labels = r.parsed?.relevant ? r.parsed.labels : [];
       processed++;
       if (labels.length) {
         withLabels++;

@@ -18,7 +18,7 @@ export function selectEnricher(
 ): Enricher {
   const key = serverEnv.anthropicApiKey;
   return new HybridEnricher(
-    key ? new LlmEnricher(key, extraGroups, memoryBrief) : null,
+    key ? new LlmEnricher(key, memoryBrief) : null,
     extraGroups,
     report,
     serverEnv.enrichStrategy,

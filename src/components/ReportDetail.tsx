@@ -143,6 +143,9 @@ export function ReportDetail({
   // Details pane is rendered (live frame, snapshot, or text).
   const [detailsText, setDetailsText] = useState("");
 
+  // A different report can reuse this mounted modal; reset the prior report's
+  // async view before starting the next fetch.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!report.url) {
       setView({ status: "error", error: "No report link available." });
@@ -174,6 +177,7 @@ export function ReportDetail({
       active = false;
     };
   }, [report.url]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const rawHash = report.rawHash;
 
@@ -313,6 +317,9 @@ export function ReportDetail({
   );
   // What the rawHash resolves to: an intel report, a breach, or neither.
   const [kind, setKind] = useState<"intel" | "breach" | null>(null);
+  // rawHash changes can reuse the mounted details panel, so clear stale data
+  // before the replacement query resolves.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!rawHash) {
       setStored(null);
@@ -347,6 +354,7 @@ export function ReportDetail({
       active = false;
     };
   }, [rawHash]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const extracted = useMemo(() => {
     const own = sourceDomain(report.url);
@@ -1424,11 +1432,6 @@ function LabelEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep the draft in sync when labels load/change while not editing.
-  useEffect(() => {
-    if (!editing) setDraft(labels.join(", "));
-  }, [labels, editing]);
-
   async function save() {
     setBusy(true);
     setError(null);
@@ -1546,11 +1549,6 @@ function EditableMarkdown({
   const [draft, setDraft] = useState(value ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Keep the draft in sync when the value loads/changes while not editing.
-  useEffect(() => {
-    if (!editing) setDraft(value ?? "");
-  }, [value, editing]);
 
   async function save() {
     setBusy(true);

@@ -184,12 +184,13 @@ describe("fallback behaviour", () => {
       fetchErrorContent({ ...TRIAGE_JSON, fetchStatus: "feed_only" }),
     );
     const enricher = new LlmEnricher("sk-test");
-    const item = await enricher.enrich(candidate);
-    expect(item).not.toBeNull();
-    expect(item!.fetchStatus).toBe("feed_only");
+    const item = await enricher.classify(candidate);
+    expect(item).toMatchObject({ fetchStatus: "feed_only" });
+    if (typeof item !== "object" || "drop" in item) throw new Error("expected item");
+    expect(item.fetchStatus).toBe("feed_only");
     // No trusted IOCs -> the pipeline will fall back to the app-side scraper.
-    expect(item!.llmIndicators).toBeUndefined();
-    expect(item!.fetchedText).toBeNull();
+    expect(item.llmIndicators).toBeUndefined();
+    expect(item.fetchedText).toBeNull();
   });
 
   it("10. rules enricher runs when the Anthropic API is unavailable (no LLM configured)", async () => {
@@ -210,7 +211,12 @@ describe("fallback behaviour", () => {
     // Unparseable response (no JSON) -> triage parsed=null -> classify
     // "unavailable" -> enrich falls back to the deterministic rules enricher.
     create.mockResolvedValue({ stop_reason: "end_turn", content: [] });
-    const enricher = new LlmEnricher("sk-test");
+    const enricher = new HybridEnricher(
+      new LlmEnricher("sk-test"),
+      [],
+      undefined,
+      "llm-first",
+    );
     const item = await enricher.enrich({
       title: "Critical vulnerability CVE-2026-9999 in Acme VPN actively exploited",
       url: "https://news.example/cve",
@@ -221,56 +227,6 @@ describe("fallback behaviour", () => {
     });
     expect(item).not.toBeNull(); // rules kept it
     expect(item!.fetchStatus).toBeUndefined(); // came from rules, not web fetch
-  });
-});
-
-describe("stage-one screen (cheap pass before the fetch)", () => {
-  const screenReply = (verdict: "keep" | "drop", reason = "r") => ({
-    stop_reason: "end_turn",
-    content: [{ type: "text", text: JSON.stringify({ verdict, reason }) }],
-  });
-
-  it("drops obvious non-intelligence without paying for a fetch", async () => {
-    create.mockResolvedValueOnce(screenReply("drop", "vendor webinar promotion"));
-    const enricher = new LlmEnricher("sk-test");
-    const verdict = await enricher.classify(candidate);
-    expect(verdict).toMatchObject({ drop: true });
-    expect((verdict as { reason: string }).reason).toContain("webinar");
-    // Only the screen ran - no web_fetch request was made.
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(create.mock.calls[0][0].tools).toBeUndefined();
-  });
-
-  it("passes survivors through to the full fetch-and-analyse pass", async () => {
-    create
-      .mockResolvedValueOnce(screenReply("keep"))
-      .mockResolvedValueOnce(successContent());
-    const enricher = new LlmEnricher("sk-test");
-    const item = await enricher.classify(candidate);
-    expect(item).toMatchObject({ fetchStatus: "full" });
-    expect(create).toHaveBeenCalledTimes(2);
-    // The second call is the one that enables web_fetch.
-    expect(create.mock.calls[1][0].tools[0].name).toBe("web_fetch");
-  });
-
-  it("fails open: an unusable screen response never loses a report", async () => {
-    create
-      .mockResolvedValueOnce({ stop_reason: "end_turn", content: [] }) // unparseable
-      .mockResolvedValueOnce(successContent());
-    const enricher = new LlmEnricher("sk-test");
-    const item = await enricher.classify(candidate);
-    expect(item).toMatchObject({ fetchStatus: "full" });
-    expect(create).toHaveBeenCalledTimes(2);
-  });
-
-  it("uses a cheaper model for the screen than for the full pass", async () => {
-    create
-      .mockResolvedValueOnce(screenReply("keep"))
-      .mockResolvedValueOnce(successContent());
-    const enricher = new LlmEnricher("sk-test");
-    await enricher.classify(candidate);
-    expect(create.mock.calls[0][0].model).toContain("haiku");
-    expect(create.mock.calls[1][0].model).not.toContain("haiku");
   });
 });
 
@@ -285,9 +241,10 @@ describe("at most one fetch per configured retrieval method", () => {
   it("9b. a full fetch carries the IOCs, so the pipeline does not also scrape", async () => {
     create.mockResolvedValue(successContent());
     const enricher = new LlmEnricher("sk-test");
-    const item = await enricher.enrich(candidate);
-    expect(item!.fetchStatus).toBe("full");
-    expect(item!.llmIndicators).toBeDefined(); // pipeline uses these; no scrape
+    const item = await enricher.classify(candidate);
+    if (typeof item !== "object" || "drop" in item) throw new Error("expected item");
+    expect(item.fetchStatus).toBe("full");
+    expect(item.llmIndicators).toBeDefined(); // pipeline uses these; no scrape
   });
 });
 

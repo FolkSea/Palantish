@@ -14,14 +14,12 @@ import { toAscii } from "@/lib/text";
 import { buildGroupsFromAdversaries } from "./adversaries";
 import { computeHash } from "./dedup";
 import { computeAdversaryLabel, sortGroups } from "./enrich/rules";
-import { kindFor, type ReportKind } from "./pipeline";
+import { findCve, resolveReportKind, type ReportKind } from "./routing";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
 import type { EnrichedItem, RawCandidate } from "./types";
 import type { Database } from "@/lib/supabase/database.types";
 
 type IntelInsert = Database["public"]["Tables"]["intel_items"]["Insert"];
-
-const CVE_RE = /\bCVE-\d{4}-\d{3,7}\b/i;
 
 // Fields needed to open the imported item in the report modal. Shape matches
 // the client ReportModalData. Every import is a report now, so always set.
@@ -160,7 +158,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
   };
 
   const publishedDate = enriched.publishedAt.toISOString().slice(0, 10);
-  const cveMatch = `${enriched.title} ${enriched.description ?? ""}`.match(CVE_RE);
+  const cveId = findCve(enriched);
 
   // Attribute: prefer the matched adversary's classification, else the nexus.
   const adv = enriched.crowdstrikeAdversary
@@ -180,8 +178,8 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     country = NEXUS_COUNTRY[enriched.nexus] ?? null;
   }
 
-  const kind = kindFor(enriched, motivation !== null, !!cveMatch);
-  const isExploit = kind === "exploit";
+  const kind = resolveReportKind(enriched, motivation !== null, !!cveId);
+  const isExploit = kind === "exploit" && !!cveId;
   const adversaryLabel = computeAdversaryLabel(
     enriched.crowdstrikeAdversary,
     enriched.nexus,
@@ -189,7 +187,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     enriched.description,
     sortGroups(adversaryGroups),
   );
-  const title = isExploit ? cveMatch![0].toUpperCase() : enriched.title;
+  const title = isExploit ? cveId! : enriched.title;
   const confidence = isExploit ? null : "medium";
 
   const row: IntelInsert = {
@@ -203,7 +201,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     confidence,
     crowdstrike_adversary: enriched.crowdstrikeAdversary,
     adversary_label: adversaryLabel,
-    cve_id: isExploit ? cveMatch![0].toUpperCase() : null,
+    cve_id: isExploit ? cveId : null,
     target: isExploit ? enriched.title.slice(0, 200) : null,
     exploit_status: isExploit ? enriched.confidence ?? "suspected" : null,
     source_name: source.name,

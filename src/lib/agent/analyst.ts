@@ -1,10 +1,8 @@
 import "server-only";
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { Nexus, Confidence } from "@/lib/badges";
-import type { ItemType, RawCandidate } from "@/lib/ingest/types";
+import type { RawCandidate } from "@/lib/ingest/types";
 import { parseReflection, type MemoryUpdate } from "./memory";
-import { parseLabels } from "./labels";
 import {
   WEB_TRIAGE_INSTRUCTIONS,
   allowedDomainsFor,
@@ -17,20 +15,12 @@ import {
   type WebTriageOutcome,
 } from "./web-triage";
 
-// Per-item triage is high-volume/low-complexity, so it defaults to a small fast
-// model; the summary and the reflection are lower-volume/higher-judgement, so
-// they default to a stronger model. All three are overridable from the env.
-const TRIAGE_MODEL_DEFAULT = "claude-haiku-4-5";
 const SUMMARY_MODEL_DEFAULT = "claude-sonnet-5";
 const REFLECT_MODEL_DEFAULT = "claude-sonnet-5";
 // Web-fetch triage reads and analyses the full article, so it defaults to a
 // stronger model; overridable via ANTHROPIC_MODEL. The content cap bounds tokens
 // spent on an unexpectedly large page or PDF.
 const WEB_TRIAGE_MODEL_DEFAULT = "claude-sonnet-5";
-// Stage-one screen: a cheap title/description-only pass that filters obvious
-// non-intelligence before the expensive fetch-and-analyse call. Small fast model
-// by default; override with ANTHROPIC_SCREEN_MODEL.
-const SCREEN_MODEL_DEFAULT = "claude-haiku-4-5";
 const WEB_FETCH_MAX_CONTENT_TOKENS =
   Number(process.env.WEB_FETCH_MAX_CONTENT_TOKENS) || 8000;
 // Per-call timeout so one slow request never stalls a worker (see LlmEnricher).
@@ -43,74 +33,10 @@ const REQUEST_TIMEOUT_MS = Number(process.env.INGEST_LLM_TIMEOUT_MS) || 20000;
 const LONG_CALL_TIMEOUT_MS =
   Number(process.env.INGEST_LLM_LONG_TIMEOUT_MS) || 60000;
 
-const NEXUS_VALUES: Nexus[] = [
-  "china",
-  "russia",
-  "north_korea",
-  "iran",
-  "rest_of_world",
-  "other",
-];
-const ITEM_TYPES: ItemType[] = [
-  "actor_activity",
-  "breach",
-  "vuln",
-  "report",
-  "breaking",
-];
-const CONFIDENCE_VALUES: Confidence[] = ["confirmed", "suspected", "poc"];
-
 /** The agent's identity, shared across triage, summarising, and reflection. */
 export const ANALYST_PERSONA = `You are a cybersecurity analyst, whose task is to triage and classify industry open-source reports for a nation-state and eCrime cyber-intelligence dashboard, and to write its executive summaries.
 You reason only from the open-source reporting in front of you: stay evidence-based, prefer precise attribution over speculation, and never invent threat actors, victims, malware, or numbers.
 You maintain a running memory of adversaries and cross-report trends. When a memory brief is provided, use it to inform attribution and context - but the report in front of you always overrides stale memory.`;
-
-// How the dashboard files an item, so the agent classifies to match the sections
-// (the ingest pipeline maps itemType + attribution onto the kind).
-const TRIAGE_INSTRUCTIONS = `Decide whether an item is genuine threat intelligence worth ingesting, then classify it.
-
-DROP (relevant=false) anything that is not genuine threat intelligence: marketing, product/feature announcements, vendor self-promotion, "use cases" and customer stories; corporate/business news (funding, M&A, partnerships, awards, hiring, earnings, compliance PR); conference/contest/webinar promotion; podcasts, newsletters, and "week in review" roundups; opinion/thought-leadership; and consumer-lifestyle or legal/policy stories with no attacker, malware, or vulnerability substance.
-
-KEEP genuine reporting and classify itemType so it lands in the right section:
-- "actor_activity": activity attributed to a named threat actor or crew (nation-state, eCrime, or hacktivist) - a campaign, intrusion, tooling/malware analysis, or a claimed incident. This becomes the actor's card, so use it whenever a specific actor is named, incident OR analysis.
-- "vuln": a vulnerability or exploit - a CVE, a security advisory/bulletin, or a proof-of-concept. This becomes an Exploits entry.
-- "breach": a breach/leak/extortion disclosure that is NOT attributed to a named actor (an unattributed victim disclosure).
-- "report": general threat-intelligence reporting with no specific named actor, vulnerability, or breach event.
-- "breaking": high-signal breaking news that does not fit the above.
-
-Only keep eCrime/ransomware when it names a crew or is large-scale (many victims or major sector impact); drop a bare crew mention with no substance.
-
-Also assign taxonomy labels for the item, drawn ONLY from what the report actually states:
-- malware: named malware families, tools or RATs (e.g. "Flying Eagle", "ValleyRAT", "Cobalt Strike").
-- adversary: named threat actors or crews (e.g. "Fancy Bear", "Lazarus Group", "Scattered Spider").
-- target: the targeted product, system, sector or organisation (e.g. "Zimbra", "SharePoint", "water utilities").
-- ai: an AI model or assistant named as used in the attack/tooling (e.g. "Claude", "ChatGPT"); usually empty.
-Give each as a short bare name (no prefix); omit a category when nothing applies. Do not invent labels. When a name in the memory brief's "Known labels" list matches, reuse that exact name so labelling stays consistent.
-
-Return ONLY strict JSON of this shape:
-{
-  "relevant": boolean,
-  "nexus": "china" | "russia" | "north_korea" | "iran" | "rest_of_world" | "other" | null,
-  "itemType": "actor_activity" | "breach" | "vuln" | "report" | "breaking",
-  "confidence": "confirmed" | "suspected" | "poc",
-  "crowdstrikeAdversary": string | null,
-  "labels": { "malware": string[], "adversary": string[], "target": string[], "ai": string[] }
-}
-nexus is the attributed nation-state (china/russia/north_korea/iran), "rest_of_world" for any other nation-state (e.g. India, Turkey, Vietnam, Pakistan, South Korea), "other" for eCrime or hacktivism, or null if none.
-crowdstrikeAdversary is the public CrowdStrike cryptonym (Panda/Bear/Chollima/Kitten/Spider/Jackal naming) when one clearly applies, else null.`;
-
-// Stage one of triage. Deliberately asymmetric: a wrong "keep" only wastes one
-// fetch, a wrong "drop" loses the report for good - so anything uncertain is
-// kept and settled by the full pass that reads the article.
-const SCREEN_INSTRUCTIONS = `Decide whether an item is worth the cost of fetching and analysing in full.
-
-You see ONLY the feed title and description. Judge from those alone - do not guess at details you cannot see.
-
-Answer "drop" only when the item is clearly NOT threat intelligence: marketing, product or feature announcements, vendor self-promotion, "use cases" and customer stories, corporate/business news (funding, M&A, partnerships, awards, hiring, earnings, compliance PR), conference/contest/webinar promotion, podcasts, newsletters and "week in review" roundups, opinion and thought-leadership, or consumer-lifestyle and legal/policy stories with no attacker, malware, or vulnerability substance.
-
-Answer "keep" for anything that could plausibly be genuine threat reporting - a campaign, intrusion, malware or tooling analysis, breach or leak, vulnerability or advisory - AND for anything you are unsure about. When in doubt, keep.
-
-Return ONLY strict JSON: {"verdict": "keep" | "drop", "reason": string}`;
 
 const SUMMARY_INSTRUCTIONS = `Write the executive summary panel for the dashboard.
 Write a flowing, narrative briefing in plain ASCII prose (no markdown, no headings, no bullet characters, no emoji).
@@ -130,17 +56,6 @@ Return ONLY strict JSON of this shape:
   "adversaries": [ { "subject": string, "content": string } ],
   "trends": [ { "subject": string, "content": string } ]
 }`;
-
-/** Parsed triage classification for one candidate. */
-export type TriageResult = {
-  relevant: boolean;
-  nexus: Nexus | null;
-  itemType: ItemType;
-  confidence: Confidence;
-  crowdstrikeAdversary: string | null;
-  // Canonical `Prefix/Value` taxonomy labels (AI/Malware/Adversary/Target).
-  labels: string[];
-};
 
 /** A compact observation about one kept report, fed into reflection. */
 export type ReflectionInput = {
@@ -180,60 +95,6 @@ export class AnalystAgent {
     if (withMemory && this.memoryBrief)
       parts.push(`Memory brief (your accumulated knowledge):\n${this.memoryBrief}`);
     return parts.join("\n\n");
-  }
-
-  /** Classify one candidate; null when the call fails or cannot be parsed. */
-  async triage(c: RawCandidate): Promise<TriageResult | null> {
-    const model = process.env.ANTHROPIC_MODEL || TRIAGE_MODEL_DEFAULT;
-    const message = await this.client.messages.create({
-      model,
-      max_tokens: 400,
-      system: this.system(TRIAGE_INSTRUCTIONS, true),
-      messages: [
-        {
-          role: "user",
-          content: `Source: ${c.sourceName} (${c.sourceCategory ?? "unknown"})
-Title: ${c.title}
-Description: ${c.description ?? ""}`,
-        },
-      ],
-    });
-    return this.parseTriage(textOf(message));
-  }
-
-  /**
-   * Stage-one screen: a cheap title/description-only pass that decides whether a
-   * candidate is worth the expensive fetch-and-analyse call. Returns null when
-   * the call fails or cannot be parsed, which callers must treat as "keep" -
-   * the screen may only ever save work, never lose a report on its own.
-   */
-  async screen(c: RawCandidate): Promise<{ keep: boolean; reason: string } | null> {
-    const model = process.env.ANTHROPIC_SCREEN_MODEL || SCREEN_MODEL_DEFAULT;
-    try {
-      const message = await this.client.messages.create({
-        model,
-        max_tokens: 150,
-        // No memory brief: this pass only asks "is this threat intelligence at
-        // all", and the brief would add tokens to every candidate.
-        system: `${ANALYST_PERSONA}\n\n${SCREEN_INSTRUCTIONS}`,
-        messages: [
-          {
-            role: "user",
-            content: `Source: ${c.sourceName} (${c.sourceCategory ?? "unknown"})
-Title: ${c.title}
-Description: ${c.description ?? ""}`,
-          },
-        ],
-      });
-      const match = textOf(message).match(/\{[\s\S]*\}/);
-      if (!match) return null;
-      const o = JSON.parse(match[0]) as Record<string, unknown>;
-      const reason = typeof o.reason === "string" ? o.reason.trim() : "";
-      // Only an explicit "drop" filters; any other value keeps.
-      return { keep: o.verdict !== "drop", reason };
-    } catch {
-      return null;
-    }
   }
 
   /**
@@ -377,37 +238,4 @@ Description: ${c.description ?? ""}`,
     return parseReflection(textOf(message));
   }
 
-  private parseTriage(text: string): TriageResult | null {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    let raw: unknown;
-    try {
-      raw = JSON.parse(match[0]);
-    } catch {
-      return null;
-    }
-    if (typeof raw !== "object" || raw === null) return null;
-    const o = raw as Record<string, unknown>;
-    const nexus =
-      typeof o.nexus === "string" && NEXUS_VALUES.includes(o.nexus as Nexus)
-        ? (o.nexus as Nexus)
-        : null;
-    const itemType = ITEM_TYPES.includes(o.itemType as ItemType)
-      ? (o.itemType as ItemType)
-      : "report";
-    const confidence = CONFIDENCE_VALUES.includes(o.confidence as Confidence)
-      ? (o.confidence as Confidence)
-      : "suspected";
-    return {
-      relevant: Boolean(o.relevant),
-      nexus,
-      itemType,
-      confidence,
-      crowdstrikeAdversary:
-        typeof o.crowdstrikeAdversary === "string" && o.crowdstrikeAdversary
-          ? o.crowdstrikeAdversary
-          : null,
-      labels: parseLabels(o.labels),
-    };
-  }
 }

@@ -124,8 +124,9 @@ export function ImportPostButton({
 
   // Open the flow when an external control bumps openSignal.
   useEffect(() => {
+    // The signal is an imperative request from a separate toolbar control.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (openSignal) openImport();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openSignal]);
 
   return (

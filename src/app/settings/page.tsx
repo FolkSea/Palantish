@@ -32,7 +32,9 @@ export default async function SettingsPage() {
     .order("name");
 
   // Recently dropped candidates (last 30 days) for the audit view.
+  // Dynamic server render; this is a database cutoff, not component state.
   const droppedCutoff = new Date(
+    // eslint-disable-next-line react-hooks/purity
     Date.now() - 30 * 24 * 60 * 60 * 1000,
   ).toISOString();
   const { data: droppedRows } = await supabase

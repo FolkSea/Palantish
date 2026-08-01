@@ -32,6 +32,14 @@ ChartJS.register(LinearScale, TimeScale, PointElement, Tooltip);
 
 const DAY = 24 * 60 * 60 * 1000;
 
+function stableJitter(key: string): number {
+  const hash = [...key].reduce(
+    (value, char) => (value * 31 + char.charCodeAt(0)) >>> 0,
+    0,
+  );
+  return ((hash % 1000) / 999 - 0.5) * 0.24;
+}
+
 // Icon (chart point shape) per marker type.
 const KIND_STYLE: Record<TimelineKind, "circle" | "rectRot" | "triangle"> = {
   report: "circle",
@@ -78,10 +86,12 @@ export default function ActivityTimeline({
   events,
   streams,
   initialFilters,
+  now,
 }: {
   events: TimelineEvent[];
   streams: TimelineStream[];
   initialFilters: TimelineFilters;
+  now: number;
 }) {
   const [filters, setFilters] = useState<TimelineFilters>(initialFilters);
   const router = useRouter();
@@ -94,7 +104,6 @@ export default function ActivityTimeline({
   }
 
   const { datasets, rowLabels, rowColors, xMin, xMax, rows, lanes } = useMemo(() => {
-    const now = Date.now();
     const xMax = now + DAY / 2;
     const xMin = now - 30 * DAY;
 
@@ -111,7 +120,9 @@ export default function ActivityTimeline({
       const base = yOf(lane.actor);
       const data: PlotPoint[] = laneEvents.map((e) => ({
         x: new Date(`${e.date}T12:00:00Z`).getTime(),
-        y: base + (Math.random() - 0.5) * 0.24,
+        // Stable jitter keeps overlapping points legible without moving them
+        // every time filters change or the component re-renders.
+        y: base + stableJitter(`${e.date}:${e.title}`),
         title: `${e.title}`,
         lines: [
           `${KIND_LABEL[e.kind]} - ${lane.actor}`,
@@ -151,7 +162,7 @@ export default function ActivityTimeline({
       rows: lanes.length,
       lanes,
     };
-  }, [events, streams, filters]);
+  }, [events, streams, filters, now]);
 
   const options: ChartOptions<"scatter"> = {
     responsive: true,
