@@ -3,6 +3,7 @@ import { getAuthenticatedClient, isAdministrator } from "@/lib/auth";
 import { loadCompiledAt } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
 import { HeaderMenu } from "@/components/HeaderMenu";
+import { SearchPanel } from "@/components/SearchPanel";
 
 /**
  * The application header, on every page. The mark and wordmark are the way home
@@ -64,9 +65,16 @@ export async function SiteHeader() {
           />
         </div>
       </div>
-      <p className="mt-2 text-[11px] text-[#90A9FF]">
-        <CompiledTime iso={compiledAt} />
-      </p>
+      {/* Search sits in the header so it is on every page, and its results
+          float over the page rather than pushing it down. */}
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <div className="min-w-[240px] flex-1">
+          <SearchPanel />
+        </div>
+        <p className="shrink-0 text-[11px] text-[#90A9FF]">
+          <CompiledTime iso={compiledAt} />
+        </p>
+      </div>
     </header>
   );
 }
