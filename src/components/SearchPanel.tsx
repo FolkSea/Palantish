@@ -143,8 +143,8 @@ function QueryHelp({ onPick }: { onPick: (query: string) => void }) {
   const examples = [
     'label:Target/Zimbra AND adv:"FANCY BEAR"',
     "(ip:192.168 OR dom:evil) NOT label:AI/Claude",
+    "label:Malware/* -src:Reddit",
     "dom:~\\.(ru|su)$",
-    "zimbra -src:Reddit",
   ];
   return (
     <div className="mt-2 rounded-[10px] border border-[#e5e7eb] bg-slate-50 p-3 text-[12px]">
@@ -159,7 +159,9 @@ function QueryHelp({ onPick }: { onPick: (query: string) => void }) {
       <p className="mt-2 text-slate-500">
         Combine with <Op>AND</Op> <Op>OR</Op> <Op>NOT</Op> (or <Op>-</Op>) and
         brackets; adjacent terms are an implicit AND. Quote values with spaces.
-        Use <Op>:~</Op> instead of <Op>:</Op> to match a regular expression.
+        A value matches anywhere in the field, or use <Op>*</Op> as a wildcard to
+        anchor it: <Op>Malware/*</Op> is that branch, <Op>*BEAR</Op> ends with it.
+        Use <Op>:~</Op> instead of <Op>:</Op> for a regular expression.
       </p>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {examples.map((e) => (

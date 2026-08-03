@@ -66,9 +66,13 @@ const INDICATOR_FIELDS = new Set<Field>([
   "ioc",
 ]);
 
-/** `:` matches a case-insensitive substring; `:~` matches a regular expression. */
+/** `:` matches a case-insensitive substring, or a wildcard pattern when the
+ * value contains `*`; `:~` matches a regular expression. */
 export type Matcher =
   | { kind: "contains"; value: string }
+  // A ":" value containing "*", anchored at both ends: Malware/* is everything
+  // under that branch, *bear is anything ending in it.
+  | { kind: "glob"; source: string; re: RegExp }
   | { kind: "regex"; source: string; re: RegExp };
 
 export type QueryNode =
@@ -84,6 +88,9 @@ export type ParseResult =
 // A user-supplied pattern is compiled and run server-side, so keep it short
 // enough that a pathological one cannot spend long backtracking.
 const MAX_REGEX_LENGTH = 200;
+// Each "*" becomes a ".*", and a long chain of them is the one way a glob can
+// backtrack badly. Far more than any real query needs.
+const MAX_WILDCARDS = 10;
 
 /* --- Tokenizer -------------------------------------------------------------- */
 
@@ -257,7 +264,30 @@ function buildMatcher(field: Field, op: ":" | ":~", value: string): Matcher {
   }
   // Defanged indicators (evil[.]com, hxxp://) resolve to their stored form.
   const needle = INDICATOR_FIELDS.has(field) ? normalizeIndicator(value) : value;
+  if (needle.includes("*")) {
+    const stars = needle.split("*").length - 1;
+    if (stars > MAX_WILDCARDS) {
+      throw new ParseError(`Use at most ${MAX_WILDCARDS} wildcards in one term.`);
+    }
+    return { kind: "glob", source: needle, re: globToRegExp(needle) };
+  }
   return { kind: "contains", value: needle.toLowerCase() };
+}
+
+/**
+ * Compile a wildcard value. Anchored at both ends, so "*" is the only thing that
+ * spans - `Malware/*` is that branch and nothing else, where an unanchored match
+ * would also hit "NotMalware/x". Everything but "*" is literal, so a value full
+ * of dots and slashes cannot accidentally behave like a regular expression.
+ *
+ * To match a literal asterisk, use `:~` and escape it there.
+ */
+function globToRegExp(glob: string): RegExp {
+  const body = glob
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${body}$`, "i");
 }
 
 /**
@@ -367,7 +397,9 @@ export function fieldsUsed(node: QueryNode): Set<Field> {
 
 /** Whether a value satisfies a matcher. Substring matching is case-insensitive. */
 export function matcherMatches(matcher: Matcher, value: string): boolean {
-  if (matcher.kind === "regex") return matcher.re.test(value);
+  if (matcher.kind === "regex" || matcher.kind === "glob") {
+    return matcher.re.test(value);
+  }
   return value.toLowerCase().includes(matcher.value);
 }
 

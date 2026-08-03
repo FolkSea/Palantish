@@ -214,6 +214,64 @@ describe("parseQuery: regex", () => {
   });
 });
 
+describe("parseQuery: wildcards", () => {
+  const re = (q: string) => (parse(q) as { matcher: { re: RegExp } }).matcher.re;
+
+  it("treats a value with * as a pattern, not a substring", () => {
+    expect(parse("label:Malware/*")).toMatchObject({
+      field: "label",
+      matcher: { kind: "glob" },
+    });
+    // No star, no change: plain values stay a substring match.
+    expect(parse("label:Malware")).toMatchObject({ matcher: { kind: "contains" } });
+  });
+
+  it("anchors at both ends, so a branch is that branch", () => {
+    const m = re("label:Malware/*");
+    expect(m.test("Malware/BRICKSTORM")).toBe(true);
+    expect(m.test("Malware/")).toBe(true);
+    // Substring semantics would have matched these; a glob must not.
+    expect(m.test("NotMalware/X")).toBe(false);
+    expect(m.test("Malware")).toBe(false);
+  });
+
+  it("matches a suffix, a prefix and a middle", () => {
+    expect(re("adv:*BEAR").test("FANCY BEAR")).toBe(true);
+    expect(re("adv:*BEAR").test("BEAR CLAW")).toBe(false);
+    expect(re("adv:FANCY*").test("FANCY BEAR")).toBe(true);
+    expect(re("dom:evil*.ru").test("evil-c2.ru")).toBe(true);
+    expect(re("dom:evil*.ru").test("evil-c2.su")).toBe(false);
+    expect(re("adv:*BEAR*").test("THE BEAR CLAW")).toBe(true);
+  });
+
+  it("is case-insensitive, like the substring match it replaces", () => {
+    expect(re("label:malware/*").test("Malware/BRICKSTORM")).toBe(true);
+  });
+
+  it("keeps everything else literal, so a value cannot act as a regex", () => {
+    // "." must be a dot, not "any character", or dom:evil*.ru would match
+    // "evil-c2Xru" and the wildcard would quietly be a regex.
+    expect(re("dom:evil*.ru").test("evilXru")).toBe(false);
+    expect(re("cve:CVE-2026-*").test("CVE-2026-42897")).toBe(true);
+    expect(re("text:a+b*").test("a+because")).toBe(true);
+    expect(re("text:a+b*").test("aaab")).toBe(false);
+  });
+
+  it("normalises a defanged indicator before compiling the pattern", () => {
+    expect(re("dom:evil[.]example[.]*").test("evil.example.ru")).toBe(true);
+  });
+
+  it("refuses a chain of wildcards long enough to backtrack badly", () => {
+    const r = parseQuery(`text:${"*a".repeat(20)}`);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.error).toContain("at most");
+  });
+
+  it("works inside quotes, where a value can hold spaces", () => {
+    expect(re('adv:"FANCY *"').test("FANCY BEAR")).toBe(true);
+  });
+});
+
 describe("parseQuery: errors", () => {
   it("names what is wrong", () => {
     const cases: [string, string][] = [
