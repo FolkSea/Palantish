@@ -95,7 +95,9 @@ export function SettingsView({
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-[200px_1fr]">
-      <nav className="rounded-[10px] border border-[#e5e7eb] bg-white p-2">
+      {/* self-start, or the grid stretches the card to the height of whichever
+          panel is showing and leaves a long empty tail below the last tab. */}
+      <nav className="self-start rounded-[10px] border border-[#e5e7eb] bg-white p-2">
         <ul className="space-y-1">
           {tabs.map((t) => (
             <li key={t.id}>
