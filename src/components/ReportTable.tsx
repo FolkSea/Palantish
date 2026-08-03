@@ -6,12 +6,12 @@
 
 import { Card, EmptyState } from "@/components/Card";
 import { ItemActions } from "@/components/ItemActions";
-import { SourceBadge } from "@/components/Badges";
+import { AdversaryBadge, SourceBadge } from "@/components/Badges";
 import { ReportTitle } from "@/components/ReportDetail";
 import { LabelChips } from "@/components/LabelChips";
 import { usePaginated, PaginationFooter } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
-import { sourceHref } from "@/lib/browse-links";
+import { adversaryHref, sourceHref } from "@/lib/browse-links";
 
 /** What the table needs from a report. Any of the fuller row types satisfies it. */
 export type ReportTableRow = {
@@ -23,6 +23,11 @@ export type ReportTableRow = {
   published_at: string | null;
   country?: string | null;
   confidence?: string | null;
+  // The attributed actor, as stored: the analyst's own attribution wins over
+  // the feed's. Optional, and the badge renders nothing when there is none, so
+  // an unattributed report simply shows no chip.
+  adversary_label?: string | null;
+  crowdstrike_adversary?: string | null;
   raw_hash: string;
   labels: string[];
 };
@@ -80,6 +85,12 @@ export function ReportTable({
                     <td className="py-2 text-slate-600">
                       {r.description}{" "}
                       <span className="ml-1 inline-flex items-center gap-2 align-middle">
+                        <AdversaryBadge
+                          name={r.adversary_label ?? r.crowdstrike_adversary ?? null}
+                          href={adversaryHref(
+                            r.adversary_label ?? r.crowdstrike_adversary ?? "",
+                          )}
+                        />
                         <SourceBadge
                           name={r.source_name}
                           href={sourceHref(r.source_name ?? "")}

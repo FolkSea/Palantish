@@ -157,6 +157,8 @@ export async function loadFeed(): Promise<FeedResult> {
     published_at: r.published_at,
     country: r.country,
     confidence: r.confidence,
+    adversary_label: r.adversary_label,
+    crowdstrike_adversary: r.crowdstrike_adversary,
     raw_hash: r.raw_hash,
     labels: chips.get(r.id) ?? [],
   });

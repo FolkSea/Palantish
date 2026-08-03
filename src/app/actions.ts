@@ -975,6 +975,8 @@ export type SearchResultRow = {
   published_at: string | null;
   country: string | null;
   confidence: string | null;
+  adversary_label: string | null;
+  crowdstrike_adversary: string | null;
   raw_hash: string;
   labels: string[];
 };
@@ -1055,6 +1057,8 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
     published_at: r.published_at,
     country: r.country,
     confidence: r.confidence,
+    adversary_label: r.adversary_label,
+    crowdstrike_adversary: r.crowdstrike_adversary,
     raw_hash: r.raw_hash,
     labels: labels.get(r.id) ?? [],
   });
