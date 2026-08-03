@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { loadFeed, FEED_SECTION_LIMIT } from "@/lib/feed";
-import { FeedResults } from "@/components/FeedResults";
+import { ReportTable } from "@/components/ReportTable";
 
 // Always current: the feed reflects what has been ingested and what the user
 // subscribes to, both of which change under it.
@@ -97,7 +97,15 @@ export default async function FeedPage() {
                 Showing the newest {FEED_SECTION_LIMIT} per section.
               </p>
             ) : null}
-            <FeedResults feed={feed} />
+            <div className="mt-3 space-y-3">
+              <ReportTable title="Reports" items={feed.reports} empty="No matches." />
+              <ReportTable title="Breaches" items={feed.breaches} empty="No matches." />
+              <ReportTable
+                title="Exploits and Vulnerabilities"
+                items={feed.vulns}
+                empty="No matches."
+              />
+            </div>
           </>
         )}
       </div>

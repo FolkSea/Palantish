@@ -352,6 +352,8 @@ describe("toDoc", () => {
     target: "Zimbra Collaboration",
     exploit_status: "confirmed",
     date_label: null,
+    country: "Russia",
+    confidence: "medium",
     adversary_label: "UNID BEAR",
     crowdstrike_adversary: "FANCY BEAR",
   };

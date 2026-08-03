@@ -18,6 +18,7 @@ import { isThreatIntel } from "@/lib/relevance";
 import { parseQuery, fieldsUsed } from "@/lib/search/query";
 import { evaluateQuery } from "@/lib/search/evaluate";
 import { loadSearchCorpus } from "@/lib/search/corpus";
+import { loadLabelsFor } from "@/lib/report-labels";
 import { queueNotifications } from "@/lib/notify/queue";
 import {
   validIndicator,
@@ -960,40 +961,29 @@ export async function discoverTechniquesAction(
   return { ok: true, techniques };
 }
 
-export type SearchReport = {
+/**
+ * A report as every list view renders it. One shape for search, the personal
+ * feed and the browse pages, because they all present it the same way (see
+ * ReportTable) - the section it lands in is the only thing that differs.
+ */
+export type SearchResultRow = {
   id: string;
   title: string;
   url: string | null;
   description: string | null;
   source_name: string | null;
   published_at: string | null;
+  country: string | null;
+  confidence: string | null;
   raw_hash: string;
+  labels: string[];
 };
-export type SearchBreach = {
-  id: string;
-  org_name: string;
-  url: string | null;
-  summary: string | null;
-  source_name: string | null;
-  event_date: string | null;
-  event_date_label: string | null;
-  raw_hash: string;
-};
-export type SearchVuln = {
-  id: string;
-  cve_id: string;
-  target: string | null;
-  url: string | null;
-  detail: string | null;
-  status: "confirmed" | "suspected" | "poc";
-  source_name: string | null;
-  raw_hash: string;
-};
+
 export type SearchResults = {
   query: string;
-  reports: SearchReport[];
-  breaches: SearchBreach[];
-  vulns: SearchVuln[];
+  reports: SearchResultRow[];
+  breaches: SearchResultRow[];
+  vulns: SearchResultRow[];
   /** Set when the query could not be parsed; the box shows it as written. */
   error?: string;
   /** True when more reports exist than the search corpus covered. */
@@ -1021,8 +1011,9 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
     truncated: false,
   };
 
-  // The corpus loader opens its own RLS-scoped client; this is the auth gate.
-  if (!(await getAuthenticatedClient())) return empty;
+  const auth = await getAuthenticatedClient();
+  if (!auth) return empty;
+  const supabase = auth.supabase;
 
   const parsed = parseQuery(q);
   if (!parsed.ok) return { ...empty, error: parsed.error };
@@ -1039,46 +1030,38 @@ export async function searchDashboard(query: string): Promise<SearchResults> {
   const fields = fieldsUsed(parsed.node);
   const requireRelevance = fields.size === 1 && fields.has("text");
 
-  const reports: SearchReport[] = matched
-    .filter((r) => r.kind === "research" || r.kind === "other")
-    .filter((r) => !requireRelevance || isThreatIntel(r.title, r.description))
-    .slice(0, SEARCH_LIMIT)
-    .map((r) => ({
-      id: r.id,
-      title: r.title,
-      url: r.url,
-      description: r.description,
-      source_name: r.source_name,
-      published_at: r.published_at,
-      raw_hash: r.raw_hash,
-    }));
-  const breaches: SearchBreach[] = matched
-    .filter((b) => b.kind === "breach")
-    .filter((b) => !requireRelevance || isThreatIntel(b.title, b.description))
-    .slice(0, SEARCH_LIMIT)
-    .map((b) => ({
-      id: b.id,
-      org_name: b.title,
-      url: b.url,
-      summary: b.description,
-      source_name: b.source_name,
-      event_date: b.published_at,
-      event_date_label: b.date_label,
-      raw_hash: b.raw_hash,
-    }));
-  const vulns: SearchVuln[] = matched
-    .filter((v) => v.kind === "exploit")
-    .slice(0, SEARCH_LIMIT)
-    .map((v) => ({
-      id: v.id,
-      cve_id: v.cve_id ?? v.title,
-      target: v.target,
-      url: v.url,
-      detail: v.description,
-      status: (v.exploit_status ?? "suspected") as SearchVuln["status"],
-      source_name: v.source_name,
-      raw_hash: v.raw_hash,
-    }));
+  const pick = (kinds: string[], relevance: boolean) =>
+    matched
+      .filter((r) => kinds.includes(r.kind ?? ""))
+      .filter((r) => !relevance || isThreatIntel(r.title, r.description))
+      .slice(0, SEARCH_LIMIT);
+
+  const reportRows = pick(["research", "other"], requireRelevance);
+  const breachRows = pick(["breach"], requireRelevance);
+  const vulnRows = pick(["exploit"], false);
+
+  // Labels are only needed for what is actually shown, so this is a handful of
+  // rows rather than the whole corpus.
+  const labels = await loadLabelsFor(
+    supabase,
+    [...reportRows, ...breachRows, ...vulnRows].map((r) => r.id),
+  );
+  const toRow = (r: (typeof matched)[number]): SearchResultRow => ({
+    id: r.id,
+    title: r.title,
+    url: r.url,
+    description: r.description,
+    source_name: r.source_name,
+    published_at: r.published_at,
+    country: r.country,
+    confidence: r.confidence,
+    raw_hash: r.raw_hash,
+    labels: labels.get(r.id) ?? [],
+  });
+
+  const reports = reportRows.map(toRow);
+  const breaches = breachRows.map(toRow);
+  const vulns = vulnRows.map(toRow);
 
   return { query: q, reports, breaches, vulns, truncated };
 }

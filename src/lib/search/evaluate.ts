@@ -104,6 +104,8 @@ export type CorpusRow = {
   target: string | null;
   exploit_status: string | null;
   date_label: string | null;
+  country: string | null;
+  confidence: string | null;
   adversary_label: string | null;
   crowdstrike_adversary: string | null;
 };

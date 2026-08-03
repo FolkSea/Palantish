@@ -5,6 +5,7 @@ import { toDoc, type CorpusRow, type SearchDoc } from "@/lib/search/evaluate";
 import type { Field, QueryNode } from "@/lib/search/query";
 import { fieldsUsed } from "@/lib/search/query";
 import { fetchAllPages, fetchAllByIds } from "@/lib/supabase/paging";
+import { loadLabelsFor } from "@/lib/report-labels";
 
 // The query language evaluates in memory (see evaluate.ts), so the corpus is
 // bounded: the most recent reports, which is where analyst searches live. The
@@ -13,7 +14,8 @@ export const SEARCH_CORPUS_LIMIT = 4000;
 
 const ITEM_COLS =
   "id, kind, title, url, description, source_name, published_at, raw_hash, " +
-  "cve_id, target, exploit_status, date_label, adversary_label, crowdstrike_adversary";
+  "cve_id, target, exploit_status, date_label, country, confidence, " +
+  "adversary_label, crowdstrike_adversary";
 
 export type { CorpusRow };
 
@@ -27,30 +29,6 @@ export type Corpus = {
 type Db = Awaited<ReturnType<typeof createClient>>;
 
 const INDICATOR_FIELDS: Field[] = ["ip", "domain", "url", "hash", "cve", "ioc", "ttp"];
-
-type LabelRow = { intel_item_id: string; labels: { name: string } | null };
-
-async function loadLabels(db: Db, ids: string[]): Promise<Map<string, string[]>> {
-  const map = new Map<string, string[]>();
-  const rows = await fetchAllByIds<LabelRow>(ids, (chunk, from, to) =>
-    db
-      .from("intel_item_labels")
-      .select("intel_item_id, labels(name)")
-      // Ordered so paging is stable; the join table's key is the pair.
-      .in("intel_item_id", chunk)
-      .order("intel_item_id")
-      .order("label_id")
-      .range(from, to),
-  );
-  for (const row of rows) {
-    const name = row.labels?.name;
-    if (!name) continue;
-    const arr = map.get(row.intel_item_id);
-    if (arr) arr.push(name);
-    else map.set(row.intel_item_id, [name]);
-  }
-  return map;
-}
 
 type IocsByItem = Map<string, { type: string; value: string }[]>;
 type IocRow = {
@@ -121,7 +99,7 @@ export async function loadSearchCorpus(node: QueryNode): Promise<Corpus> {
   const wantsLabels = used.has("label");
   const wantsIocs = INDICATOR_FIELDS.some((f) => used.has(f));
   const [labels, iocs] = await Promise.all([
-    wantsLabels ? loadLabels(db, ids) : Promise.resolve(new Map<string, string[]>()),
+    wantsLabels ? loadLabelsFor(db, ids) : Promise.resolve(new Map<string, string[]>()),
     wantsIocs ? loadIocs(db, ids) : Promise.resolve<IocsByItem>(new Map()),
   ]);
 

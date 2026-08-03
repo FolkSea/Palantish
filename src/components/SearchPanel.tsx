@@ -2,12 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { searchDashboard, type SearchResults } from "@/app/actions";
-import {
-  Section,
-  ReportRow,
-  BreachRow,
-  VulnRow,
-} from "@/components/ResultRows";
+import { ReportTable } from "@/components/ReportTable";
 
 export function SearchPanel() {
   const [query, setQuery] = useState("");
@@ -118,25 +113,14 @@ export function SearchPanel() {
           ) : null}
 
           {results && !results.error && !pending ? (
-            <div className="mt-3 space-y-4">
-              <Section title="Reports" count={results.reports.length}>
-                {results.reports.map((r) => (
-                  <ReportRow key={r.id} r={r} />
-                ))}
-              </Section>
-              <Section title="Breaches" count={results.breaches.length}>
-                {results.breaches.map((b) => (
-                  <BreachRow key={b.id} b={b} />
-                ))}
-              </Section>
-              <Section
+            <div className="mt-3 space-y-3">
+              <ReportTable title="Reports" items={results.reports} empty="No matches." />
+              <ReportTable title="Breaches" items={results.breaches} empty="No matches." />
+              <ReportTable
                 title="Exploits and Vulnerabilities"
-                count={results.vulns.length}
-              >
-                {results.vulns.map((v) => (
-                  <VulnRow key={v.id} v={v} />
-                ))}
-              </Section>
+                items={results.vulns}
+                empty="No matches."
+              />
             </div>
           ) : null}
         </div>

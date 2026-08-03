@@ -1,17 +1,14 @@
 import "server-only";
 
 import { getAuthenticatedClient } from "@/lib/auth";
-import { fetchAllPages, fetchAllByIds } from "@/lib/supabase/paging";
+import { fetchAllPages } from "@/lib/supabase/paging";
+import { loadLabelsFor } from "@/lib/report-labels";
 import {
   matchSubscriptions,
   type Subscription,
   type SubscriptionKind,
 } from "@/lib/notify/match";
-import type {
-  SearchReport,
-  SearchBreach,
-  SearchVuln,
-} from "@/app/actions";
+import type { SearchResultRow } from "@/app/actions";
 
 // The window the feed considers, newest first. Same reasoning as the search
 // corpus: matching happens in memory, so the set has to be bounded, and the page
@@ -22,8 +19,8 @@ export const FEED_SECTION_LIMIT = 100;
 
 const ITEM_COLS =
   "id, kind, title, url, description, source_name, published_at, raw_hash, " +
-  "cve_id, target, exploit_status, date_label, country, adversary_label, " +
-  "crowdstrike_adversary";
+  "cve_id, target, exploit_status, date_label, country, confidence, " +
+  "adversary_label, crowdstrike_adversary";
 
 type FeedRow = {
   id: string;
@@ -39,6 +36,7 @@ type FeedRow = {
   exploit_status: string | null;
   date_label: string | null;
   country: string | null;
+  confidence: string | null;
   adversary_label: string | null;
   crowdstrike_adversary: string | null;
 };
@@ -48,9 +46,9 @@ export type FeedSubscription = { kind: SubscriptionKind; value: string };
 export type FeedResult = {
   /** What the user is following, for the header. */
   subscriptions: FeedSubscription[];
-  reports: SearchReport[];
-  breaches: SearchBreach[];
-  vulns: SearchVuln[];
+  reports: SearchResultRow[];
+  breaches: SearchResultRow[];
+  vulns: SearchResultRow[];
   /** True when more reports exist than the feed window covered. */
   truncated: boolean;
 };
@@ -121,7 +119,7 @@ export async function loadFeed(): Promise<FeedResult> {
   // Labels only matter when something is actually subscribed to one.
   const wantsLabels = subscriptions.some((s) => s.kind === "label");
   const labels = wantsLabels
-    ? await loadLabels(db, rows.map((r) => r.id))
+    ? await loadLabelsFor(db, rows.map((r) => r.id))
     : new Map<string, string[]>();
 
   const matched = rows.filter(
@@ -137,73 +135,37 @@ export async function loadFeed(): Promise<FeedResult> {
       ).length > 0,
   );
 
+  const pick = (kinds: string[]) =>
+    matched.filter((r) => kinds.includes(r.kind ?? "")).slice(0, FEED_SECTION_LIMIT);
+  const reportRows = pick(["research", "other"]);
+  const breachRows = pick(["breach"]);
+  const vulnRows = pick(["exploit"]);
+
+  // Chips are only needed for the rows shown. When a label subscription drove
+  // the matching the corpus map already has them; otherwise this is the only
+  // label read, over a handful of rows.
+  const shown = [...reportRows, ...breachRows, ...vulnRows];
+  const chips = wantsLabels
+    ? labels
+    : await loadLabelsFor(db, shown.map((r) => r.id));
+  const toRow = (r: FeedRow): SearchResultRow => ({
+    id: r.id,
+    title: r.title,
+    url: r.url,
+    description: r.description,
+    source_name: r.source_name,
+    published_at: r.published_at,
+    country: r.country,
+    confidence: r.confidence,
+    raw_hash: r.raw_hash,
+    labels: chips.get(r.id) ?? [],
+  });
+
   return {
     subscriptions: following,
-    reports: matched
-      .filter((r) => r.kind === "research" || r.kind === "other")
-      .slice(0, FEED_SECTION_LIMIT)
-      .map((r) => ({
-        id: r.id,
-        title: r.title,
-        url: r.url,
-        description: r.description,
-        source_name: r.source_name,
-        published_at: r.published_at,
-        raw_hash: r.raw_hash,
-      })),
-    breaches: matched
-      .filter((b) => b.kind === "breach")
-      .slice(0, FEED_SECTION_LIMIT)
-      .map((b) => ({
-        id: b.id,
-        org_name: b.title,
-        url: b.url,
-        summary: b.description,
-        source_name: b.source_name,
-        event_date: b.published_at,
-        event_date_label: b.date_label,
-        raw_hash: b.raw_hash,
-      })),
-    vulns: matched
-      .filter((v) => v.kind === "exploit")
-      .slice(0, FEED_SECTION_LIMIT)
-      .map((v) => ({
-        id: v.id,
-        cve_id: v.cve_id ?? v.title,
-        target: v.target,
-        url: v.url,
-        detail: v.description,
-        status: (v.exploit_status ?? "suspected") as SearchVuln["status"],
-        source_name: v.source_name,
-        raw_hash: v.raw_hash,
-      })),
+    reports: reportRows.map(toRow),
+    breaches: breachRows.map(toRow),
+    vulns: vulnRows.map(toRow),
     truncated,
   };
-}
-
-type LabelRow = { intel_item_id: string; labels: { name: string } | null };
-
-type Db = NonNullable<
-  Awaited<ReturnType<typeof getAuthenticatedClient>>
->["supabase"];
-
-async function loadLabels(db: Db, ids: string[]): Promise<Map<string, string[]>> {
-  const map = new Map<string, string[]>();
-  const rows = await fetchAllByIds<LabelRow>(ids, (chunk, from, to) =>
-    db
-      .from("intel_item_labels")
-      .select("intel_item_id, labels(name)")
-      .in("intel_item_id", chunk)
-      .order("intel_item_id")
-      .order("label_id")
-      .range(from, to),
-  );
-  for (const row of rows) {
-    const name = row.labels?.name;
-    if (!name) continue;
-    const arr = map.get(row.intel_item_id);
-    if (arr) arr.push(name);
-    else map.set(row.intel_item_id, [name]);
-  }
-  return map;
 }
