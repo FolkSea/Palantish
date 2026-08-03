@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { getAuthenticatedClient, isAdministrator } from "@/lib/auth";
+import { getAuthenticatedClient } from "@/lib/auth";
 import { loadDashboard } from "@/lib/data";
-import CompiledTime from "@/components/CompiledTime";
-import { HeaderMenu } from "@/components/HeaderMenu";
+import { SiteHeader } from "@/components/SiteHeader";
 import { SearchPanel } from "@/components/SearchPanel";
 import ActivityTimeline from "@/components/ActivityTimeline";
 import { DEFAULT_FILTERS, type TimelineFilters } from "@/lib/timeline";
@@ -30,10 +29,6 @@ export default async function DashboardPage() {
   // eslint-disable-next-line react-hooks/purity
   const timelineNow = Date.now();
 
-  const displayName = (
-    user?.user_metadata?.display_name as string | undefined
-  )?.trim();
-  const identityLabel = displayName || user?.email;
   const focus = ((user?.user_metadata?.focus as string | undefined) ??
     "all") as Focus;
   const savedFilters = user?.user_metadata?.timelineFilters as
@@ -43,46 +38,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <header className="mb-4 rounded-lg bg-[#2855D9] px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {/* Stylised P with a dot in the loop (the all-seeing stone) */}
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
-              <svg
-                width="22"
-                height="22"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden="true"
-              >
-                <path
-                  d="M8 20.5 V3.5 H13 a5 5 0 0 1 0 10 H8"
-                  stroke="#2855D9"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="12.5" cy="8.5" r="1.8" fill="#2855D9" />
-              </svg>
-            </span>
-            <div>
-              <h1 className="text-[22px] font-bold lowercase leading-none tracking-tight text-white">
-                palantish
-              </h1>
-              <p className="mt-1 text-[12px] text-[#90A9FF]">
-                Open Source Intelligence Portal
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[#90A9FF]">{identityLabel}</span>
-            <HeaderMenu isAdministrator={auth ? isAdministrator(auth.role) : false} />
-          </div>
-        </div>
-        <p className="mt-2 text-[11px] text-[#90A9FF]">
-          <CompiledTime iso={data.compiledAt} />
-        </p>
-      </header>
+      <SiteHeader />
 
       <div className="mb-4">
         <SearchPanel />

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   listSubscriptions,
   subscriptionOptions,
@@ -13,6 +12,7 @@ import type { HiddenPost } from "@/components/settings/HiddenPanel";
 import type { Focus } from "@/components/settings/AccountPanel";
 import type { ActorRecord } from "@/lib/actor-catalogue";
 import { listManagedUsers } from "@/lib/user-management";
+import { SiteHeader } from "@/components/SiteHeader";
 
 export const dynamic = "force-dynamic";
 // A single-feed update can run inline, so allow the same budget as the cron.
@@ -129,20 +129,14 @@ export default async function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <header className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-[18px] font-semibold text-slate-900">Settings</h1>
-          <p className="mt-0.5 text-[12px] text-slate-500">
-            Manage your account, users, and intelligence sources.
-          </p>
-        </div>
-        <Link
-          href="/"
-          className="rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:bg-slate-50"
-        >
-          Back to dashboard
-        </Link>
-      </header>
+      <SiteHeader />
+
+      <div className="mb-4">
+        <h1 className="text-[18px] font-semibold text-slate-900">Settings</h1>
+        <p className="mt-0.5 text-[12px] text-slate-500">
+          Manage your account, users, and intelligence sources.
+        </p>
+      </div>
 
       <SettingsView
         email={user?.email ?? ""}

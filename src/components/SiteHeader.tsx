@@ -1,0 +1,72 @@
+import Link from "next/link";
+import { getAuthenticatedClient, isAdministrator } from "@/lib/auth";
+import { loadCompiledAt } from "@/lib/data";
+import CompiledTime from "@/components/CompiledTime";
+import { HeaderMenu } from "@/components/HeaderMenu";
+
+/**
+ * The application header, on every page. The mark and wordmark are the way home
+ * - which is why no page carries a "back to dashboard" button.
+ *
+ * Loads its own identity and compiled time rather than taking them as props, so
+ * adding it to a page is one line and every page shows the same thing.
+ */
+export async function SiteHeader() {
+  const auth = await getAuthenticatedClient();
+  const user = auth?.user;
+  const compiledAt = await loadCompiledAt();
+
+  const displayName = (
+    user?.user_metadata?.display_name as string | undefined
+  )?.trim();
+  const identityLabel = displayName || user?.email;
+
+  return (
+    <header className="mb-4 rounded-lg bg-[#2855D9] px-4 py-3 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          href="/"
+          className="flex items-center gap-3 rounded-md outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-white/60"
+          aria-label="Palantish home"
+        >
+          {/* Stylised P with a dot in the loop (the all-seeing stone) */}
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M8 20.5 V3.5 H13 a5 5 0 0 1 0 10 H8"
+                stroke="#2855D9"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <circle cx="12.5" cy="8.5" r="1.8" fill="#2855D9" />
+            </svg>
+          </span>
+          <div>
+            <h1 className="text-[22px] font-bold lowercase leading-none tracking-tight text-white">
+              palantish
+            </h1>
+            <p className="mt-1 text-[12px] text-[#90A9FF]">
+              Open Source Intelligence Portal
+            </p>
+          </div>
+        </Link>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-[#90A9FF]">{identityLabel}</span>
+          <HeaderMenu
+            isAdministrator={auth ? isAdministrator(auth.role) : false}
+          />
+        </div>
+      </div>
+      <p className="mt-2 text-[11px] text-[#90A9FF]">
+        <CompiledTime iso={compiledAt} />
+      </p>
+    </header>
+  );
+}

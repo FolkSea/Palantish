@@ -33,7 +33,7 @@ body {
 /* Default link styling belongs in the base layer so a utility class can still
    override it. Unlayered, these rules beat every layered Tailwind utility, and a
    `text-white` (or any text-*) on a link was silently ignored - which rendered
-   the blue-header "Back to dashboard" buttons blue-on-blue. */
+   links on the blue header blue-on-blue. */
 @layer base {
   a {
     color: var(--link);

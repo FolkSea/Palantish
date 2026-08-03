@@ -132,6 +132,7 @@ export default function GraphView({
 
   useEffect(() => {
     let cy: Core | null = null;
+    let observer: ResizeObserver | null = null;
     let disposed = false;
     (async () => {
       const cytoscape = (await import("cytoscape")).default;
@@ -213,9 +214,22 @@ export default function GraphView({
 
       refreshHighlights();
       setReady(true);
+
+      // Cytoscape measures its container once, at construction. Anything that
+      // changes that box afterwards - the page header laying out, a window
+      // resize, the pane being revealed - leaves it drawing to a stale viewport,
+      // with the graph bunched into a corner until something calls fit().
+      if (containerRef.current) {
+        observer = new ResizeObserver(() => {
+          cy?.resize();
+          cy?.fit(undefined, 34);
+        });
+        observer.observe(containerRef.current);
+      }
     })();
     return () => {
       disposed = true;
+      observer?.disconnect();
       cy?.destroy();
       cyRef.current = null;
     };

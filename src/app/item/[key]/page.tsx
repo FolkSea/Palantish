@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { loadItem } from "@/lib/browse";
 import { ReportDetail } from "@/components/ReportDetail";
+import { SiteHeader } from "@/components/SiteHeader";
 
 // Always render fresh intel; never cache the authenticated view.
 export const dynamic = "force-dynamic";
@@ -30,8 +31,12 @@ export default async function ItemPage({
   if (!item) notFound();
 
   return (
-    <div className="h-screen p-[5px]">
-      <ReportDetail report={item} asPage />
+    // A column so the report fills whatever the header leaves.
+    <div className="flex h-screen flex-col px-4 pt-4">
+      <SiteHeader />
+      <div className="min-h-0 flex-1 pb-4">
+        <ReportDetail report={item} asPage />
+      </div>
     </div>
   );
 }

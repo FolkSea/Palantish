@@ -379,3 +379,20 @@ export async function loadDashboard(): Promise<DashboardData> {
     })),
   };
 }
+
+/**
+ * When the dashboard was last compiled: the newest successful ingest run. Its
+ * own loader because the site header shows it on every page, and pulling the
+ * whole dashboard for one timestamp would be absurd.
+ */
+export async function loadCompiledAt(): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("refresh_runs")
+    .select("finished_at, started_at")
+    .eq("status", "success")
+    .order("started_at", { ascending: false })
+    .limit(1);
+  const latest = data?.[0];
+  return latest?.finished_at ?? latest?.started_at ?? null;
+}

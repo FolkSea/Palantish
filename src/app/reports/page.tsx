@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { loadBrowse, BROWSE_LIMIT } from "@/lib/browse";
 import {
   BROWSE_KIND_LABEL,
@@ -6,6 +5,7 @@ import {
   type BrowseKind,
 } from "@/lib/browse-links";
 import { BrowseList } from "@/components/BrowseList";
+import { SiteHeader } from "@/components/SiteHeader";
 
 // Always render fresh intel; never cache the authenticated view.
 export const dynamic = "force-dynamic";
@@ -20,37 +20,29 @@ export default async function ReportsPage({
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <header className="mb-4 rounded-lg bg-[#2855D9] px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-[15px] font-semibold text-white">
-              {filter ? (
-                <>
-                  <span className="opacity-80">
-                    {BROWSE_KIND_LABEL[filter.kind]}:
-                  </span>{" "}
-                  {filter.value}
-                </>
-              ) : (
-                "Reports"
-              )}
-            </h1>
-            <p className="text-[11px] text-white/70">
-              {result
-                ? `${result.items.length}${result.truncated ? "+" : ""} report${
-                    result.items.length === 1 ? "" : "s"
-                  }, most recent first`
-                : "Choose a label, adversary or source to browse."}
-            </p>
-          </div>
-          <Link
-            href="/"
-            className="rounded-md bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-white/25"
-          >
-            Back to dashboard
-          </Link>
-        </div>
-      </header>
+      <SiteHeader />
+
+      <div className="mb-4">
+        <h1 className="text-[18px] font-semibold text-slate-900">
+          {filter ? (
+            <>
+              <span className="text-slate-500">
+                {BROWSE_KIND_LABEL[filter.kind]}:
+              </span>{" "}
+              {filter.value}
+            </>
+          ) : (
+            "Reports"
+          )}
+        </h1>
+        <p className="mt-0.5 text-[12px] text-slate-500">
+          {result
+            ? `${result.items.length}${result.truncated ? "+" : ""} report${
+                result.items.length === 1 ? "" : "s"
+              }, most recent first`
+            : "Choose a label, adversary or source to browse."}
+        </p>
+      </div>
 
       {!filter ? (
         <p className="rounded-lg border border-[#e5e7eb] bg-white p-4 text-[13px] text-slate-500">

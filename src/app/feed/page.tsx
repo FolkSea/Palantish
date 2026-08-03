@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { loadFeed, FEED_SECTION_LIMIT } from "@/lib/feed";
 import { ReportTable } from "@/components/ReportTable";
+import { SiteHeader } from "@/components/SiteHeader";
 
 // Always current: the feed reflects what has been ingested and what the user
 // subscribes to, both of which change under it.
@@ -28,28 +29,22 @@ export default async function FeedPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
-      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <SiteHeader />
+
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-semibold text-slate-900">Personal Feed</h1>
           <p className="mt-0.5 text-[13px] text-slate-500">
             Reports matching your subscriptions, newest first.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/settings"
-            className="rounded-md border border-[#e5e7eb] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1d4ed8] hover:bg-slate-50"
-          >
-            Manage subscriptions
-          </Link>
-          <Link
-            href="/"
-            className="rounded-md border border-[#e5e7eb] bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Back to dashboard
-          </Link>
-        </div>
-      </header>
+        <Link
+          href="/settings"
+          className="rounded-md border border-[#e5e7eb] bg-white px-3 py-1.5 text-[12px] font-medium text-[#1d4ed8] hover:bg-slate-50"
+        >
+          Manage subscriptions
+        </Link>
+      </div>
 
       {feed.subscriptions.length > 0 ? (
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
