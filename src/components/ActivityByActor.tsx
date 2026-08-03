@@ -264,7 +264,7 @@ function ActorEntry({ item }: { item: ActorItem }) {
           </span>
         ) : null}
         <span className="ml-auto">
-          <ItemActions rawHash={item.raw_hash} />
+          <ItemActions rawHash={item.raw_hash} intelItemId={item.id} />
         </span>
       </div>
     </div>

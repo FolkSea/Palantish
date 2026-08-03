@@ -55,3 +55,11 @@ export async function isBookmarked(intelItemId: string): Promise<boolean> {
     .maybeSingle();
   return !!data;
 }
+
+/** Every report the signed-in user has saved. Small by nature - a working list. */
+export async function listBookmarkIds(): Promise<string[]> {
+  const auth = await getAuthenticatedClient();
+  if (!auth) return [];
+  const { data } = await auth.supabase.from("bookmarks").select("intel_item_id");
+  return (data ?? []).map((r) => r.intel_item_id);
+}

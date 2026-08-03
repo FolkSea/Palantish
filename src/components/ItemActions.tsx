@@ -3,13 +3,22 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteItemAction, hideItemAction } from "@/app/actions";
+import { BookmarkToggle, ShareButton } from "@/components/ItemControls";
 
 /**
- * Per-item hide + delete controls. Hide is per-user (persisted); delete removes
- * the item for everyone and blocklists it from re-import. Both refresh the
- * dashboard on success so the item drops out of the list.
+ * The per-item control cluster on a list row or an actor card: save to the
+ * reading list, copy a link, hide for me, delete for everyone. Hide is per-user
+ * (persisted); delete removes the item for everyone and blocklists it from
+ * re-import. Both refresh the dashboard so the item drops out of the list.
  */
-export function ItemActions({ rawHash }: { rawHash: string }) {
+export function ItemActions({
+  rawHash,
+  intelItemId,
+}: {
+  rawHash: string;
+  /** Enables the save control; omitted where the row has no id to hand. */
+  intelItemId?: string | null;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +49,8 @@ export function ItemActions({ rawHash }: { rawHash: string }) {
 
   return (
     <span className="inline-flex items-center gap-1 align-middle">
+      {intelItemId ? <BookmarkToggle intelItemId={intelItemId} /> : null}
+      <ShareButton rawHash={rawHash} />
       <button
         type="button"
         onClick={hide}

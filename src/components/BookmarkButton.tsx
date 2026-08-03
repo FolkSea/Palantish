@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setBookmarkAction } from "@/app/bookmark-actions";
+import { useBookmarks } from "@/components/BookmarksProvider";
 
 /**
  * Add or remove this report from the reader's own reading list.
@@ -19,19 +20,29 @@ export function BookmarkButton({
   initial: boolean;
 }) {
   const router = useRouter();
-  const [on, setOn] = useState(initial);
+  const bookmarks = useBookmarks();
+  // Falls back to its own state outside a provider, so the button still works
+  // if the report view is ever rendered on its own.
+  const [local, setLocal] = useState(initial);
+  const on = bookmarks ? bookmarks.has(intelItemId) : local;
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function toggle() {
-    const next = !on;
-    setOn(next);
     setError(null);
     startTransition(async () => {
+      if (bookmarks) {
+        const r = await bookmarks.toggle(intelItemId);
+        if (r.ok) router.refresh();
+        else setError(r.error ?? "Could not save.");
+        return;
+      }
+      const next = !local;
+      setLocal(next);
       const r = await setBookmarkAction(intelItemId, next);
       if (r.ok) router.refresh();
       else {
-        setOn(!next);
+        setLocal(!next);
         setError(r.error);
       }
     });

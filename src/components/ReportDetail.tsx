@@ -27,6 +27,7 @@ import { EditableIocList } from "./EditableIocList";
 import { Markdown } from "./Markdown";
 import { AdversaryBadge } from "./Badges";
 import { BookmarkButton } from "./BookmarkButton";
+import { ShareButton } from "./ItemControls";
 import {
   REPORT_CONFIDENCES,
   REPORT_CONFIDENCE_LABEL,
@@ -573,6 +574,7 @@ export function ReportDetail({
               {report.id ? (
                 <BookmarkButton intelItemId={report.id} initial={bookmarked} />
               ) : null}
+              {rawHash ? <ShareButton rawHash={rawHash} label /> : null}
               {rawHash ? (
                 <a
                   href={`/graph?seed=${encodeURIComponent(rawHash)}`}

@@ -95,7 +95,7 @@ export function ReportTable({
                           name={r.source_name}
                           href={sourceHref(r.source_name ?? "")}
                         />
-                        <ItemActions rawHash={r.raw_hash} />
+                        <ItemActions rawHash={r.raw_hash} intelItemId={r.id} />
                       </span>
                     </td>
                   </tr>
