@@ -20,8 +20,10 @@ const TYPE_LABEL: Record<FeedType, string> = {
   manual: "Manual",
   scraper: "Custom Scraper",
 };
-// Users may only choose RSS or Manual. Custom Scraper is reserved for the dev
-// team to enable later; it still displays if a source is already set to it.
+// Users may only choose RSS or Manual. Custom Scraper works, but only for a URL
+// with a reader registered in src/lib/ingest/readers - picking it here for an
+// arbitrary site would just fail the run - so it is set in the seed, not the UI.
+// It still displays for a source already on it.
 const SELECTABLE_TYPES: FeedType[] = ["rss", "manual"];
 
 const inputCls =

@@ -19,11 +19,16 @@ async function main() {
 
   const { data: sources } = await db
     .from("sources")
-    .select("name, feed_url, category")
+    .select("name, feed_url, category, feed_type")
     .eq("active", true);
   const feedSources = (sources ?? [])
     .filter((s) => s.feed_url)
-    .map((s) => ({ name: s.name, feed_url: s.feed_url, category: s.category }));
+    .map((s) => ({
+      name: s.name,
+      feed_url: s.feed_url,
+      category: s.category,
+      feed_type: s.feed_type,
+    }));
 
   const { health } = await pullAllFeeds(feedSources);
   await updateFeedHealth(db, health);

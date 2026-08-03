@@ -70,5 +70,13 @@ insert into sources (name, url, category, feed_url) values
   ('Zero Day Initiative Advisories', 'https://www.zerodayinitiative.com/advisories/published/', 'research', 'https://www.zerodayinitiative.com/rss/published/')
 on conflict (name) do nothing;
 
+-- Sources with no usable feed, read from their listing page by a custom reader
+-- (src/lib/ingest/readers). feed_url is the listing page, not a feed. Adding one
+-- here without registering a reader for its URL makes the run report an error
+-- rather than silently pulling nothing.
+insert into sources (name, url, category, feed_url, feed_type) values
+  ('CERT-EU Blog',            'https://cert.europa.eu/blog',                     'government', 'https://cert.europa.eu/blog', 'scraper')
+on conflict (name) do nothing;
+
 -- Sources without an RSS feed URL are manual (blog URL only).
 update sources set feed_type = 'manual' where feed_url is null;

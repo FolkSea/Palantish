@@ -119,7 +119,7 @@ export async function runIngest(
     // ids regardless of their active flag; a full run pulls all active sources.
     const sourcesSelect = db
       .from("sources")
-      .select("id, name, url, feed_url, category");
+      .select("id, name, url, feed_url, category, feed_type");
     const [{ data: sources }, { data: adversaries }] = await Promise.all([
       options?.sourceIds
         ? sourcesSelect.in("id", options.sourceIds)
