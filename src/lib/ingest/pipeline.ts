@@ -26,6 +26,8 @@ import { ilog } from "./log";
 import { fetchArticleText } from "./scrape";
 import { indicatorRows, linkIocsToItem } from "./iocs";
 import { linkLabelsToItem } from "./labels";
+import { queueNotifications } from "@/lib/notify/queue";
+import { dispatchNotifications } from "@/lib/notify/dispatch";
 import { reconcileIndicators } from "@/lib/agent/ioc-validate";
 import { loadIocAllowlist } from "./allowlist";
 import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
@@ -319,6 +321,7 @@ export async function runIngest(
     };
 
     let added = 0;
+    let queued = 0;
     let iocLinks = 0;
     let iocFailed = 0;
     let labelLinks = 0;
@@ -430,6 +433,15 @@ export async function runIngest(
         }
       }
 
+      // Subscriptions are matched once the labels exist, so a label a report
+      // was just given can match. Queued now, mailed as one digest at the end
+      // of the run rather than a message per batch.
+      queued += await queueNotifications(
+        db,
+        insertedIntel.map((i) => i.id),
+        "ingest",
+      );
+
       // Populate IOCs. Prefer the indicators Claude already extracted from the
       // web-fetched article (validated + reconciled against the fetched text
       // here). Only reports whose body was NOT fetched full fall back to the
@@ -527,6 +539,22 @@ export async function runIngest(
       `inserted ${added} new items; IOC extraction: ${iocLinks} links (${iocFailed} fetch failures); ` +
         `${labelLinks} labels linked`,
     );
+
+    // Send one digest per subscriber for everything this run queued (plus
+    // anything an earlier run could not deliver). Non-fatal: a mail failure
+    // leaves the queue intact for the next run and never fails ingest.
+    if (queued > 0) ilog(`subscriptions: ${queued} notifications queued`);
+    try {
+      const d = await dispatchNotifications(db);
+      if (d.skipped) ilog("subscriptions: email not configured, queue retained");
+      else if (d.recipients > 0)
+        ilog(`subscriptions: ${d.sent} notifications mailed to ${d.recipients} subscriber(s)`);
+      for (const e of d.errors) errors.push(`notify: ${e}`);
+    } catch (err) {
+      errors.push(
+        `notify dispatch: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     // Record this run's taxonomy labels to memory so the agent reuses them next
     // run (consistent labelling). Deterministic; non-fatal.

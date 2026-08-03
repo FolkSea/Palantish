@@ -34,6 +34,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_roles: {
+        Row: {
+          created_at: string
+          role: Database["public"]["Enums"]["account_role"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          role?: Database["public"]["Enums"]["account_role"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          role?: Database["public"]["Enums"]["account_role"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       adversaries: {
         Row: {
           community_identifiers: string[] | null
@@ -109,27 +130,6 @@ export type Database = {
           created_at?: string
           email?: string
           note?: string | null
-        }
-        Relationships: []
-      }
-      account_roles: {
-        Row: {
-          created_at: string
-          role: Database["public"]["Enums"]["account_role"]
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          role?: Database["public"]["Enums"]["account_role"]
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          role?: Database["public"]["Enums"]["account_role"]
-          updated_at?: string
-          user_id?: string
         }
         Relationships: []
       }
@@ -498,6 +498,50 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_queue: {
+        Row: {
+          created_at: string
+          id: string
+          intel_item_id: string
+          last_error: string | null
+          reason_kind: Database["public"]["Enums"]["subscription_kind"]
+          reason_value: string
+          sent_at: string | null
+          trigger: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          intel_item_id: string
+          last_error?: string | null
+          reason_kind: Database["public"]["Enums"]["subscription_kind"]
+          reason_value: string
+          sent_at?: string | null
+          trigger: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          intel_item_id?: string
+          last_error?: string | null
+          reason_kind?: Database["public"]["Enums"]["subscription_kind"]
+          reason_value?: string
+          sent_at?: string | null
+          trigger?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_queue_intel_item_id_fkey"
+            columns: ["intel_item_id"]
+            isOneToOne: false
+            referencedRelation: "intel_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       refresh_runs: {
         Row: {
           finished_at: string | null
@@ -579,6 +623,30 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          created_at: string
+          id: string
+          kind: Database["public"]["Enums"]["subscription_kind"]
+          user_id: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: Database["public"]["Enums"]["subscription_kind"]
+          user_id: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["subscription_kind"]
+          user_id?: string
+          value?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -602,6 +670,7 @@ export type Database = {
       item_type: "actor_activity" | "breach" | "vuln" | "report" | "breaking"
       refresh_status: "running" | "success" | "error"
       source_category: "vendor" | "research" | "news" | "government"
+      subscription_kind: "label" | "adversary" | "country"
       vuln_status: "confirmed" | "poc" | "suspected"
     }
     CompositeTypes: {
@@ -733,6 +802,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      account_role: ["administrator", "user"],
       actor_nexus: [
         "china",
         "russia",
@@ -746,7 +816,9 @@ export const Constants = {
       item_type: ["actor_activity", "breach", "vuln", "report", "breaking"],
       refresh_status: ["running", "success", "error"],
       source_category: ["vendor", "research", "news", "government"],
+      subscription_kind: ["label", "adversary", "country"],
       vuln_status: ["confirmed", "poc", "suspected"],
     },
   },
 } as const
+

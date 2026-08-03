@@ -4,7 +4,9 @@ import type { Database } from "./database.types";
 import { publicEnv } from "@/lib/env";
 
 /** Paths reachable without an authenticated session. */
-const PUBLIC_PATHS = ["/login", "/auth", "/api/ingest"];
+// Cron-triggered routes carry no session; they authenticate on the shared
+// secret in their own handler, so the session gate must let them through.
+const PUBLIC_PATHS = ["/login", "/auth", "/api/ingest", "/api/notify"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(

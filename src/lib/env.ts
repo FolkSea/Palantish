@@ -73,4 +73,28 @@ export const serverEnv = {
   get readerProxyKey(): string | undefined {
     return process.env.READER_PROXY_KEY || undefined;
   },
+  /**
+   * Cloudflare Email Sending, used for subscription digests. All three must be
+   * set for mail to go out; with any missing, the dispatcher leaves the queue
+   * untouched rather than dropping notifications on the floor, so configuring
+   * it later still delivers what was owed.
+   */
+  get emailAccountId(): string | undefined {
+    return process.env.CLOUDFLARE_EMAIL_ACCOUNT_ID || undefined;
+  },
+  get emailApiToken(): string | undefined {
+    return process.env.CLOUDFLARE_EMAIL_API_TOKEN || undefined;
+  },
+  get emailFrom(): string | undefined {
+    return process.env.EMAIL_FROM || undefined;
+  },
+  /** Absolute base URL used for links in outbound mail. */
+  get appUrl(): string {
+    return (
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : "http://localhost:3000")
+    );
+  },
 };

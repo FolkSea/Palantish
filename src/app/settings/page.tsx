@@ -1,4 +1,8 @@
 import Link from "next/link";
+import {
+  listSubscriptions,
+  subscriptionOptions,
+} from "@/app/settings/subscription-actions";
 import { redirect } from "next/navigation";
 import { getAuthenticatedClient, isAdministrator } from "@/lib/auth";
 import {
@@ -63,6 +67,12 @@ export default async function SettingsPage() {
         .order("last_seen", { ascending: false })
         .limit(500)
     : { data: [] };
+  // Subscriptions are per-user and always available, whatever the role.
+  const [subscriptions, subOptions] = await Promise.all([
+    listSubscriptions(),
+    subscriptionOptions(),
+  ]);
+
   const memory = (memoryRows ?? []).map((m) => ({
     kind: m.kind as "adversary" | "trend",
     subject: m.subject,
@@ -145,6 +155,8 @@ export default async function SettingsPage() {
         hidden={hidden}
         dropped={dropped}
         memory={memory}
+        subscriptions={subscriptions}
+        subscriptionOptions={subOptions}
       />
     </div>
   );

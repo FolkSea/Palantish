@@ -8,10 +8,15 @@ import { ActorsPanel } from "./ActorsPanel";
 import { DroppedPanel, type DroppedItem } from "./DroppedPanel";
 import { AgentMemoryPanel, type AgentMemoryNote } from "./AgentMemoryPanel";
 import { UsersPanel } from "./UsersPanel";
+import {
+  SubscriptionsPanel,
+  type SubscriptionOptions,
+} from "./SubscriptionsPanel";
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
 import type { ActorRecord } from "@/lib/actor-catalogue";
 import type { AccountRole } from "@/lib/account-role";
 import type { ManagedUser } from "@/lib/user-management-types";
+import type { SubscriptionRow } from "@/app/settings/subscription-actions";
 
 export type SettingsSource = {
   id: string;
@@ -27,6 +32,7 @@ export type SettingsSource = {
 
 type Tab =
   | "account"
+  | "subscriptions"
   | "users"
   | "sources"
   | "actors"
@@ -36,6 +42,11 @@ type Tab =
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "account", label: "Account", hint: "Display name and password" },
+  {
+    id: "subscriptions",
+    label: "Subscriptions",
+    hint: "Email me about matching reports",
+  },
   { id: "users", label: "Users", hint: "Accounts and access levels" },
   { id: "sources", label: "Feeds", hint: "Add, edit, or delete feeds" },
   { id: "actors", label: "Actors", hint: "Threat actor catalogue" },
@@ -55,6 +66,8 @@ export function SettingsView({
   hidden,
   dropped,
   memory,
+  subscriptions,
+  subscriptionOptions,
 }: {
   email: string;
   role: AccountRole;
@@ -66,6 +79,8 @@ export function SettingsView({
   hidden: HiddenPost[];
   dropped: DroppedItem[];
   memory: AgentMemoryNote[];
+  subscriptions: SubscriptionRow[];
+  subscriptionOptions: SubscriptionOptions;
 }) {
   const [tab, setTab] = useState<Tab>("account");
   const tabs =
@@ -109,6 +124,11 @@ export function SettingsView({
             role={role}
             displayName={displayName}
             focus={focus}
+          />
+        ) : tab === "subscriptions" ? (
+          <SubscriptionsPanel
+            initial={subscriptions}
+            options={subscriptionOptions}
           />
         ) : tab === "users" && role === "administrator" ? (
           <UsersPanel initialUsers={users} />

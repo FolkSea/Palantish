@@ -18,6 +18,7 @@ import { isThreatIntel } from "@/lib/relevance";
 import { parseQuery, fieldsUsed } from "@/lib/search/query";
 import { evaluateQuery } from "@/lib/search/evaluate";
 import { loadSearchCorpus } from "@/lib/search/corpus";
+import { queueNotifications } from "@/lib/notify/queue";
 import {
   validIndicator,
   normalizeIndicatorValue,
@@ -722,6 +723,7 @@ export async function updateReportAdversaryAction(
     .update(update)
     .eq("id", item.id);
   if (error) return { ok: false, error: error.message };
+  await queueNotifications(db, [item.id], "attribution");
   revalidatePath("/");
   return {
     ok: true,
@@ -779,6 +781,7 @@ export async function updateReportCountryAction(
     .update({ country: c, motivation: "nation_state", kind: newKind })
     .eq("id", item.id);
   if (error) return { ok: false, error: error.message };
+  await queueNotifications(db, [item.id], "attribution");
   revalidatePath("/");
   return { ok: true, country: c, moved: item.kind !== newKind };
 }
@@ -910,6 +913,9 @@ export async function updateReportLabelsAction(
     if (ins.error) return { ok: false, error: ins.error.message };
   }
 
+  // The report may now match a label someone subscribes to. Queued only - the
+  // digest goes out with the next run, so saving labels stays instant.
+  await queueNotifications(db, [item.id], "labels");
   revalidatePath("/");
   return { ok: true, labels: names.sort((a, b) => a.localeCompare(b)) };
 }
