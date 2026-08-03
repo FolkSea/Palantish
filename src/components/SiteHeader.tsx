@@ -31,10 +31,10 @@ export async function SiteHeader() {
           aria-label="Palantish home"
         >
           {/* Stylised P with a dot in the loop (the all-seeing stone) */}
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
+          <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
             <svg
-              width="22"
-              height="22"
+              width="26"
+              height="26"
               viewBox="0 0 24 24"
               fill="none"
               aria-hidden="true"
@@ -50,10 +50,10 @@ export async function SiteHeader() {
             </svg>
           </span>
           <div>
-            <h1 className="text-[22px] font-bold lowercase leading-none tracking-tight text-white">
+            <h1 className="text-[26px] font-bold lowercase leading-none tracking-tight text-white">
               palantish
             </h1>
-            <p className="mt-1 text-[12px] text-[#90A9FF]">
+            <p className="mt-1 whitespace-nowrap text-[12px] leading-tight text-[#90A9FF]">
               Open Source Intelligence Portal
             </p>
           </div>
