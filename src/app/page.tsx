@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getAuthenticatedClient } from "@/lib/auth";
 import { loadDashboard } from "@/lib/data";
 import { SiteHeader } from "@/components/SiteHeader";
+import { readingPrefsFrom } from "@/lib/reading-prefs";
 import { SearchPanel } from "@/components/SearchPanel";
 import ActivityTimeline from "@/components/ActivityTimeline";
 import { DEFAULT_FILTERS, type TimelineFilters } from "@/lib/timeline";
@@ -74,7 +75,10 @@ export default async function DashboardPage() {
       ) : null}
 
       <div className="mb-4">
-        <ExecutiveSummaryPanel summary={data.executiveSummary} />
+        <ExecutiveSummaryPanel
+          summary={data.executiveSummary}
+          reading={readingPrefsFrom(user?.user_metadata)}
+        />
       </div>
 
       <div className="space-y-4">

@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { itemHref } from "@/lib/browse-links";
 import type { SummaryCitation } from "@/lib/data";
+import {
+  DEFAULT_READING_PREFS,
+  readingStyle,
+  type ReadingPrefs,
+} from "@/lib/reading-prefs";
 
 /**
  * Render the executive summary prose, turning "[n]" citation markers into
@@ -11,14 +16,20 @@ import type { SummaryCitation } from "@/lib/data";
 export function SummaryText({
   text,
   citations,
+  reading = DEFAULT_READING_PREFS,
 }: {
   text: string;
   citations: SummaryCitation[];
+  /** The reader's chosen font and size, shared with the report pane. */
+  reading?: ReadingPrefs;
 }) {
   const byId = new Map(citations.map((c) => [c.id, c]));
 
   return (
-    <div className="mt-2 space-y-2 text-[13px] leading-relaxed text-slate-700">
+    <div
+      className="mt-2 space-y-2 leading-relaxed text-slate-700"
+      style={readingStyle(reading)}
+    >
       {text.split(/\n{2,}/).map((para, i) => (
         <p key={i}>{renderCitations(para, byId)}</p>
       ))}
@@ -38,7 +49,8 @@ function renderCitations(text: string, byId: Map<number, SummaryCitation>) {
           key={i}
           href={itemHref(c.rawHash)}
           title={c.title}
-          className="align-super text-[9px] font-semibold text-[#1d4ed8] hover:underline"
+          className="align-super font-semibold text-[#1d4ed8] hover:underline"
+          style={{ fontSize: "0.7em" }}
         >
           [{m[1]}]
         </Link>

@@ -1,11 +1,18 @@
 import CompiledTime from "./CompiledTime";
 import { SummaryText } from "./SummaryText";
 import type { ExecutiveSummary as Summary } from "@/lib/data";
+import {
+  DEFAULT_READING_PREFS,
+  type ReadingPrefs,
+} from "@/lib/reading-prefs";
 
 export function ExecutiveSummaryPanel({
   summary,
+  reading = DEFAULT_READING_PREFS,
 }: {
   summary: Summary | null;
+  /** The reader's chosen font and size, shared with the report pane. */
+  reading?: ReadingPrefs;
 }) {
   return (
     <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
@@ -25,7 +32,11 @@ export function ExecutiveSummaryPanel({
       </div>
 
       {summary ? (
-        <SummaryText text={summary.summary} citations={summary.citations} />
+        <SummaryText
+          text={summary.summary}
+          citations={summary.citations}
+          reading={reading}
+        />
       ) : (
         <p className="mt-2 text-[12px] text-slate-400">
           No summary yet. It is generated on each ingest run (set
