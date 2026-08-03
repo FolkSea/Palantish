@@ -166,6 +166,32 @@ export type Database = {
         }
         Relationships: []
       }
+      bookmarks: {
+        Row: {
+          created_at: string
+          intel_item_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          intel_item_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          intel_item_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookmarks_intel_item_id_fkey"
+            columns: ["intel_item_id"]
+            isOneToOne: false
+            referencedRelation: "intel_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deleted_items: {
         Row: {
           deleted_at: string

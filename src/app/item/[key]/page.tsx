@@ -5,6 +5,7 @@ import { ReportDetail } from "@/components/ReportDetail";
 import { SiteHeader } from "@/components/SiteHeader";
 import { getAuthenticatedClient } from "@/lib/auth";
 import { readingPrefsFrom } from "@/lib/reading-prefs";
+import { isBookmarked } from "@/app/bookmark-actions";
 
 // Always render fresh intel; never cache the authenticated view.
 export const dynamic = "force-dynamic";
@@ -34,13 +35,19 @@ export default async function ItemPage({
 
   const auth = await getAuthenticatedClient();
   const reading = readingPrefsFrom(auth?.user?.user_metadata);
+  const bookmarked = await isBookmarked(item.id ?? "");
 
   return (
     // A column so the report fills whatever the header leaves.
     <div className="flex h-screen flex-col px-4 pt-4">
       <SiteHeader />
       <div className="min-h-0 flex-1 pb-4">
-        <ReportDetail report={item} asPage reading={reading} />
+        <ReportDetail
+          report={item}
+          asPage
+          reading={reading}
+          bookmarked={bookmarked}
+        />
       </div>
     </div>
   );

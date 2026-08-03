@@ -26,6 +26,7 @@ import {
 import { EditableIocList } from "./EditableIocList";
 import { Markdown } from "./Markdown";
 import { AdversaryBadge } from "./Badges";
+import { BookmarkButton } from "./BookmarkButton";
 import {
   REPORT_CONFIDENCES,
   REPORT_CONFIDENCE_LABEL,
@@ -51,6 +52,8 @@ import {
 } from "@/lib/reading-prefs";
 
 export type ReportModalData = {
+  /** intel_items.id, needed to bookmark the report. */
+  id?: string | null;
   title: string;
   url: string | null;
   description: string | null;
@@ -106,6 +109,7 @@ export function ReportDetail({
   onClose,
   asPage = false,
   reading = DEFAULT_READING_PREFS,
+  bookmarked = false,
 }: {
   report: ReportModalData;
   /** Closes the overlay. Omitted on the standalone page, which navigates. */
@@ -114,6 +118,8 @@ export function ReportDetail({
   asPage?: boolean;
   /** The reader's chosen font and size for the article pane. */
   reading?: ReadingPrefs;
+  /** Whether this report is already on the reader's reading list. */
+  bookmarked?: boolean;
 }) {
   const router = useRouter();
   // Every report renders in the same clean reading view: the article extracted
@@ -564,6 +570,9 @@ export function ReportDetail({
               Report details
             </span>
             <div className="flex items-center gap-2">
+              {report.id ? (
+                <BookmarkButton intelItemId={report.id} initial={bookmarked} />
+              ) : null}
               {rawHash ? (
                 <a
                   href={`/graph?seed=${encodeURIComponent(rawHash)}`}

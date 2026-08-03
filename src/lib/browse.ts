@@ -137,6 +137,8 @@ export async function loadBrowse(filter: BrowseFilter): Promise<BrowseResult> {
 }
 
 export type ItemDetail = {
+  /** intel_items.id - what the reading list keys a bookmark on. */
+  id: string;
   title: string;
   url: string | null;
   description: string | null;
@@ -161,7 +163,7 @@ export async function loadItem(key: string): Promise<ItemDetail | null> {
   if (!k) return null;
   const db = await createClient();
   const cols =
-    "title, url, description, source_name, published_at, country, confidence, " +
+    "id, title, url, description, source_name, published_at, country, confidence, " +
     "adversary_label, crowdstrike_adversary, raw_hash";
 
   // raw_hash first: every in-app link uses it, so this is the common path.
@@ -172,6 +174,7 @@ export async function loadItem(key: string): Promise<ItemDetail | null> {
   if (!data) return null;
 
   const r = data as unknown as {
+    id: string;
     title: string;
     url: string | null;
     description: string | null;
@@ -184,6 +187,7 @@ export async function loadItem(key: string): Promise<ItemDetail | null> {
     raw_hash: string | null;
   };
   return {
+    id: r.id,
     title: r.title,
     url: r.url,
     description: r.description,
