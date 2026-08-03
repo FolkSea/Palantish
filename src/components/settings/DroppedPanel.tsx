@@ -1,7 +1,7 @@
 "use client";
 
 import { usePaginated, PaginationFooter } from "@/components/Pagination";
-import { formatDate } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 
 export type DroppedItem = {
   rawHash: string;
@@ -32,38 +32,61 @@ export function DroppedPanel({ initial }: { initial: DroppedItem[] }) {
         </p>
       ) : (
         <>
-          <ul className="mt-3 divide-y divide-slate-100">
-            {p.pageItems.map((d) => (
-              <li
-                key={d.rawHash}
-                className="flex items-start gap-3 py-2 text-[12px]"
-              >
-                <span className="flex-1">
-                  {d.url ? (
-                    <a
-                      href={d.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-slate-800 hover:underline"
-                    >
-                      {d.title}
-                    </a>
-                  ) : (
-                    <span className="font-medium text-slate-800">{d.title}</span>
-                  )}
-                  <span className="mt-0.5 block text-[11px] text-slate-400">
-                    {d.sourceName ? `${d.sourceName} - ` : ""}
-                    {formatDate(d.droppedAt)}
-                  </span>
-                </span>
-                {d.reason ? (
-                  <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-                    {d.reason}
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          {/* A table, so every title starts at the same x however long the
+              source name is. The reason spans the full width on its own row
+              beneath, where it can wrap without moving the columns. */}
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full border-collapse text-[12px]">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-slate-400">
+                  <th className="w-px whitespace-nowrap py-1.5 pr-3 font-medium">
+                    Dropped (UTC)
+                  </th>
+                  <th className="w-px whitespace-nowrap py-1.5 pr-3 font-medium">
+                    Source
+                  </th>
+                  <th className="py-1.5 font-medium">Report</th>
+                </tr>
+              </thead>
+              {p.pageItems.map((d) => (
+                // One body per item, so the border separates items rather than
+                // cutting between a report and its own reason.
+                <tbody key={d.rawHash} className="border-t border-slate-100">
+                  <tr className="align-top">
+                    <td className="w-px whitespace-nowrap py-2 pr-3 text-slate-500">
+                      {formatDateTime(d.droppedAt)}
+                    </td>
+                    <td className="w-px whitespace-nowrap py-2 pr-3 text-slate-500">
+                      {d.sourceName ?? "-"}
+                    </td>
+                    <td className="py-2">
+                      {d.url ? (
+                        <a
+                          href={d.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-slate-800 hover:underline"
+                        >
+                          {d.title}
+                        </a>
+                      ) : (
+                        <span className="font-medium text-slate-800">{d.title}</span>
+                      )}
+                    </td>
+                  </tr>
+                  {d.reason ? (
+                    <tr>
+                      <td />
+                      <td />
+                      <td className="pb-2 text-[11px] leading-relaxed text-slate-500">
+                        {d.reason}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              ))}
+            </table>
+          </div>
           <PaginationFooter {...p} />
         </>
       )}
