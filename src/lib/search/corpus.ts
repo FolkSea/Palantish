@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { toDoc, type CorpusRow, type SearchDoc } from "@/lib/search/evaluate";
 import type { Field, QueryNode } from "@/lib/search/query";
 import { fieldsUsed } from "@/lib/search/query";
+import { fetchAllPages, fetchAllByIds } from "@/lib/supabase/paging";
 
 // The query language evaluates in memory (see evaluate.ts), so the corpus is
 // bounded: the most recent reports, which is where analyst searches live. The
@@ -27,50 +28,11 @@ type Db = Awaited<ReturnType<typeof createClient>>;
 
 const INDICATOR_FIELDS: Field[] = ["ip", "domain", "url", "hash", "cve", "ioc", "ttp"];
 
-// Many UUIDs in one `.in()` filter would overflow the request URI, so the ids
-// are chunked - concurrently, because a corpus-sized search is many chunks and
-// running them in sequence is that many round-trips the user waits through.
-const BATCH_SIZE = 200;
-
-// PostgREST caps every response (`max_rows`, 1000 by default) and truncates
-// silently rather than erroring, so a request that asks for more just gets less.
-// One report can carry hundreds of indicators, so a batch runs well past the cap
-// and every query below has to page until a short page says it is done.
-const PAGE_SIZE = 1000;
-
-/** Page one request to exhaustion, past the server's per-response row cap. */
-async function fetchAllPages<T>(
-  page: (from: number, to: number) => PromiseLike<{ data: T[] | null }>,
-): Promise<T[]> {
-  const rows: T[] = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const { data } = await page(from, from + PAGE_SIZE - 1);
-    const got = data ?? [];
-    rows.push(...got);
-    if (got.length < PAGE_SIZE) return rows;
-  }
-}
-
-/** Chunk ids to keep the URI short, then page each chunk to exhaustion. */
-async function inBatches<T>(
-  ids: string[],
-  page: (chunk: string[], from: number, to: number) => PromiseLike<{ data: T[] | null }>,
-): Promise<T[]> {
-  const chunks: string[][] = [];
-  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-    chunks.push(ids.slice(i, i + BATCH_SIZE));
-  }
-  const perChunk = await Promise.all(
-    chunks.map((chunk) => fetchAllPages<T>((from, to) => page(chunk, from, to))),
-  );
-  return perChunk.flat();
-}
-
 type LabelRow = { intel_item_id: string; labels: { name: string } | null };
 
 async function loadLabels(db: Db, ids: string[]): Promise<Map<string, string[]>> {
   const map = new Map<string, string[]>();
-  const rows = await inBatches<LabelRow>(ids, (chunk, from, to) =>
+  const rows = await fetchAllByIds<LabelRow>(ids, (chunk, from, to) =>
     db
       .from("intel_item_labels")
       .select("intel_item_id, labels(name)")
@@ -98,7 +60,7 @@ type IocRow = {
 
 async function loadIocs(db: Db, ids: string[]): Promise<IocsByItem> {
   const map: IocsByItem = new Map();
-  const rows = await inBatches<IocRow>(ids, (chunk, from, to) =>
+  const rows = await fetchAllByIds<IocRow>(ids, (chunk, from, to) =>
     db
       .from("intel_item_iocs")
       .select("intel_item_id, iocs(ioc_type, value)")

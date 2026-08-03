@@ -189,3 +189,40 @@ describe("renderDigest", () => {
     expect(d?.html).toContain(`${APP}/settings`);
   });
 });
+
+// The Personal Feed runs the same matcher as the notification queue, so these
+// pin the property that matters: what the page shows and what gets emailed are
+// the same set. A report is in the feed exactly when at least one subscription
+// matches it.
+describe("feed and notifications agree", () => {
+  const subs: Subscription[] = [
+    sub({ kind: "label", value: "Malware" }),
+    sub({ kind: "adversary", value: "FANCY BEAR" }),
+    sub({ kind: "country", value: "Russia" }),
+  ];
+  const inFeed = (r: NotifiableReport) => matchSubscriptions(r, subs).length > 0;
+
+  it("includes a report matched by any one subscription", () => {
+    expect(inFeed(report({ labels: ["Malware/BRICKSTORM"] }))).toBe(true);
+    expect(inFeed(report({ adversaries: ["FANCY BEAR"] }))).toBe(true);
+    expect(inFeed(report({ country: "Russia" }))).toBe(true);
+  });
+
+  it("excludes a report that matches nothing", () => {
+    expect(inFeed(report({ labels: ["AI/Claude"], country: "China" }))).toBe(false);
+  });
+
+  it("includes a report once, however many subscriptions it satisfies", () => {
+    const r = report({
+      labels: ["Malware/BRICKSTORM"],
+      adversaries: ["FANCY BEAR"],
+      country: "Russia",
+    });
+    expect(matchSubscriptions(r, subs)).toHaveLength(3);
+    expect(inFeed(r)).toBe(true);
+  });
+
+  it("shows nothing when nothing is subscribed to", () => {
+    expect(matchSubscriptions(report({ labels: ["Malware/X"] }), [])).toEqual([]);
+  });
+});
