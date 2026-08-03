@@ -3,14 +3,17 @@ import type { RawCandidate } from "./types";
 import { toAscii } from "@/lib/text";
 import { ilog } from "./log";
 import { readerFor } from "./readers";
+import { parseFeedDate } from "./dates";
 
 export type FeedSource = {
   name: string;
   feed_url: string | null;
   category: "vendor" | "research" | "news" | "government" | null;
   /** "scraper" sources have no usable feed and are read from their listing
-   * page by a custom reader (see ./readers). */
-  feed_type?: string | null;
+   * page by a custom reader (see ./readers). Required, not optional: it was
+   * optional once and a caller quietly omitted it, sending every scraper source
+   * through the RSS parser. */
+  feed_type: string | null;
 };
 
 // Present as a browser: a listing page is HTML meant for people, and some sites
@@ -33,9 +36,7 @@ const parser = new Parser({ timeout: 15000 });
 const MAX_ITEMS_PER_FEED = 40;
 
 function toDate(value: string | undefined): Date | null {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
+  return parseFeedDate(value);
 }
 
 function clean(html: string | undefined): string | null {

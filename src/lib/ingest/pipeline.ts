@@ -152,7 +152,12 @@ export async function runIngest(
 
     const feedSources: FeedSource[] = (sources ?? [])
       .filter((s) => s.feed_url)
-      .map((s) => ({ name: s.name, feed_url: s.feed_url, category: s.category }));
+      .map((s) => ({
+        name: s.name,
+        feed_url: s.feed_url,
+        category: s.category,
+        feed_type: s.feed_type,
+      }));
     ilog(`pulling ${feedSources.length} active feeds...`);
 
     const [intelHashes, deletedHashes] = await Promise.all([

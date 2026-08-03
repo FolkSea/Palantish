@@ -7,6 +7,7 @@
 
 import type { RawCandidate } from "../types";
 import { toAscii } from "@/lib/text";
+import { ZONE_OFFSET_HOURS } from "../dates";
 
 const ARTICLE_RE = /<article class="news--articles--item">([\s\S]*?)<\/article>/gi;
 const TIME_RE = /<time[^>]*class="news--articles--item--time"[^>]*>([\s\S]*?)<\/time>/i;
@@ -19,10 +20,6 @@ const MONTHS = [
   "january", "february", "march", "april", "may", "june",
   "july", "august", "september", "october", "november", "december",
 ];
-
-// Central European Time, as the site publishes it. Fixed offsets rather than a
-// timezone database: these are the only two zones the page ever emits.
-const ZONE_OFFSET_HOURS: Record<string, number> = { CET: 1, CEST: 2 };
 
 const DATE_RE =
   /^(?:\w+,\s*)?([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?\s*([A-Z]{3,4})?$/i;
