@@ -13,6 +13,7 @@ import type { Focus } from "@/components/settings/AccountPanel";
 import type { ActorRecord } from "@/lib/actor-catalogue";
 import { listManagedUsers } from "@/lib/user-management";
 import { SiteHeader } from "@/components/SiteHeader";
+import { readingPrefsFrom } from "@/lib/reading-prefs";
 
 export const dynamic = "force-dynamic";
 // A single-feed update can run inline, so allow the same budget as the cron.
@@ -149,6 +150,7 @@ export default async function SettingsPage() {
         hidden={hidden}
         dropped={dropped}
         memory={memory}
+        reading={readingPrefsFrom(user?.user_metadata)}
         subscriptions={subscriptions}
         subscriptionOptions={subOptions}
       />

@@ -15,6 +15,7 @@ import {
 import type { SourceCategory, FeedType } from "@/app/settings/actions";
 import type { ActorRecord } from "@/lib/actor-catalogue";
 import type { AccountRole } from "@/lib/account-role";
+import type { ReadingPrefs } from "@/lib/reading-prefs";
 import type { ManagedUser } from "@/lib/user-management-types";
 import type { SubscriptionRow } from "@/app/settings/subscription-actions";
 
@@ -68,6 +69,7 @@ export function SettingsView({
   memory,
   subscriptions,
   subscriptionOptions,
+  reading,
 }: {
   email: string;
   role: AccountRole;
@@ -81,6 +83,7 @@ export function SettingsView({
   memory: AgentMemoryNote[];
   subscriptions: SubscriptionRow[];
   subscriptionOptions: SubscriptionOptions;
+  reading: ReadingPrefs;
 }) {
   const [tab, setTab] = useState<Tab>("account");
   const tabs =
@@ -124,6 +127,7 @@ export function SettingsView({
             role={role}
             displayName={displayName}
             focus={focus}
+            reading={reading}
           />
         ) : tab === "subscriptions" ? (
           <SubscriptionsPanel

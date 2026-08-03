@@ -31,15 +31,18 @@ export function Markdown({ text }: { text: string }) {
     if (heading) {
       flushPara();
       const level = heading[1].length;
+      // Sized in em, not px: the container sets the base and the hierarchy
+      // scales with it (see lib/reading-prefs).
       const cls =
         level === 1
-          ? "text-[14px] font-semibold text-slate-900"
+          ? "font-semibold text-slate-900"
           : level === 2
-            ? "text-[13px] font-semibold text-slate-900"
-            : "text-[12px] font-semibold text-slate-700";
+            ? "font-semibold text-slate-900"
+            : "font-semibold text-slate-700";
+      const em = level === 1 ? "1.5em" : level === 2 ? "1.25em" : "1.1em";
       const k = `b${blocks.length}`;
       blocks.push(
-        <p key={k} className={cls}>
+        <p key={k} className={cls} style={{ fontSize: em }}>
           {renderInline(heading[2], k)}
         </p>,
       );
@@ -142,7 +145,8 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
       nodes.push(
         <code
           key={key}
-          className="rounded bg-slate-200 px-1 py-0.5 font-mono text-[11px]"
+          className="rounded bg-slate-200 px-1 py-0.5 font-mono"
+          style={{ fontSize: "0.85em" }}
         >
           {m[11]}
         </code>,

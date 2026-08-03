@@ -44,6 +44,11 @@ import {
 import type { DiscoveredTechnique } from "@/lib/mitre/parse";
 import { techniqueInfo } from "@/lib/mitre/techniques";
 import { formatDate } from "@/lib/format";
+import {
+  DEFAULT_READING_PREFS,
+  readingStyle,
+  type ReadingPrefs,
+} from "@/lib/reading-prefs";
 
 export type ReportModalData = {
   title: string;
@@ -100,12 +105,15 @@ export function ReportDetail({
   report,
   onClose,
   asPage = false,
+  reading = DEFAULT_READING_PREFS,
 }: {
   report: ReportModalData;
   /** Closes the overlay. Omitted on the standalone page, which navigates. */
   onClose?: () => void;
   /** Render as a full page (no dimmed overlay, no click-outside to close). */
   asPage?: boolean;
+  /** The reader's chosen font and size for the article pane. */
+  reading?: ReadingPrefs;
 }) {
   const router = useRouter();
   // Every report renders in the same clean reading view: the article extracted
@@ -535,6 +543,7 @@ export function ReportDetail({
                 url={report.url}
                 showOriginal={showOriginal}
                 onToggleOriginal={() => setShowOriginal((o) => !o)}
+                reading={reading}
               />
             </div>
           </div>
@@ -742,11 +751,13 @@ function ReportBody({
   url,
   showOriginal,
   onToggleOriginal,
+  reading,
 }: {
   view: ViewState;
   url: string | null;
   showOriginal: boolean;
   onToggleOriginal: () => void;
+  reading: ReadingPrefs;
 }) {
   if (view.status === "loading") {
     return (
@@ -827,7 +838,10 @@ function ReportBody({
       ) : (
         <div className="flex-1 overflow-y-auto bg-white px-4 py-3">
           {hasReading ? (
-            <div className="max-w-3xl space-y-2">
+            <div
+              className="max-w-3xl space-y-2 leading-relaxed"
+              style={readingStyle(reading)}
+            >
               <Markdown text={view.markdown} />
             </div>
           ) : (
