@@ -16,7 +16,18 @@ const FILE_EXT =
   "exe|dll|sys|ps1|bat|cmd|vbs|js|jse|wsf|hta|scr|lnk|jar|apk|dmg|iso|img|bin|msi|doc|docx|xls|xlsx|ppt|pptx|pdf|rtf|zip|rar|7z|gz|tar|py|sh|elf|so|tmp|dat|macho|" +
   // Web-asset extensions: image/style/font filenames on a scraped page must not
   // be mistaken for domains (e.g. photo.jpg, index.html).
-  "jpg|jpeg|png|gif|webp|svg|ico|css|html|htm|woff|woff2|ttf|otf";
+  "jpg|jpeg|png|gif|webp|svg|ico|css|html|htm|woff|woff2|ttf|otf|" +
+  // Server-side page extensions. These arrive from the share and tracking links
+  // every article carries (facebook.com/sharer/sharer.php), so "sharer.php" was
+  // being stored as a domain - php is not a TLD.
+  "php|phtml|php3|php4|php5|php7|asp|aspx|ashx|asmx|jsp|jspx|cgi|shtml|xhtml|" +
+  // Data and config filenames quoted in write-ups (config.json, access.log).
+  "txt|json|xml|yml|yaml|ini|conf|cfg|csv|sql|bak|log|db|dmp|pcap|eml|msg";
+// Deliberately NOT listed, despite looking like extensions: md, pl, do, in, is,
+// it, me, tv, ai, sh and py are live TLDs. The last three are already above -
+// a Paraguayan or Saint Helenian domain is rarer in this corpus than a script
+// filename, so those keep the filename reading; the rest are too common as real
+// domains to sacrifice.
 
 const URI_RE = /\bhttps?:\/\/[^\s"'<>()\]]+/gi;
 const IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
@@ -29,10 +40,33 @@ const EXT_ONLY_RE = new RegExp(`^(?:${FILE_EXT})$`, "i");
 // (window.fetch, console.log, exec.command, os.path). Reject a token whose
 // last label is a common method/property name, or whose first label is a
 // well-known namespace object - neither is ever a real TLD/domain.
+//
+// No entry here may be a live TLD. "info", "name", "id", "host", "run", "post"
+// and "date" were, and cost real indicators: 0x666.info, fixmy-nflix.info and
+// zimbra-beta.info are exactly the kind of host this system exists to record,
+// and were being discarded to catch p.name and subprocess.run. Letting a little
+// code noise through is the cheaper mistake, and the head list still catches the
+// common forms (console.info, os.name).
 const CODE_TAIL_RE =
-  /^(?:log|error|warn|info|debug|trace|fetch|then|catch|push|pop|map|filter|join|split|slice|call|apply|bind|exec|spawn|run|send|write|read|open|close|start|stop|create|delete|update|get|post|put|head|command|commands|argv|env|path|json|stringify|parse|test|match|replace|trim|length|name|value|data|type|id|url|href|src|innerhtml|textcontent|prototype|constructor|tostring|valueof|now|random|floor|round|ceil|min|max|abs|keys|values|entries|assign|freeze|target|origin|host|hostname|search|hash|body|title|status|headers|params|query|state|props|self|this|default|module|exports|require|import|main|init|setup|config|options|args|result|response|request|client|server|session|token|key|secret|user|admin|root|local|remote|temp|tmp|cache|buffer|stream|file|dir|folder|list|item|items|count|total|sum|avg|first|last|next|prev|current|active|enabled|disabled|visible|hidden|open_|close_)$/i;
+  /^(?:log|error|warn|debug|trace|fetch|then|catch|push|pop|map|filter|join|split|slice|call|apply|bind|exec|spawn|send|write|read|open|close|start|stop|create|delete|update|get|put|head|command|commands|argv|env|path|json|stringify|parse|test|match|replace|trim|length|value|data|type|url|href|src|innerhtml|textcontent|prototype|constructor|tostring|valueof|now|random|floor|round|ceil|min|max|abs|keys|values|entries|assign|freeze|target|origin|hostname|search|hash|body|title|status|headers|params|query|state|props|self|this|default|module|exports|require|import|main|init|setup|config|options|args|result|response|request|client|server|session|token|key|secret|user|admin|root|local|remote|temp|tmp|cache|buffer|stream|file|dir|folder|list|item|items|count|total|sum|avg|first|last|next|prev|current|active|enabled|disabled|visible|hidden|open_|close_)$/i;
 const CODE_HEAD_RE =
-  /^(?:window|document|console|process|os|sys|math|json|object|array|string|number|boolean|date|regexp|promise|map|set|error|exec|child_process|subprocess|shutil|urllib|requests|axios|fs|path|http|https|net|crypto|util|events|stream|buffer|assert|zlib|querystring|readline|cluster|worker|navigator|location|history|screen|localstorage|sessionstorage|globalthis|module|exports|require|this|self|super|new|typeof|instanceof)$/i;
+  /^(?:window|document|console|process|os|sys|math|json|object|array|string|number|boolean|regexp|promise|map|set|error|exec|child_process|subprocess|shutil|urllib|requests|axios|fs|path|http|https|net|crypto|util|events|stream|buffer|assert|zlib|querystring|readline|cluster|worker|navigator|location|history|screen|localstorage|sessionstorage|globalthis|module|exports|require|this|self|super|new|typeof|instanceof)$/i;
+
+/**
+ * Whether a domain-shaped token is really a filename or a code identifier.
+ *
+ * Both readings are rejected by the text extractor, but the LLM path used to
+ * check only the allowlist, so a value the model reported as a domain was
+ * stored even when it was plainly `sharer.php` or `console.log`. One predicate
+ * for both paths, so they cannot disagree again.
+ */
+export function isFilenameOrCode(domain: string): boolean {
+  const d = (domain ?? "").trim().toLowerCase();
+  // Only judge domain-shaped tokens. A single label is not a domain at all, and
+  // "php" on its own would otherwise read as its own extension.
+  if (!d.includes(".")) return false;
+  return isFileExt(d) || isCodeIdentifier(d);
+}
 
 /** Whether a domain-shaped token is really a code identifier (window.fetch). */
 function isCodeIdentifier(domain: string): boolean {

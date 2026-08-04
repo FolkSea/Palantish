@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  isFilenameOrCode,
   extractIndicators,
   normalizeIndicator,
   validIndicator,
@@ -204,5 +205,76 @@ describe("extractIndicators allowlisting", () => {
     expect(i.domains).not.toContain("blog.crowdstrike.com");
     expect(i.ips).toContain("45.86.230.12");
     expect(i.ips).not.toContain("1.1.1.1");
+  });
+});
+
+describe("isFilenameOrCode", () => {
+  it("rejects the server-side page extensions that share links carry", () => {
+    // The one that prompted this: facebook.com/sharer/sharer.php on every
+    // article footer was being stored as the domain "sharer.php".
+    for (const v of [
+      "sharer.php", "index.aspx", "login.asp", "view.jsp", "run.cgi",
+      "page.phtml", "doc.xhtml",
+    ]) {
+      expect(isFilenameOrCode(v), v).toBe(true);
+    }
+  });
+
+  it("rejects asset, data and config filenames", () => {
+    for (const v of [
+      "index.html", "photo.png", "styles.css", "config.json", "access.log",
+      "notes.txt", "data.xml", "dump.sql", "settings.ini", "capture.pcap",
+    ]) {
+      expect(isFilenameOrCode(v), v).toBe(true);
+    }
+  });
+
+  it("rejects code identifiers", () => {
+    for (const v of ["console.log", "window.fetch", "os.path", "exec.command"]) {
+      expect(isFilenameOrCode(v), v).toBe(true);
+    }
+  });
+
+  it("keeps real domains, including ones whose TLD looks like an extension", () => {
+    // These are live TLDs and must survive: deleting a .in or .md domain to
+    // catch a filename would be losing a real indicator to catch noise.
+    for (const v of [
+      "evil.com", "malware.ru", "c2.example.net", "bad.in", "actor.md",
+      "site.pl", "shop.do", "news.is", "cdn.io", "portal.app", "x.online",
+    ]) {
+      expect(isFilenameOrCode(v), v).toBe(false);
+    }
+  });
+
+  it("is not fooled by an extension appearing mid-domain", () => {
+    // Only the LAST label decides; php.example.com is a perfectly good host.
+    expect(isFilenameOrCode("php.example.com")).toBe(false);
+    expect(isFilenameOrCode("html.evil.ru")).toBe(false);
+  });
+
+  it("copes with empty and malformed input", () => {
+    expect(isFilenameOrCode("")).toBe(false);
+    expect(isFilenameOrCode("   ")).toBe(false);
+    expect(isFilenameOrCode("php")).toBe(false); // no dot: not domain-shaped
+  });
+});
+
+describe("code-identifier rejection must not eat live TLDs", () => {
+  it("keeps domains whose TLD is also a programming word", () => {
+    // Each of these was previously discarded as a "code identifier": .info,
+    // .name, .id, .host, .run, .post and .date are all real TLDs, and the first
+    // three of these are genuine indicators seen in the corpus.
+    for (const v of [
+      "0x666.info", "fixmy-nflix.info", "zimbra-beta.info", "web27.info",
+      "actor.name", "tracker.id", "panel.host", "payload.run", "drop.date",
+    ]) {
+      expect(isFilenameOrCode(v), v).toBe(false);
+    }
+  });
+
+  it("still rejects the namespaced forms via the head list", () => {
+    for (const v of ["console.info", "os.name", "document.id", "process.argv"]) {
+      expect(isFilenameOrCode(v), v).toBe(true);
+    }
   });
 });

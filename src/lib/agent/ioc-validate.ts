@@ -14,6 +14,7 @@ import {
   validIpv4,
   shouldExcludeDomain,
   shouldExcludeIp,
+  isFilenameOrCode,
 } from "@/lib/report-indicators";
 import type { IocRow } from "@/lib/ingest/iocs";
 import type { LlmIndicators } from "./web-triage";
@@ -35,7 +36,13 @@ type Excludes = {
 
 /** Whether an already-normalised value should be dropped as excluded infra. */
 function isExcluded(type: string, value: string, ex: Excludes): boolean {
-  if (type === "domain") return shouldExcludeDomain(value, ex.excludeDomains);
+  if (type === "domain") {
+    // The same filename/code-identifier rejection the text extractor applies.
+    // Without it this path stored sharer.php, index.html and console.log as
+    // domains - the model reports them in good faith, they simply are not.
+    if (isFilenameOrCode(value)) return true;
+    return shouldExcludeDomain(value, ex.excludeDomains);
+  }
   if (type === "uri") {
     const h = hostOf(value);
     return !h || shouldExcludeDomain(h, ex.excludeDomains);

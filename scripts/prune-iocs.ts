@@ -16,6 +16,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import {
   shouldExcludeDomain,
   shouldExcludeIp,
+  isFilenameOrCode,
 } from "@/lib/report-indicators";
 
 const args = process.argv.slice(2);
@@ -79,7 +80,11 @@ async function main() {
   const doomed: { id: string; value: string; ioc_type: string }[] = [];
   for (const i of iocs ?? []) {
     if (i.ioc_type === "domain") {
-      if (shouldExcludeDomain(i.value.toLowerCase(), allowDomains)) doomed.push(i);
+      // Filenames and code identifiers stored as domains (sharer.php,
+      // index.html, console.log) - never IOCs, whichever path wrote them.
+      if (isFilenameOrCode(i.value)) doomed.push(i);
+      else if (shouldExcludeDomain(i.value.toLowerCase(), allowDomains))
+        doomed.push(i);
     } else if (i.ioc_type === "uri") {
       const host = hostOf(i.value);
       if (host && shouldExcludeDomain(host, allowDomains)) doomed.push(i);
