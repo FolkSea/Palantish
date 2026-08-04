@@ -2,7 +2,11 @@
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureAuthenticated, getAuthenticatedClient } from "@/lib/auth";
+import {
+  ensureAuthenticated,
+  getAdministratorClient,
+  getAuthenticatedClient,
+} from "@/lib/auth";
 import {
   ingestArticle,
   importBlogPostWithAI,
@@ -42,16 +46,22 @@ export type ItemMutationResult = { ok: boolean; error?: string };
 
 /**
  * Permanently delete an intel item from the database and add its content hash
- * to the blocklist so the ingest pipeline never re-imports it. Global (affects
- * every viewer), auth-checked.
+ * to the blocklist so the ingest pipeline never re-imports it.
+ *
+ * Administrators only. This is the one destructive action here that is global
+ * and irreversible: the row goes, and the hash is blocklisted so no later
+ * ingest can bring it back. Editing a report, or removing one of its
+ * indicators, is collaborative work any analyst may do; erasing the report for
+ * everyone is not. Note the gate has to live here rather than in RLS - the
+ * write runs as the service role, which no policy constrains.
  */
 export async function deleteItemAction(
   rawHash: string,
 ): Promise<ItemMutationResult> {
   if (!rawHash) return { ok: false, error: "Missing item reference." };
-  const auth = await getAuthenticatedClient();
+  const auth = await getAdministratorClient();
   if (!auth) {
-    return { ok: false, error: "Not authorized." };
+    return { ok: false, error: "Administrator access required." };
   }
   const { user } = auth;
 

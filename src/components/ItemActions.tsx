@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deleteItemAction, hideItemAction } from "@/app/actions";
 import { BookmarkToggle, ShareButton } from "@/components/ItemControls";
+import { useIsAdministrator } from "@/components/ViewerRoleProvider";
 
 /**
  * The per-item control cluster on a list row or an actor card: save to the
@@ -20,6 +21,11 @@ export function ItemActions({
   intelItemId?: string | null;
 }) {
   const router = useRouter();
+  // Deleting a report removes it for everyone and blocklists it from re-import,
+  // so only administrators are offered it. Hiding, saving and sharing stay open
+  // to every analyst - the tool is collaborative, and those are all reversible
+  // or personal.
+  const administrator = useIsAdministrator();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +80,7 @@ export function ItemActions({
           <line x1="1" y1="1" x2="23" y2="23" />
         </svg>
       </button>
+      {administrator ? (
       <button
         type="button"
         onClick={remove}
@@ -99,6 +106,7 @@ export function ItemActions({
           <line x1="14" y1="11" x2="14" y2="17" />
         </svg>
       </button>
+      ) : null}
       {error ? <span className="text-[10px] text-red-600">{error}</span> : null}
     </span>
   );
