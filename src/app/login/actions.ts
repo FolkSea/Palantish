@@ -4,6 +4,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { announceFirstSignIn } from "@/lib/notifications/first-sign-in";
+import { isEmailAllowed } from "@/lib/allowlist";
+
+const NOT_ALLOWED =
+  "That account is not approved for this application. Ask an administrator to add it.";
 
 type ActionResult = { error?: string; message?: string };
 
@@ -26,6 +30,12 @@ export async function signInWithMagicLink(
 ): Promise<ActionResult> {
   const email = String(formData.get("email") ?? "").trim();
   if (!email) return { error: "Enter an email address." };
+
+  // Checked before the link is sent, but answered identically either way: the
+  // form must not become a way to test who is on the list.
+  if (!(await isEmailAllowed(email))) {
+    return { message: `If ${email} has an account, a magic link is on its way.` };
+  }
 
   const supabase = await createClient();
   const origin = await originFromHeaders();
@@ -55,6 +65,14 @@ export async function signInWithPassword(
     password,
   });
   if (error) return { error: error.message };
+
+  // The database refuses this account's reads either way; signing it straight
+  // back out means saying so, rather than handing over a session that renders
+  // an empty application with no explanation.
+  if (!(await isEmailAllowed(email))) {
+    await supabase.auth.signOut();
+    return { error: NOT_ALLOWED };
+  }
 
   // Only ever fires once per user - see announceFirstSignIn.
   if (data.user) await announceFirstSignIn(data.user.id, data.user.email);

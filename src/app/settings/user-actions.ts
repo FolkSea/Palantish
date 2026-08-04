@@ -43,6 +43,16 @@ export async function inviteUserAction(input: {
     return { ok: false, error: "Invalid access level." };
 
   const db = createAdminClient();
+
+  // On the allow-list before the invitation goes out, or the recipient would
+  // accept it and find an empty application: every read policy checks
+  // is_allowed_user(), which is membership of this table.
+  const allow = await db
+    .from("allowed_users")
+    .upsert({ email, note: "invited" }, { onConflict: "email", ignoreDuplicates: true });
+  if (allow.error)
+    return { ok: false, error: `Could not allow-list ${email}: ${allow.error.message}` };
+
   const { data, error } = await db.auth.admin.inviteUserByEmail(email, {
     redirectTo: await callbackUrl(),
     data: { display_name: input.displayName.trim() },
