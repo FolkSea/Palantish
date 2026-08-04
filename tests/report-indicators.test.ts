@@ -91,6 +91,31 @@ describe("extractIndicators", () => {
     expect(i.uris.some((u) => u.includes("twitter.com"))).toBe(false);
   });
 
+  it("applies an operator allowlist entry to URLs, not just bare domains", () => {
+    // The ioc_allowlist reaches the extractor as excludeDomains. A press or CDN
+    // domain has to be suppressed in whichever form the scraper met it -
+    // allowlisting it and still storing the article URL as an IOC is the bug
+    // this guards.
+    const i = extractIndicators(
+      "image https://blogger.googleusercontent.com/img/a/AVvXsEg and " +
+        "writeup https://www.thehackernews.com/2026/01/post.html and " +
+        "c2 https://real-c2.example.net/panel plus bare thehackernews.com",
+      ["thehackernews.com", "blogger.googleusercontent.com"],
+    );
+    expect(i.uris).toEqual(["https://real-c2.example.net/panel"]);
+    expect(i.domains.some((d) => d.includes("thehackernews"))).toBe(false);
+  });
+
+  it("does not let an allowlisted domain hide a lookalike host", () => {
+    // not-thehackernews.com.evil.ru merely contains the allowlisted string; it
+    // is a different registrable domain and a plausible IOC in its own right.
+    const i = extractIndicators(
+      "https://not-thehackernews.com.evil.ru/x",
+      ["thehackernews.com"],
+    );
+    expect(i.uris).toEqual(["https://not-thehackernews.com.evil.ru/x"]);
+  });
+
   it("returns empty sets when nothing is present", () => {
     const i = extractIndicators("A generic advisory with no indicators.");
     expect(i.ips).toHaveLength(0);
