@@ -20,6 +20,18 @@ export const GRAPH_TYPE_LABEL: Record<GraphNodeType, string> = {
   adversary: "Adversary",
 };
 
+/** IOC node subtypes, as stored in iocs.ioc_type. CVEs and ATT&CK techniques
+ * are their own node types, so they are not listed here. */
+export const IOC_SUBTYPES = ["ip", "domain", "uri", "file_hash"] as const;
+export type IocSubtype = (typeof IOC_SUBTYPES)[number];
+
+export const IOC_SUBTYPE_LABEL: Record<IocSubtype, string> = {
+  ip: "IP addresses",
+  domain: "Domains",
+  uri: "URLs",
+  file_hash: "File hashes",
+};
+
 export type GraphNode = {
   id: string; // `${type}:${key}` - key is the item id, ioc/cve/ttp value, or actor name
   type: GraphNodeType;

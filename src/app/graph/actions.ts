@@ -67,6 +67,9 @@ async function itemNeighbours(
   db: Db,
   item: ItemFull,
   include: Set<GraphNodeType>,
+  /** When set, only these IOC subtypes are followed (ip, domain, uri,
+   * file_hash). Undefined means every subtype. */
+  iocSubtypes?: Set<string>,
 ): Promise<GraphData> {
   const self = itemNode(item);
   const nodes: GraphNode[] = [self];
@@ -84,6 +87,11 @@ async function itemNeighbours(
     if (!l.iocs?.value) continue;
     const n = iocNode(l.iocs.value, l.iocs.ioc_type);
     if (!include.has(n.type)) continue;
+    // Subtype filter applies to IOC nodes only: a CVE or a technique is its own
+    // node type and is governed by include, not by this.
+    if (n.type === "ioc" && iocSubtypes && !iocSubtypes.has(l.iocs.ioc_type)) {
+      continue;
+    }
     nodes.push(n);
     edges.push(edge(self.id, n.id));
   }
@@ -423,12 +431,16 @@ export async function seedGraphAction(rawHash: string): Promise<GraphResult> {
 export async function expandNodeAction(
   nodeId: string,
   includeTypes: GraphNodeType[],
+  /** Restrict IOC neighbours to these subtypes; empty/omitted means all. */
+  iocSubtypes?: string[],
 ): Promise<GraphResult> {
   const db = await authed();
   if (!db) return { ok: false, error: "Not authorized." };
   const include = new Set<GraphNodeType>(
     includeTypes.length ? includeTypes : GRAPH_NODE_TYPES,
   );
+  const subtypes =
+    iocSubtypes && iocSubtypes.length ? new Set(iocSubtypes) : undefined;
   const { type, key } = parseNodeId(nodeId);
   const hidden = await hiddenHashes(db);
 
@@ -439,7 +451,12 @@ export async function expandNodeAction(
       .eq("id", key)
       .maybeSingle();
     if (!item) return { ok: true, graph: { nodes: [], edges: [] } };
-    const graph = await itemNeighbours(db, item as unknown as ItemFull, include);
+    const graph = await itemNeighbours(
+      db,
+      item as unknown as ItemFull,
+      include,
+      subtypes,
+    );
     await withDegrees(db, graph.nodes, hidden);
     return { ok: true, graph };
   }
