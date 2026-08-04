@@ -1,6 +1,7 @@
 "use server";
 
 import { getAuthenticatedClient } from "@/lib/auth";
+import type { NotificationItem } from "@/lib/notifications/read";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -37,4 +38,45 @@ export async function markAllNotificationsRead(): Promise<Result> {
     .is("read_at", null);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * Anything newer than `since`, plus the current unread count.
+ *
+ * Polled rather than pushed. Supabase Realtime would be the obvious choice, but
+ * realtime is switched off in this project's local Supabase (the full stack
+ * OOM-kills the dev machine), so it could not be exercised before shipping -
+ * and a minute-granular poll of one small indexed query is cheap enough that
+ * the difference is not worth an unverifiable dependency.
+ */
+export async function pollNotifications(
+  sinceIso: string,
+): Promise<{ items: NotificationItem[]; unread: number }> {
+  const auth = await getAuthenticatedClient();
+  if (!auth) return { items: [], unread: 0 };
+
+  const { data } = await auth.supabase
+    .from("notifications")
+    .select("id, kind, title, body, href, created_at, read_at")
+    .gt("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const { count } = await auth.supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .is("read_at", null);
+
+  return {
+    items: (data ?? []).map((n) => ({
+      id: n.id,
+      kind: n.kind,
+      title: n.title,
+      body: n.body,
+      href: n.href,
+      createdAt: n.created_at,
+      read: n.read_at !== null,
+    })),
+    unread: count ?? 0,
+  };
 }

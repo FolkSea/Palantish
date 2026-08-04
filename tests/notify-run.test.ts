@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { buildRunNotifications } from "@/lib/notifications/run-messages";
+import {
+  buildRunNotifications,
+  buildPocNotification,
+} from "@/lib/notifications/run-messages";
 
 function build(over: Record<string, unknown> = {}) {
   return buildRunNotifications({
@@ -91,5 +94,38 @@ describe("buildRunNotifications", () => {
   it("gives every notification somewhere to go", () => {
     const sent = build({ added: 1, summarised: true, flaggedIocs: 1, errors: ["e"], staleFeeds: 1 });
     for (const s of sent) expect(s.href, s.kind).toBeTruthy();
+  });
+});
+
+describe("buildPocNotification", () => {
+  const poc = {
+    itemId: "item-1",
+    rawHash: "abc123",
+    cveId: "CVE-2026-1234",
+    headline: "Exploit code published for Fortinet flaw",
+  };
+
+  it("names the CVE and links to the report", () => {
+    const n = buildPocNotification(poc);
+    expect(n.kind).toBe("poc_released");
+    expect(n.title).toBe("New PoC released: CVE-2026-1234");
+    expect(n.body).toBe("Exploit code published for Fortinet flaw");
+    expect(n.href).toBe("/item/abc123");
+  });
+
+  it("keys on the report, so a re-run raises it once", () => {
+    // Keying on the run would re-announce the same PoC on every ingest that
+    // happened to touch the report.
+    expect(buildPocNotification(poc).dedupeKey).toBe("poc_released:item-1");
+  });
+
+  it("still says something useful without a CVE id", () => {
+    const n = buildPocNotification({ ...poc, cveId: null });
+    expect(n.title).toBe("New PoC released");
+  });
+
+  it("leaves the body empty rather than blank when there is no headline", () => {
+    expect(buildPocNotification({ ...poc, headline: null }).body).toBeNull();
+    expect(buildPocNotification({ ...poc, headline: "   " }).body).toBeNull();
   });
 });

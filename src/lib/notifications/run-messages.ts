@@ -107,3 +107,29 @@ export function buildRunNotifications(outcome: RunOutcome): NewNotification[] {
 
   return out;
 }
+
+export type PocRelease = {
+  itemId: string;
+  rawHash: string;
+  cveId: string | null;
+  /** The report's own headline. Exploit rows carry the CVE id as their title
+   * and keep the original headline in `target`. */
+  headline: string | null;
+};
+
+/**
+ * A proof of concept being published is the moment a vulnerability stops being
+ * theoretical, so this goes to every user rather than only to whoever happens
+ * to subscribe to the label.
+ */
+export function buildPocNotification(poc: PocRelease): NewNotification {
+  return {
+    kind: "poc_released",
+    title: poc.cveId ? `New PoC released: ${poc.cveId}` : "New PoC released",
+    body: poc.headline?.trim() || null,
+    href: `/item/${poc.rawHash}`,
+    // The report, not the run: the same PoC reported twice is one thing, and a
+    // re-run must not raise it again.
+    dedupeKey: `poc_released:${poc.itemId}`,
+  };
+}

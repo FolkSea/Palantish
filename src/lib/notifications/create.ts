@@ -13,7 +13,8 @@ export type NotificationKind =
   | "stale_feeds"
   | "suspect_iocs"
   | "ingest_errors"
-  | "new_user";
+  | "new_user"
+  | "poc_released";
 
 export type NewNotification = {
   kind: NotificationKind;
@@ -55,6 +56,19 @@ export async function notifyUsers(
     .select("id");
   if (error) throw new Error(error.message);
   return data?.length ?? 0;
+}
+
+/**
+ * Every account. For news that is not about one person's subscriptions and not
+ * an operational detail - a released proof of concept changes the picture for
+ * whoever is on shift, whatever they happen to follow.
+ */
+export async function notifyAllUsers(
+  db: Db,
+  notification: NewNotification,
+): Promise<number> {
+  const { data } = await db.from("account_roles").select("user_id");
+  return notifyUsers(db, (data ?? []).map((r) => r.user_id), notification);
 }
 
 /** Every administrator. Operational news has no other audience. */

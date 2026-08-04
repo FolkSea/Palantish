@@ -32,6 +32,7 @@ import { reconcileIndicators } from "@/lib/agent/ioc-validate";
 import { loadIocAllowlist } from "./allowlist";
 import { runIocReview } from "@/lib/ioc-review/run";
 import { notifyRunOutcome } from "./notify-run";
+import { notifyPocReleases } from "./notify-poc";
 import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
@@ -412,12 +413,17 @@ export async function runIngest(
         kind: string;
         source_name: string | null;
         raw_hash: string;
+        cve_id: string | null;
+        exploit_status: string | null;
+        target: string | null;
       }[] = [];
       if (batchRows.length > 0) {
         const { data, error } = await db
           .from("intel_items")
           .upsert(batchRows, { onConflict: "raw_hash", ignoreDuplicates: true })
-          .select("id, url, title, description, kind, source_name, raw_hash");
+          .select(
+            "id, url, title, description, kind, source_name, raw_hash, cve_id, exploit_status, target",
+          );
         if (error) errors.push(`intel_items insert: ${error.message}`);
         else {
           insertedIntel = data ?? [];
@@ -448,6 +454,17 @@ export async function runIngest(
         insertedIntel.map((i) => i.id),
         "ingest",
       );
+
+      // A released proof of concept changes what a vulnerability means today,
+      // so everyone is told - not only whoever happens to subscribe to the
+      // label. Non-fatal, like every other notification.
+      try {
+        await notifyPocReleases(db, insertedIntel);
+      } catch (err) {
+        errors.push(
+          `poc notify: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
 
       // Populate IOCs. Prefer the indicators Claude already extracted from the
       // web-fetched article (validated + reconciled against the fetched text
