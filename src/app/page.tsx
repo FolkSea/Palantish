@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { getAuthenticatedClient } from "@/lib/auth";
 import { loadDashboard } from "@/lib/data";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -39,30 +38,6 @@ export default async function DashboardPage() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
       <SiteHeader />
-
-      <div className="mb-4 flex justify-end">
-        <Link
-          href="/feed"
-          className="inline-flex items-center gap-1.5 rounded-md border border-[#e5e7eb] bg-white px-2.5 py-1 text-[12px] font-medium text-[#1d4ed8] hover:bg-slate-50"
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M4 11a9 9 0 0 1 9 9" />
-            <path d="M4 4a16 16 0 0 1 16 16" />
-            <circle cx="5" cy="19" r="1.5" />
-          </svg>
-          Personal Feed
-        </Link>
-      </div>
 
       {data.breaking.length > 0 ? (
         <div className="mb-4">

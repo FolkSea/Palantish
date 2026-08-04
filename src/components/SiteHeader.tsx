@@ -3,6 +3,7 @@ import { getAuthenticatedClient, isAdministrator } from "@/lib/auth";
 import { loadCompiledAt } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
 import { HeaderMenu } from "@/components/HeaderMenu";
+import { HeaderNav } from "@/components/HeaderNav";
 import { SearchPanel } from "@/components/SearchPanel";
 
 /**
@@ -59,6 +60,7 @@ export async function SiteHeader() {
           </div>
         </Link>
         <div className="flex items-center gap-2">
+          <HeaderNav />
           <span className="text-[11px] text-[#90A9FF]">{identityLabel}</span>
           <HeaderMenu
             isAdministrator={auth ? isAdministrator(auth.role) : false}
