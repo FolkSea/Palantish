@@ -4,6 +4,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { RawCandidate } from "@/lib/ingest/types";
 import { parseReflection, type MemoryUpdate } from "./memory";
 import {
+  REVIEW_SYSTEM_PROMPT,
+  buildReviewPrompt,
+  parseReviewResponse,
+  type ReviewCandidate,
+  type ReviewVerdict,
+} from "@/lib/ioc-review/candidates";
+import {
   WEB_TRIAGE_INSTRUCTIONS,
   allowedDomainsFor,
   buildTriageUserMessage,
@@ -17,6 +24,10 @@ import {
 
 const SUMMARY_MODEL_DEFAULT = "claude-sonnet-5";
 const REFLECT_MODEL_DEFAULT = "claude-sonnet-5";
+// Judging whether a value looks like attacker infrastructure is recognition, not
+// analysis, and it runs over a list rather than over prose - so it defaults to
+// the cheap model. Overridable via ANTHROPIC_IOC_REVIEW_MODEL.
+const IOC_REVIEW_MODEL_DEFAULT = "claude-haiku-4-5-20251001";
 // Web-fetch triage reads and analyses the full article, so it defaults to a
 // stronger model; overridable via ANTHROPIC_MODEL. The content cap bounds tokens
 // spent on an unexpectedly large page or PDF.
@@ -158,6 +169,41 @@ export class AnalystAgent {
       fetchStatus,
       fetchedText: outcome.succeeded ? outcome.text : null,
       fetchedUrl: outcome.fetchedUrl,
+    };
+  }
+
+  /**
+   * Review indicators that join reports together and report the ones that are
+   * not really indicators.
+   *
+   * No memory brief: this is a judgement about what a value IS, and the running
+   * narrative of who is attacking whom would only bias it toward seeing
+   * infrastructure everywhere.
+   */
+  async reviewIndicators(
+    candidates: ReviewCandidate[],
+  ): Promise<{ verdicts: ReviewVerdict[]; model: string }> {
+    const model =
+      process.env.ANTHROPIC_IOC_REVIEW_MODEL || IOC_REVIEW_MODEL_DEFAULT;
+    if (candidates.length === 0) return { verdicts: [], model };
+    const message = await this.client.messages.create(
+      {
+        model,
+        // One short JSON object per problem, over a list of at most 80.
+        max_tokens: 4000,
+        // No output_config here: the cheap model rejects the effort parameter
+        // outright ("This model does not support the effort parameter"), and it
+        // does not think adaptively, so there is nothing to constrain.
+        system: REVIEW_SYSTEM_PROMPT,
+        messages: [
+          { role: "user", content: buildReviewPrompt(candidates) },
+        ],
+      },
+      { timeout: LONG_CALL_TIMEOUT_MS },
+    );
+    return {
+      verdicts: parseReviewResponse(textOf(message), candidates),
+      model,
     };
   }
 

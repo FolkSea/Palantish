@@ -6,6 +6,11 @@ import { SourcesPanel } from "./SourcesPanel";
 import { HiddenPanel, type HiddenPost } from "./HiddenPanel";
 import { ActorsPanel } from "./ActorsPanel";
 import { DroppedPanel, type DroppedItem } from "./DroppedPanel";
+import {
+  ReviewPanel,
+  type ReviewFlag,
+  type ReviewStatus,
+} from "./ReviewPanel";
 import { AgentMemoryPanel, type AgentMemoryNote } from "./AgentMemoryPanel";
 import { UsersPanel } from "./UsersPanel";
 import {
@@ -39,6 +44,7 @@ type Tab =
   | "actors"
   | "hidden"
   | "dropped"
+  | "review"
   | "memory";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
@@ -53,6 +59,7 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "actors", label: "Actors", hint: "Threat actor catalogue" },
   { id: "hidden", label: "Hidden posts", hint: "Unhide posts you hid" },
   { id: "dropped", label: "Dropped", hint: "Review filtered-out candidates" },
+  { id: "review", label: "Suspect IOCs", hint: "Indicators the daily check flagged" },
   { id: "memory", label: "Agent memory", hint: "What the analyst agent knows" },
 ];
 
@@ -66,6 +73,8 @@ export function SettingsView({
   actors,
   hidden,
   dropped,
+  reviewFlags,
+  reviewStatus,
   memory,
   subscriptions,
   subscriptionOptions,
@@ -80,6 +89,8 @@ export function SettingsView({
   actors: ActorRecord[];
   hidden: HiddenPost[];
   dropped: DroppedItem[];
+  reviewFlags: ReviewFlag[];
+  reviewStatus: ReviewStatus | null;
   memory: AgentMemoryNote[];
   subscriptions: SubscriptionRow[];
   subscriptionOptions: SubscriptionOptions;
@@ -90,7 +101,7 @@ export function SettingsView({
     role === "administrator"
       ? TABS
       : TABS.filter((item) =>
-          !["users", "sources", "dropped", "memory"].includes(item.id),
+          !["users", "sources", "dropped", "review", "memory"].includes(item.id),
         );
 
   return (
@@ -146,6 +157,8 @@ export function SettingsView({
           <HiddenPanel initialHidden={hidden} />
         ) : tab === "dropped" && role === "administrator" ? (
           <DroppedPanel initial={dropped} />
+        ) : tab === "review" && role === "administrator" ? (
+          <ReviewPanel initial={reviewFlags} status={reviewStatus} />
         ) : tab === "memory" && role === "administrator" ? (
           <AgentMemoryPanel notes={memory} />
         ) : null}

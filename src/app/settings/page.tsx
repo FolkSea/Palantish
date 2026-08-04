@@ -61,6 +61,44 @@ export default async function SettingsPage() {
     droppedAt: d.created_at,
   }));
 
+  // Open flags only: a resolved one has had its decision recorded and would
+  // just be a list of past housekeeping.
+  const { data: reviewRows } = administrator
+    ? await supabase
+        .from("ioc_review_flags")
+        .select("id, value, ioc_type, category, reason, reports, created_at")
+        .is("resolved_at", null)
+        .order("reports", { ascending: false })
+        .limit(500)
+    : { data: [] };
+  const reviewFlags = (reviewRows ?? []).map((r) => ({
+    id: r.id,
+    value: r.value,
+    iocType: r.ioc_type,
+    category: r.category,
+    reason: r.reason,
+    reports: r.reports,
+    flaggedAt: r.created_at,
+  }));
+
+  const { data: reviewRun } = administrator
+    ? await supabase
+        .from("ioc_review_runs")
+        .select("ran_at, candidates, flagged, model, error")
+        .order("ran_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
+  const reviewStatus = administrator
+    ? {
+        ranAt: reviewRun?.ran_at ?? null,
+        candidates: reviewRun?.candidates ?? 0,
+        flagged: reviewRun?.flagged ?? 0,
+        model: reviewRun?.model ?? null,
+        error: reviewRun?.error ?? null,
+      }
+    : null;
+
   const { data: memoryRows } = administrator
     ? await supabase
         .from("analyst_memory")
@@ -149,6 +187,8 @@ export default async function SettingsPage() {
         actors={(actors ?? []) as ActorRecord[]}
         hidden={hidden}
         dropped={dropped}
+      reviewFlags={reviewFlags}
+      reviewStatus={reviewStatus}
         memory={memory}
         reading={readingPrefsFrom(user?.user_metadata)}
         subscriptions={subscriptions}

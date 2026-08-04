@@ -479,6 +479,83 @@ export type Database = {
         }
         Relationships: []
       }
+      ioc_review_flags: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          ioc_id: string | null
+          ioc_type: string
+          reason: string
+          reports: number
+          resolution: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          value: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          ioc_id?: string | null
+          ioc_type: string
+          reason: string
+          reports?: number
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          value: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          ioc_id?: string | null
+          ioc_type?: string
+          reason?: string
+          reports?: number
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ioc_review_flags_ioc_id_fkey"
+            columns: ["ioc_id"]
+            isOneToOne: true
+            referencedRelation: "iocs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ioc_review_runs: {
+        Row: {
+          candidates: number
+          error: string | null
+          flagged: number
+          id: string
+          model: string | null
+          ran_at: string
+        }
+        Insert: {
+          candidates?: number
+          error?: string | null
+          flagged?: number
+          id?: string
+          model?: string | null
+          ran_at?: string
+        }
+        Update: {
+          candidates?: number
+          error?: string | null
+          flagged?: number
+          id?: string
+          model?: string | null
+          ran_at?: string
+        }
+        Relationships: []
+      }
       iocs: {
         Row: {
           comment: string | null

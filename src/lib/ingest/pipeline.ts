@@ -30,6 +30,7 @@ import { queueNotifications } from "@/lib/notify/queue";
 import { dispatchNotifications } from "@/lib/notify/dispatch";
 import { reconcileIndicators } from "@/lib/agent/ioc-validate";
 import { loadIocAllowlist } from "./allowlist";
+import { runIocReview } from "@/lib/ioc-review/run";
 import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
@@ -637,6 +638,25 @@ export async function runIngest(
         `summary: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+    // Ask the cheap model which of the indicators that join reports together
+    // are not really indicators. Last, and non-fatal: it is housekeeping, it
+    // only ever writes suggestions for an administrator, and it declines to run
+    // more than once a day on its own.
+    try {
+      const review = await runIocReview(db);
+      if (review.ran) {
+        ilog(
+          `indicator review: ${review.flagged} flagged of ${review.candidates} reviewed`,
+        );
+      } else {
+        ilog(`indicator review skipped: ${review.skipped}`);
+      }
+    } catch (err) {
+      errors.push(
+        `indicator review: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     ilog(`ingest run ${runId} finished: ${added} added, ${errors.length} errors`);
 
     await db
