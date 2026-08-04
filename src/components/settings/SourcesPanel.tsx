@@ -8,6 +8,7 @@ import {
   type FeedHealth,
 } from "@/lib/feed-status";
 import { formatDateTime } from "@/lib/format";
+import { keepShade } from "@/lib/keep-rate";
 import { RowMenu } from "./RowMenu";
 import {
   addSource,
@@ -94,15 +95,20 @@ function byName(a: SettingsSource, b: SettingsSource) {
 
 /** Cumulative kept vs dropped counts for a feed, with the keep rate. */
 function KeepDrop({ kept, dropped }: { kept: number; dropped: number }) {
-  const total = kept + dropped;
-  if (total === 0) return <span className="text-slate-400">-</span>;
-  const pct = Math.round((kept / total) * 100);
+  const { background, keptPercent } = keepShade(kept, dropped);
+  if (keptPercent === null) return <span className="text-slate-400">-</span>;
   return (
-    <span className="inline-flex items-center gap-1">
-      <span className="font-medium text-emerald-700">{kept}</span>
-      <span className="text-slate-300">/</span>
-      <span className="text-slate-500">{dropped}</span>
-      <span className="text-[10px] text-slate-400">({pct}% kept)</span>
+    <span
+      // The tint is a second reading of the numbers beside it, never the only
+      // one - the figures and the percentage still say it in text.
+      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5"
+      style={background ? { backgroundColor: background } : undefined}
+      title={`${keptPercent}% of this feed's candidates were kept`}
+    >
+      <span className="font-medium text-emerald-800">{kept}</span>
+      <span className="text-slate-400">/</span>
+      <span className="text-slate-600">{dropped}</span>
+      <span className="text-[10px] text-slate-500">({keptPercent}% kept)</span>
     </span>
   );
 }
