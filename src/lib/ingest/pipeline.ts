@@ -31,6 +31,7 @@ import { dispatchNotifications } from "@/lib/notify/dispatch";
 import { reconcileIndicators } from "@/lib/agent/ioc-validate";
 import { loadIocAllowlist } from "./allowlist";
 import { runIocReview } from "@/lib/ioc-review/run";
+import { notifyRunOutcome } from "./notify-run";
 import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
@@ -631,8 +632,10 @@ export async function runIngest(
     // Recalculate the executive summary on every completed run so it always
     // reflects the latest data and the current 24h / 7-30d windows. Non-fatal.
     ilog("recalculating executive summary...");
+    let summarised = false;
     try {
       await generateAndStoreSummary(db);
+      summarised = true;
     } catch (err) {
       errors.push(
         `summary: ${err instanceof Error ? err.message : String(err)}`,
@@ -642,9 +645,11 @@ export async function runIngest(
     // are not really indicators. Last, and non-fatal: it is housekeeping, it
     // only ever writes suggestions for an administrator, and it declines to run
     // more than once a day on its own.
+    let flaggedIocs = 0;
     try {
       const review = await runIocReview(db);
       if (review.ran) {
+        flaggedIocs = review.flagged ?? 0;
         ilog(
           `indicator review: ${review.flagged} flagged of ${review.candidates} reviewed`,
         );
@@ -656,6 +661,20 @@ export async function runIngest(
         `indicator review: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+
+    // Tell the administrators what this run did. Keyed on the run id, so a
+    // retried or chained run adds nothing new, and non-fatal like everything
+    // else down here.
+    errors.push(
+      ...(await notifyRunOutcome(db, {
+        runId,
+        scoped: !!options?.sourceIds,
+        added,
+        summarised,
+        flaggedIocs,
+        errors,
+      })),
+    );
 
     ilog(`ingest run ${runId} finished: ${added} added, ${errors.length} errors`);
 

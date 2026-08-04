@@ -91,7 +91,7 @@ export type DashboardData = {
  */
 // Timeline tabs look back 30 days; every non-timeline section shows 7 days.
 const RECENT_DAYS = 7;
-const TIMELINE_DAYS = 30;
+export const TIMELINE_DAYS = 30;
 
 function daysAgo(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000)

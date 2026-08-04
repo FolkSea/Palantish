@@ -1,6 +1,7 @@
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { announceFirstSignIn } from "@/lib/notifications/first-sign-in";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -20,9 +21,12 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.verifyOtp({ token_hash, type });
+  const { data, error } = await supabase.auth.verifyOtp({ token_hash, type });
 
   if (error) return redirectTo("/login", "invalid_link");
+
+  // Only ever fires once per user - see announceFirstSignIn.
+  if (data.user) await announceFirstSignIn(data.user.id, data.user.email);
 
   // Supabase controls sign-in eligibility; application roles are enforced after
   // the session is established.

@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { announceFirstSignIn } from "@/lib/notifications/first-sign-in";
 
 type ActionResult = { error?: string; message?: string };
 
@@ -49,8 +50,14 @@ export async function signInWithPassword(
   if (!email || !password) return { error: "Enter email and password." };
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
   if (error) return { error: error.message };
+
+  // Only ever fires once per user - see announceFirstSignIn.
+  if (data.user) await announceFirstSignIn(data.user.id, data.user.email);
 
   redirect("/");
 }

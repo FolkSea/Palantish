@@ -4,6 +4,8 @@ import { loadCompiledAt } from "@/lib/data";
 import CompiledTime from "@/components/CompiledTime";
 import { HeaderMenu } from "@/components/HeaderMenu";
 import { HeaderNav } from "@/components/HeaderNav";
+import { NotificationBell } from "@/components/NotificationBell";
+import { loadNotifications } from "@/lib/notifications/read";
 import { SearchPanel } from "@/components/SearchPanel";
 
 /**
@@ -17,6 +19,11 @@ export async function SiteHeader() {
   const auth = await getAuthenticatedClient();
   const user = auth?.user;
   const compiledAt = await loadCompiledAt();
+  // Loaded here rather than per page: the bell is part of the header, and every
+  // page would otherwise have to remember to fetch for it.
+  const notifications = auth
+    ? await loadNotifications(auth.supabase)
+    : { items: [], unread: 0 };
 
   const displayName = (
     user?.user_metadata?.display_name as string | undefined
@@ -62,6 +69,10 @@ export async function SiteHeader() {
         <div className="flex items-center gap-2">
           <HeaderNav />
           <span className="text-[11px] text-[#90A9FF]">{identityLabel}</span>
+          <NotificationBell
+            initial={notifications.items}
+            initialUnread={notifications.unread}
+          />
           <HeaderMenu
             isAdministrator={auth ? isAdministrator(auth.role) : false}
           />

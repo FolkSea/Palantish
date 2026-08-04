@@ -7,6 +7,8 @@ import {
   type NotifiableReport,
   type Subscription,
 } from "./match";
+import { notifyUsers } from "@/lib/notifications/create";
+import { itemHref } from "@/lib/browse-links";
 
 type Db = SupabaseClient<Database>;
 
@@ -111,8 +113,57 @@ export async function queueNotifications(
     if (fresh.length === 0) return 0;
 
     const { error } = await db.from("notification_queue").insert(fresh);
-    return error ? 0 : fresh.length;
+    if (error) return 0;
+
+    // The same matches, delivered in the app as well as by email. Done here
+    // because this is the one place matching happens, so the bell and the
+    // digest can never disagree about what matched.
+    await notifyMatches(db, fresh);
+    return fresh.length;
   } catch {
     return 0;
+  }
+}
+
+/**
+ * Raise a bell notification per user per matched report.
+ *
+ * Deduped on the report, not the subscription: a report matching both a label
+ * and a country is one thing that happened, and being told twice about it would
+ * be noise. Failures are swallowed - an in-app notification is not worth
+ * failing an ingest for, and the email digest is the durable channel.
+ */
+async function notifyMatches(
+  db: Db,
+  matches: { user_id: string; intel_item_id: string }[],
+): Promise<void> {
+  try {
+    const itemIds = [...new Set(matches.map((m) => m.intel_item_id))];
+    const { data: items } = await db
+      .from("intel_items")
+      .select("id, title, raw_hash")
+      .in("id", itemIds);
+    const byId = new Map((items ?? []).map((i) => [i.id, i]));
+
+    const usersByItem = new Map<string, Set<string>>();
+    for (const m of matches) {
+      const set = usersByItem.get(m.intel_item_id);
+      if (set) set.add(m.user_id);
+      else usersByItem.set(m.intel_item_id, new Set([m.user_id]));
+    }
+
+    for (const [itemId, users] of usersByItem) {
+      const item = byId.get(itemId);
+      if (!item) continue;
+      await notifyUsers(db, [...users], {
+        kind: "subscription_match",
+        title: item.title,
+        body: "Matches one of your subscriptions",
+        href: itemHref(item.raw_hash),
+        dedupeKey: `subscription:${itemId}`,
+      });
+    }
+  } catch {
+    // Deliberately quiet: see the doc comment.
   }
 }
