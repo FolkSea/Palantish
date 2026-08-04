@@ -8,7 +8,9 @@ import {
   parseNodeId,
   mergeGraph,
   nodeTypeForIoc,
+  prefixFor,
 } from "@/lib/graph/build";
+import { GRAPH_NODE_TYPES } from "@/lib/graph/types";
 
 describe("nodeTypeForIoc", () => {
   it("maps ioc_type to a graph node type", () => {
@@ -72,6 +74,25 @@ describe("edges + ids", () => {
   it("parses a node id on the first colon (values may contain colons)", () => {
     expect(parseNodeId("ioc:https://a.b/c")).toEqual({ type: "ioc", key: "https://a.b/c" });
     expect(parseNodeId("item:abc")).toEqual({ type: "item", key: "abc" });
+  });
+
+  it("round-trips every node type through its id", () => {
+    // The old cast turned "adv:" into the type "adv", which matches no branch
+    // in expandNodeAction - so expanding an adversary quietly returned nothing.
+    // Asserting the whole set is what stops the next prefix from drifting.
+    for (const type of GRAPH_NODE_TYPES) {
+      const id = `${prefixFor(type)}:SOME KEY`;
+      expect(parseNodeId(id), id).toEqual({ type, key: "SOME KEY" });
+    }
+  });
+
+  it("parses the id an adversary node actually carries", () => {
+    const node = adversaryNodeFor("FANCY BEAR", "russia");
+    expect(node).not.toBeNull();
+    expect(parseNodeId(node!.id)).toEqual({
+      type: "adversary",
+      key: "FANCY BEAR",
+    });
   });
 });
 

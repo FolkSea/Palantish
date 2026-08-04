@@ -87,7 +87,12 @@ export function adversaryNodeFor(
   // label form, so unattributed reports never collapse onto one hub node.
   if (!name || /^unid\b/i.test(name.trim()) || !isSpecificAdversary(name))
     return null;
-  return { id: `adv:${name}`, type: "adversary", label: name, nexus: nexus ?? null };
+  return {
+    id: `${TYPE_PREFIX.adversary}:${name}`,
+    type: "adversary",
+    label: name,
+    nexus: nexus ?? null,
+  };
 }
 
 /** An undirected edge, keyed by its sorted endpoints so it dedupes regardless
@@ -97,11 +102,40 @@ export function edge(a: string, b: string): GraphEdge {
   return { id: `${s}--${t}`, source: a, target: b };
 }
 
+/**
+ * The id prefix for each node type. Only "adversary" differs from its type name
+ * (ids read `adv:FANCY BEAR`), which is exactly why parsing has to go through
+ * this map: slicing the prefix and casting it to a GraphNodeType yielded "adv",
+ * a value no branch matches, so expanding an adversary silently returned
+ * nothing. The compiler could not catch it - `as` was doing the lying.
+ */
+const TYPE_PREFIX: Record<GraphNodeType, string> = {
+  item: "item",
+  ioc: "ioc",
+  cve: "cve",
+  ttp: "ttp",
+  adversary: "adv",
+};
+
+const PREFIX_TYPE = new Map<string, GraphNodeType>(
+  Object.entries(TYPE_PREFIX).map(([t, p]) => [p, t as GraphNodeType]),
+);
+
+/** The id prefix used for a node type. */
+export function prefixFor(type: GraphNodeType): string {
+  return TYPE_PREFIX[type];
+}
+
 /** Split a node id back into its type + key (values may contain ":", so only
- * the first ":" is the delimiter). */
+ * the first ":" is the delimiter). An unrecognised prefix is returned as-is;
+ * callers match it against no branch and yield an empty graph. */
 export function parseNodeId(id: string): { type: GraphNodeType; key: string } {
   const i = id.indexOf(":");
-  return { type: id.slice(0, i) as GraphNodeType, key: id.slice(i + 1) };
+  const prefix = id.slice(0, i);
+  return {
+    type: PREFIX_TYPE.get(prefix) ?? (prefix as GraphNodeType),
+    key: id.slice(i + 1),
+  };
 }
 
 export function mergeGraph(...parts: GraphData[]): GraphData {

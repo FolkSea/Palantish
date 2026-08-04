@@ -250,10 +250,18 @@ export default function GraphView({
           cy.layout(LAYOUT).run();
           return;
         }
-        for (const addedId of mergeGraph(res.graph)) {
-          if (visited.has(addedId)) continue;
-          visited.add(addedId);
-          next.push(addedId);
+        mergeGraph(res.graph);
+        // Walk every neighbour returned, not just the ones that were newly
+        // drawn. A node can be on the canvas already - the seed lays down two
+        // steps, and earlier expansions add more - while never having been
+        // expanded itself. Following only new nodes made the frontier empty
+        // after one hop on any well-connected graph, so a depth of 3 or 5
+        // behaved exactly like a depth of 1. `visited` still stops this walk
+        // from expanding the same node twice.
+        for (const n of res.graph.nodes) {
+          if (visited.has(n.id)) continue;
+          visited.add(n.id);
+          next.push(n.id);
         }
       }
       if (capped) break;
