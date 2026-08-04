@@ -114,8 +114,13 @@ export class AnalystAgent {
    * host allow-list; resumes a server-tool pause_turn. Returns a failed outcome
    * (parsed=null) on any error so callers can fall back to rules/RSS.
    */
-  async triageWithFetch(c: RawCandidate): Promise<WebTriageOutcome> {
-    const model = process.env.ANTHROPIC_MODEL || WEB_TRIAGE_MODEL_DEFAULT;
+  async triageWithFetch(
+    c: RawCandidate,
+    /** Overrides the default model - see enrich/model-tier. */
+    modelOverride?: string,
+  ): Promise<WebTriageOutcome> {
+    const model =
+      modelOverride || process.env.ANTHROPIC_MODEL || WEB_TRIAGE_MODEL_DEFAULT;
     const tool = webFetchTool(model, {
       allowedDomains: allowedDomainsFor(c.url),
       maxContentTokens: WEB_FETCH_MAX_CONTENT_TOKENS,

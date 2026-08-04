@@ -5,6 +5,8 @@ import type { EnrichedItem, RawCandidate } from "@/lib/ingest/types";
 import { AnalystAgent } from "@/lib/agent/analyst";
 import type { WebTriageOutcome } from "@/lib/agent/web-triage";
 import type { LlmVerdict } from "./hybrid";
+import { modelTierFor, modelForTier } from "./model-tier";
+import type { GroupEntry } from "./rules";
 
 /**
  * LLM-backed enricher: triages via the analyst agent's web-fetch triage, which
@@ -19,8 +21,13 @@ export class LlmEnricher {
   readonly name = "llm";
   private agent: AnalystAgent;
 
-  constructor(apiKey: string, memoryBrief = "") {
+  private actors: GroupEntry[];
+
+  constructor(apiKey: string, memoryBrief = "", actors: GroupEntry[] = []) {
     this.agent = new AnalystAgent(apiKey, memoryBrief);
+    // The catalogue, used to spot a named crew in a title so it keeps the
+    // strong model however advisory-shaped the rest of the title looks.
+    this.actors = actors;
   }
 
   private toItem(c: RawCandidate, out: WebTriageOutcome): EnrichedItem {
@@ -56,7 +63,12 @@ export class LlmEnricher {
   async classify(c: RawCandidate): Promise<LlmVerdict> {
     if (!c.title || !c.url) return "drop";
     try {
-      const out = await this.agent.triageWithFetch(c);
+      // Vulnerability records go to the cheap model; anything that reads like
+      // actor reporting keeps the strong one.
+      const out = await this.agent.triageWithFetch(
+        c,
+        modelForTier(modelTierFor(c, this.actors)),
+      );
       if (!out.parsed) return "unavailable";
       if (!out.parsed.relevant)
         return {

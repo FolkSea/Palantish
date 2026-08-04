@@ -7,6 +7,8 @@ import { ensureAdministrator, ensureAuthenticated } from "@/lib/auth";
 import { toAscii } from "@/lib/text";
 import { runIngest } from "@/lib/ingest/pipeline";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
+import { headers } from "next/headers";
+import { triggerIngestRun } from "@/lib/ingest/chain";
 
 export type SourceCategory = "vendor" | "research" | "news" | "government";
 const CATEGORIES: SourceCategory[] = ["vendor", "research", "news", "government"];
@@ -174,9 +176,19 @@ async function triggerIngest(
 export async function ingestAllSources(): Promise<IngestActionResult> {
   const unauth = await ensureAdministrator();
   if (unauth) return { ok: false, error: unauth };
+
+  // Hand off to /api/ingest rather than running the pipeline here, so a manual
+  // refresh gets the same chaining the cron does. Running it inline did exactly
+  // one pass and stopped, so refreshing twice against a large backlog looked
+  // like nothing was happening - the run was working, it just had no successor.
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  if (!host) return { ok: false, error: "Could not determine the application URL." };
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+
   after(async () => {
     try {
-      await runIngest();
+      await triggerIngestRun(`${proto}://${host}`);
       revalidatePath("/");
       revalidatePath("/settings");
     } catch {

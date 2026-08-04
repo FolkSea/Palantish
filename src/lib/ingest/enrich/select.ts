@@ -13,7 +13,7 @@ export function selectEnricher(
 ): Enricher {
   const key = serverEnv.anthropicApiKey;
   return new HybridEnricher(
-    key ? new LlmEnricher(key, memoryBrief) : null,
+    key ? new LlmEnricher(key, memoryBrief, extraGroups) : null,
     extraGroups,
     report,
     serverEnv.enrichStrategy,

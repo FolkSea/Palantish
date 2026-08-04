@@ -84,14 +84,15 @@ export type IngestResult = {
 // the batch loop - source stats, dropped items, label memory, the end-of-run
 // reflection and the summary. Those last two are large single LLM calls; when
 // the budget left them too little time the reflection simply timed out and no
-// memory was ever written.
-const RUN_BUDGET_MS = Number(process.env.INGEST_RUN_BUDGET_MS) || 180000;
+// memory was ever written. 240s keeps ~60s for that tail, which has been enough
+// in practice, and buys a third more enrichment per run than 180s did.
+const RUN_BUDGET_MS = Number(process.env.INGEST_RUN_BUDGET_MS) || 240000;
 
 // How many candidates are enriched concurrently. Each is one LLM call that
 // fetches and analyses the article, so this is I/O-bound - the ceiling is the
 // Anthropic rate limit, not local CPU. BATCH_SIZE defaults to this so a batch is
 // exactly one wave. Override with INGEST_ENRICH_CONCURRENCY.
-const ENRICH_CONCURRENCY = Number(process.env.INGEST_ENRICH_CONCURRENCY) || 6;
+const ENRICH_CONCURRENCY = Number(process.env.INGEST_ENRICH_CONCURRENCY) || 10;
 
 export async function runIngest(
   options?: { sourceIds?: string[] },
@@ -201,9 +202,22 @@ export async function runIngest(
     ilog(
       `pulled ${feedCandidates.length} feed items (${feedErrors.length} feed errors)`,
     );
-    const fresh = selectNewCandidates(allCandidates, existing);
+    // Newest first, across all feeds rather than feed by feed.
+    //
+    // The order used to be whatever order the feeds were pulled in, so a large
+    // backlog drained one feed at a time and the feeds at the end of the list
+    // waited many runs. Each pull keeps only a feed's newest MAX_ITEMS_PER_FEED,
+    // so an item that waits long enough falls out of that window and is never
+    // ingested at all - and under the old order that risk fell on whole feeds.
+    // Sorting by date puts the freshest reporting on the dashboard first and
+    // leaves the roll-out risk with the oldest candidates, where it belongs.
+    const fresh = selectNewCandidates(allCandidates, existing).sort(
+      (a, b) =>
+        (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0),
+    );
     ilog(
-      `${allCandidates.length} candidates, ${fresh.length} new after dedup; enriching (concurrency 6)...`,
+      `${allCandidates.length} candidates, ${fresh.length} new after dedup; ` +
+        `enriching (concurrency ${ENRICH_CONCURRENCY}, newest first)...`,
     );
 
     // Per-item logging: which items the rules classify locally vs escalate to

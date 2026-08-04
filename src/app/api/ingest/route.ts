@@ -1,6 +1,7 @@
 import { NextResponse, after, type NextRequest } from "next/server";
 import { runIngest } from "@/lib/ingest/pipeline";
 import { serverEnv } from "@/lib/env";
+import { triggerIngestRun } from "@/lib/ingest/chain";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // allow the pipeline up to 5 minutes
@@ -25,24 +26,6 @@ function isAuthorized(req: NextRequest): boolean {
   return false;
 }
 
-/**
- * Fire the next run in the chain. The successor is asked to start in the
- * background so it answers immediately: this call resolves in milliseconds and
- * the current invocation can exit, instead of being held open for the whole of
- * the next run (which would blow through maxDuration).
- */
-async function triggerNext(req: NextRequest, chain: number): Promise<void> {
-  const url = new URL("/api/ingest", req.nextUrl.origin).toString();
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      "x-ingest-secret": serverEnv.ingestCronSecret,
-      "x-ingest-chain": String(chain),
-      "x-ingest-background": "1",
-    },
-  });
-}
-
 /** Run the pipeline, then chain another run if candidates were deferred. */
 async function runAndMaybeChain(req: NextRequest, chain: number) {
   const result = await runIngest();
@@ -56,7 +39,7 @@ async function runAndMaybeChain(req: NextRequest, chain: number) {
       );
     } else {
       try {
-        await triggerNext(req, chain + 1);
+        await triggerIngestRun(req.nextUrl.origin, chain + 1);
       } catch (err) {
         // A broken chain just means the backlog waits for the next cron.
         console.warn(
