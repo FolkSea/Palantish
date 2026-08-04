@@ -88,7 +88,13 @@ const EXPAND_TARGETS: ExpandTarget[] = [
 // depth 3 is thousands of nodes, and an unbounded walk would hang the browser
 // long before it finished being useful.
 const DEPTH_OPTIONS = [1, 2, 3, 4, 5, Infinity];
-const MAX_NODES = 1200;
+// What one expand may ADD, not how large the graph may be. An absolute ceiling
+// broke the whole-corpus view, which opens at ~1,400 nodes: every expand was
+// already over the limit, so it refused before making a single request. What
+// needs bounding is the growth this one walk causes.
+const MAX_NEW_NODES = 800;
+// A backstop for the renderer itself, well above any hand-built graph.
+const MAX_NODES = 6000;
 const MAX_REQUESTS = 300;
 
 function toElements(g: GraphData): ElementDefinition[] {
@@ -234,11 +240,16 @@ export default function GraphView({
     let requests = 0;
     let capped = false;
     let level = 0;
+    const startedAt = cy.nodes().length;
 
     while (frontier.length && level < depth) {
       const next: string[] = [];
       for (const id of frontier) {
-        if (requests >= MAX_REQUESTS || cy.nodes().length >= MAX_NODES) {
+        if (
+          requests >= MAX_REQUESTS ||
+          cy.nodes().length - startedAt >= MAX_NEW_NODES ||
+          cy.nodes().length >= MAX_NODES
+        ) {
           capped = true;
           break;
         }
@@ -274,7 +285,8 @@ export default function GraphView({
     setBusy(false);
     if (capped) {
       setError(
-        `Stopped at ${cy.nodes().length} nodes - narrow the expansion or use fewer levels.`,
+        `Stopped after adding ${cy.nodes().length - startedAt} nodes ` +
+          `(${cy.nodes().length} in total) - narrow the expansion or use fewer levels.`,
       );
     }
   }
@@ -466,7 +478,8 @@ export default function GraphView({
           </select>
         </label>
         <p className="mt-1 text-[10px] leading-tight text-slate-400">
-          How far a right-click expand reaches. Stops at {MAX_NODES} nodes.
+          How far a right-click expand reaches. Adds at most {MAX_NEW_NODES}{" "}
+          nodes at a time.
         </p>
 
         <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-2 text-[10px] text-slate-500">

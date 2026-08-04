@@ -52,7 +52,17 @@ export type GraphNode = {
   degree?: number;
 };
 
-export type GraphEdge = { id: string; source: string; target: string };
+export type GraphEdge = {
+  id: string;
+  source: string;
+  target: string;
+  /**
+   * How many entities the two endpoints share, for edges that collapse several
+   * shared indicators into one connection (the report network). Undefined on a
+   * plain edge, which represents exactly one relationship.
+   */
+  weight?: number;
+};
 
 export type GraphData = { nodes: GraphNode[]; edges: GraphEdge[] };
 

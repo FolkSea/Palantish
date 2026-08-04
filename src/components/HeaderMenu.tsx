@@ -165,6 +165,15 @@ export function HeaderMenu({ isAdministrator }: { isAdministrator: boolean }) {
             Personal Feed
           </Link>
           <Link
+            href="/network"
+            role="menuitem"
+            className={itemCls}
+            onClick={() => setOpen(false)}
+          >
+            <MenuIcon d="M5 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM19 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM7 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6.5 5.5 17.5 7M6 8v9M8.5 18.5 16.5 17M17.5 9 8.5 17" />
+            Report network
+          </Link>
+          <Link
             href="/reading-list"
             role="menuitem"
             className={itemCls}
