@@ -24,6 +24,21 @@ const apply = args.includes("--apply");
 const positional = args.filter((a) => !a.startsWith("--"));
 const [argUrl, argKey] = positional;
 
+// An unset shell variable expands to an empty argument, so `prune-iocs
+// "$PROD_URL" "$PROD_KEY"` with those unset used to fall quietly back to
+// .env.local and prune the LOCAL database instead - reporting a clean result
+// for a database nobody asked about. Meaning to target a project and missing is
+// an error, not a reason to pick a different one.
+if (positional.length > 0 && (!argUrl || !argKey)) {
+  console.error(
+    "A target was given but is incomplete - check the variables are set.\n" +
+      `  url: ${argUrl ? argUrl : "(empty)"}\n` +
+      `  key: ${argKey ? "(provided)" : "(empty)"}\n` +
+      "Pass both, or pass neither to use .env.local.",
+  );
+  process.exit(1);
+}
+
 let SUPABASE_URL = argUrl || process.env.NEXT_PUBLIC_SUPABASE_URL;
 let SERVICE_ROLE_KEY = argKey || process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
@@ -51,6 +66,11 @@ async function main() {
   const db = createClient<Database>(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  // Always say which database this is about to read. A prune reporting "0 rows"
+  // is only good news if it ran against the project you meant.
+  const local = /localhost|127\.0\.0\.1/.test(SUPABASE_URL);
+  console.log(`Target: ${SUPABASE_URL}${local ? "  (LOCAL)" : ""}\n`);
 
   const { data: allow, error: allowErr } = await db
     .from("ioc_allowlist")
