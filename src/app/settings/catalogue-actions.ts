@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureAuthenticated } from "@/lib/auth";
+import { ensureAuthenticated, getAdministratorClient } from "@/lib/auth";
+import { findActorCollision } from "@/lib/actor-collision";
 import { toAscii } from "@/lib/text";
 import {
   MOTIVATIONS,
@@ -114,6 +115,26 @@ async function rescanUnattributed(
   return updated;
 }
 
+async function requireAdministrator(): Promise<
+  { ok: false; error: string } | null
+> {
+  return (await getAdministratorClient())
+    ? null
+    : { ok: false, error: "Administrator access required." };
+}
+
+/**
+ * Add an actor the catalogue does not have.
+ *
+ * Open to any analyst, because meeting an unlisted actor mid-report is exactly
+ * when one gets added, and the report viewer is where that happens. Strictly
+ * create, though: an analyst may introduce an actor but never redefine one, so
+ * a proposal colliding with an existing name or alias is refused rather than
+ * merged. Changing and removing entries stay with administrators.
+ *
+ * The rescan that follows only fills in reports with no specific adversary (see
+ * rescanUnattributed), so adding cannot re-point existing attribution.
+ */
 export async function addActor(input: ActorInput): Promise<ActorResult> {
   const unauth = await ensureAuthenticated();
   if (unauth) return { ok: false, error: unauth };
@@ -121,6 +142,33 @@ export async function addActor(input: ActorInput): Promise<ActorResult> {
   if (!row.name) return { ok: false, error: "Name is required." };
 
   const db = createAdminClient();
+
+  // Checked here so the analyst is told which actor they have hit and under
+  // which name; the unique index on lower(name) is the backstop for the race
+  // between this read and the insert.
+  const { data: existing } = await db
+    .from("adversaries")
+    .select("id, name, community_identifiers, internal_alternative_names");
+  const clash = findActorCollision(
+    { name: row.name, aliases: row.community_identifiers },
+    (existing ?? []).map((a) => ({
+      id: a.id,
+      name: a.name,
+      aliases: [
+        ...(a.community_identifiers ?? []),
+        ...(a.internal_alternative_names ?? []),
+      ],
+    })),
+  );
+  if (clash) {
+    return {
+      ok: false,
+      error:
+        `"${clash.actor.name}" already covers "${clash.on}". ` +
+        `Ask an administrator to amend it rather than adding a second entry.`,
+    };
+  }
+
   const { data, error } = await db
     .from("adversaries")
     .insert(row)
@@ -133,12 +181,14 @@ export async function addActor(input: ActorInput): Promise<ActorResult> {
   return { ok: true, actor: data as ActorRecord };
 }
 
+/** Amend an actor. Administrators only: an edit redefines who existing and
+ * future reporting is attributed to, across the whole corpus. */
 export async function updateActor(
   id: string,
   input: ActorInput,
 ): Promise<ActorResult> {
-  const unauth = await ensureAuthenticated();
-  if (unauth) return { ok: false, error: unauth };
+  const denied = await requireAdministrator();
+  if (denied) return denied;
   const row = actorRow(input);
   if (!row.name) return { ok: false, error: "Name is required." };
 
@@ -155,11 +205,12 @@ export async function updateActor(
   return { ok: true, actor: data as ActorRecord };
 }
 
+/** Remove an actor. Administrators only, for the same reason as amending. */
 export async function deleteActor(
   id: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const unauth = await ensureAuthenticated();
-  if (unauth) return { ok: false, error: unauth };
+  const denied = await requireAdministrator();
+  if (denied) return denied;
   const db = createAdminClient();
   const { error } = await db.from("adversaries").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };

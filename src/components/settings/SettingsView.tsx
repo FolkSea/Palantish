@@ -115,7 +115,14 @@ export function SettingsView({
     role === "administrator"
       ? TABS
       : TABS.filter((item) =>
-          !["users", "sources", "dropped", "review", "memory"].includes(item.id),
+          ![
+            "users",
+            "sources",
+            "actors",
+            "dropped",
+            "review",
+            "memory",
+          ].includes(item.id),
         );
 
   return (
@@ -165,7 +172,7 @@ export function SettingsView({
           <UsersPanel initialUsers={users} />
         ) : tab === "sources" && role === "administrator" ? (
           <SourcesPanel initialSources={sources} />
-        ) : tab === "actors" ? (
+        ) : tab === "actors" && role === "administrator" ? (
           <ActorsPanel initialActors={actors} />
         ) : tab === "hidden" ? (
           <HiddenPanel initialHidden={hidden} />

@@ -446,8 +446,19 @@ export async function getReportIndicatorsAction(
   return { ok: true, indicators: grouped, kind: "intel", notes, labels, attribution, allowlist };
 }
 
-/** Delete an ioc's link to a report (and the ioc row if it becomes orphaned),
- * so an operator can remove an indicator scraped by mistake. */
+/**
+ * Delete an ioc's link to a report (and the ioc row if it becomes orphaned), so
+ * an operator can remove an indicator scraped by mistake.
+ *
+ * Open to any analyst, deliberately. Correcting a bad indicator on the report
+ * in front of you is ordinary collaborative work, and the mistakes here are the
+ * kind anyone reading a report will spot. Note this is a weaker gate than
+ * removeFlaggedIndicators in settings/review-actions, which is administrator
+ * only: that one acts on the corpus in bulk from a review queue and also
+ * allow-lists the value against future ingests, which is a standing decision
+ * rather than a correction. Both are intentional; do not "make them
+ * consistent" without deciding which workflow you mean.
+ */
 export async function deleteReportIocAction(
   rawHash: string,
   value: string,
