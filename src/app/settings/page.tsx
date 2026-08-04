@@ -23,11 +23,11 @@ export const maxDuration = 300;
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; source?: string }>;
 }) {
   // ?tab= lets a notification open the panel it is about, rather than dropping
   // the reader on Account to go looking.
-  const { tab } = await searchParams;
+  const { tab, source: droppedSource } = await searchParams;
   const auth = await getAuthenticatedClient();
   if (!auth) redirect("/login");
   const { supabase, user, role } = auth;
@@ -52,13 +52,22 @@ export default async function SettingsPage({
     // eslint-disable-next-line react-hooks/purity
     Date.now() - 30 * 24 * 60 * 60 * 1000,
   ).toISOString();
-  const { data: droppedRows } = administrator
-    ? await supabase
+  // Narrowed server-side when a feed is named, not after the fact: the limit
+  // below is a window over ALL feeds, so filtering a 500-row page in the client
+  // showed nothing for any feed whose drops fell outside it - the drop chart
+  // promised six and the list showed none.
+  const droppedQuery = administrator
+    ? supabase
         .from("dropped_items")
         .select("raw_hash, title, url, source_name, reason, created_at")
         .gte("created_at", droppedCutoff)
         .order("created_at", { ascending: false })
         .limit(500)
+    : null;
+  const { data: droppedRows } = droppedQuery
+    ? await (droppedSource
+        ? droppedQuery.eq("source_name", droppedSource)
+        : droppedQuery)
     : { data: [] };
   const dropped = (droppedRows ?? []).map((d) => ({
     rawHash: d.raw_hash,
@@ -191,6 +200,7 @@ export default async function SettingsPage({
         displayName={displayName}
         focus={focus}
         initialTab={parseSettingsTab(tab)}
+      droppedSource={droppedSource}
       sources={(sources ?? []) as SettingsSource[]}
         users={users}
         actors={(actors ?? []) as ActorRecord[]}

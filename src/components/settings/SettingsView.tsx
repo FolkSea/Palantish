@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AccountPanel, type Focus } from "./AccountPanel";
 import { SourcesPanel } from "./SourcesPanel";
 import { HiddenPanel, type HiddenPost } from "./HiddenPanel";
@@ -23,7 +23,7 @@ import type { AccountRole } from "@/lib/account-role";
 import type { ReadingPrefs } from "@/lib/reading-prefs";
 import type { ManagedUser } from "@/lib/user-management-types";
 import type { SubscriptionRow } from "@/app/settings/subscription-actions";
-import type { SettingsTab as Tab } from "@/lib/settings-tabs";
+import { parseSettingsTab, type SettingsTab as Tab } from "@/lib/settings-tabs";
 
 export type SettingsSource = {
   id: string;
@@ -74,6 +74,7 @@ export function SettingsView({
   subscriptionOptions,
   reading,
   initialTab,
+  droppedSource,
 }: {
   email: string;
   role: AccountRole;
@@ -92,8 +93,24 @@ export function SettingsView({
   reading: ReadingPrefs;
   /** Which panel to open on, so a notification can link straight to it. */
   initialTab?: Tab;
+  /** Narrows the Dropped panel to one feed, from its drop chart. */
+  droppedSource?: string;
 }) {
-  const [tab, setTab] = useState<Tab>(initialTab ?? "account");
+  // The URL owns which panel is showing, not local state.
+  //
+  // It was useState(initialTab), which reads the prop once - so ?tab= worked on
+  // a fresh load and was silently ignored on a client-side navigation. Linking
+  // to a panel from inside the page (the drop chart's "see all") therefore
+  // changed the URL and nothing else. Deriving it also makes the tabs
+  // linkable and back-button friendly, which they were not.
+  const params = useSearchParams();
+  const tab: Tab =
+    parseSettingsTab(params.get("tab") ?? undefined) ?? initialTab ?? "account";
+  const router = useRouter();
+  const setTab = (next: Tab) => {
+    // replace, not push: flicking through tabs should not fill the history.
+    router.replace(`/settings?tab=${next}`, { scroll: false });
+  };
   const tabs =
     role === "administrator"
       ? TABS
@@ -153,7 +170,7 @@ export function SettingsView({
         ) : tab === "hidden" ? (
           <HiddenPanel initialHidden={hidden} />
         ) : tab === "dropped" && role === "administrator" ? (
-          <DroppedPanel initial={dropped} />
+          <DroppedPanel initial={dropped} source={droppedSource} />
         ) : tab === "review" && role === "administrator" ? (
           <ReviewPanel initial={reviewFlags} status={reviewStatus} />
         ) : tab === "memory" && role === "administrator" ? (

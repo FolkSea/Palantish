@@ -9,6 +9,7 @@ import {
 } from "@/lib/feed-status";
 import { formatDateTime } from "@/lib/format";
 import { keepShade } from "@/lib/keep-rate";
+import { DropReasonsPopup } from "./DropReasonsPopup";
 import { RowMenu } from "./RowMenu";
 import {
   addSource,
@@ -94,22 +95,42 @@ function byName(a: SettingsSource, b: SettingsSource) {
 }
 
 /** Cumulative kept vs dropped counts for a feed, with the keep rate. */
-function KeepDrop({ kept, dropped }: { kept: number; dropped: number }) {
+function KeepDrop({
+  kept,
+  dropped,
+  onShowReasons,
+}: {
+  kept: number;
+  dropped: number;
+  onShowReasons?: () => void;
+}) {
   const { background, keptPercent } = keepShade(kept, dropped);
   if (keptPercent === null) return <span className="text-slate-400">-</span>;
+  // Clickable only when there is something to explain.
+  const Tag = dropped > 0 && onShowReasons ? "button" : "span";
   return (
-    <span
+    <Tag
+      {...(Tag === "button"
+        ? {
+            type: "button" as const,
+            onClick: onShowReasons,
+            title: `${keptPercent}% kept - see why ${dropped} were dropped`,
+          }
+        : {})}
       // The tint is a second reading of the numbers beside it, never the only
       // one - the figures and the percentage still say it in text.
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5"
+      className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${
+        Tag === "button"
+          ? "cursor-pointer ring-offset-1 hover:ring-2 hover:ring-slate-300"
+          : ""
+      }`}
       style={background ? { backgroundColor: background } : undefined}
-      title={`${keptPercent}% of this feed's candidates were kept`}
     >
       <span className="font-medium text-emerald-800">{kept}</span>
       <span className="text-slate-400">/</span>
       <span className="text-slate-600">{dropped}</span>
       <span className="text-[10px] text-slate-500">({keptPercent}% kept)</span>
-    </span>
+    </Tag>
   );
 }
 
@@ -124,6 +145,8 @@ export function SourcesPanel({
   const [ingesting, setIngesting] = useState<string | "all" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  // Which feed's drop reasons are being shown, if any.
+  const [reasonsFor, setReasonsFor] = useState<string | null>(null);
 
   const [nameFilter, setNameFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<"all" | SourceCategory>(
@@ -338,7 +361,11 @@ export function SourcesPanel({
                     <FeedStatus source={s} />
                   </td>
                   <td className="py-2 pr-3 whitespace-nowrap">
-                    <KeepDrop kept={s.posts_kept} dropped={s.posts_dropped} />
+                    <KeepDrop
+                      kept={s.posts_kept}
+                      dropped={s.posts_dropped}
+                      onShowReasons={() => setReasonsFor(s.name)}
+                    />
                   </td>
                   <td className="py-2 text-right">
                     <RowMenu
@@ -368,6 +395,16 @@ export function SourcesPanel({
           </tbody>
         </table>
       </div>
+
+      {reasonsFor ? (
+        <DropReasonsPopup
+          sourceName={reasonsFor}
+          droppedTally={
+            sources.find((s) => s.name === reasonsFor)?.posts_dropped ?? 0
+          }
+          onClose={() => setReasonsFor(null)}
+        />
+      ) : null}
     </section>
   );
 }

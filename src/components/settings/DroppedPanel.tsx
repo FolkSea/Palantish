@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePaginated, PaginationFooter } from "@/components/Pagination";
 import { formatDateTime } from "@/lib/format";
 
@@ -12,13 +13,26 @@ export type DroppedItem = {
   droppedAt: string;
 };
 
-export function DroppedPanel({ initial }: { initial: DroppedItem[] }) {
-  const p = usePaginated(initial, 25);
+export function DroppedPanel({
+  initial,
+  source,
+}: {
+  initial: DroppedItem[];
+  /** Set when arriving from a feed's drop chart - shows only that feed. */
+  source?: string;
+}) {
+  const rows = source
+    ? initial.filter((d) => d.sourceName === source)
+    : initial;
+  const p = usePaginated(rows, 25);
 
   return (
     <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
       <h2 className="text-[13px] font-semibold text-slate-900">
-        Dropped during ingest ({initial.length})
+        Dropped during ingest ({rows.length})
+        {source ? (
+          <span className="ml-1 font-normal text-slate-500">from {source}</span>
+        ) : null}
       </h2>
       <p className="mt-0.5 text-[11px] text-slate-500">
         Candidates the ingest pipeline filtered out (marketing, low-signal crew
@@ -26,7 +40,16 @@ export function DroppedPanel({ initial }: { initial: DroppedItem[] }) {
         useful is being dropped. Last 30 days.
       </p>
 
-      {initial.length === 0 ? (
+      {source ? (
+        <Link
+          href="/settings?tab=dropped"
+          className="mt-1 inline-block text-[11px] text-[#1d4ed8] hover:underline"
+        >
+          Show every feed
+        </Link>
+      ) : null}
+
+      {rows.length === 0 ? (
         <p className="mt-4 text-[12px] text-slate-400">
           Nothing has been dropped recently.
         </p>
