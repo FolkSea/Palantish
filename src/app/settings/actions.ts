@@ -36,6 +36,9 @@ export type SourceResult = {
     active: boolean;
     posts_kept: number;
     posts_dropped: number;
+    last_item_at: string | null;
+    last_fetched_at: string | null;
+    last_error: string | null;
   };
 };
 
@@ -64,8 +67,10 @@ function normalise(input: SourceInput) {
   };
 }
 
+// One literal, not a concatenation: PostgREST infers the row type from the
+// string, and a computed one degrades it to an error type.
 const SELECT =
-  "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped";
+  "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped, last_item_at, last_fetched_at, last_error";
 
 export async function addSource(input: SourceInput): Promise<SourceResult> {
   const unauth = await ensureAdministrator();

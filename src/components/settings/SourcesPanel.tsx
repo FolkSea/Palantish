@@ -2,6 +2,12 @@
 
 import { useState } from "react";
 import type { SettingsSource } from "./SettingsView";
+import {
+  feedHealth,
+  FEED_HEALTH_LABEL,
+  type FeedHealth,
+} from "@/lib/feed-status";
+import { formatDateTime } from "@/lib/format";
 import { RowMenu } from "./RowMenu";
 import {
   addSource,
@@ -32,6 +38,55 @@ const filterCls =
   "rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
 
 type ActiveFilter = "all" | "active" | "off";
+
+const HEALTH_STYLE: Record<FeedHealth, string> = {
+  ok: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  off: "border-slate-300 bg-slate-100 text-slate-500",
+  stale: "border-amber-200 bg-amber-50 text-amber-700",
+  never: "border-amber-200 bg-amber-50 text-amber-700",
+  error: "border-rose-200 bg-rose-50 text-rose-700",
+};
+
+/**
+ * A feed's state, not its switch.
+ *
+ * "Active" used to mean only that the toggle was on, so a feed the dashboard
+ * was warning about still read as Active here - which is the confusion this
+ * replaces. The health rule is shared with the dashboard warning and the
+ * notification, so all three agree.
+ */
+function FeedStatus({ source }: { source: SettingsSource }) {
+  const health = feedHealth({
+    active: source.active,
+    feedUrl: source.feed_url,
+    lastItemAt: source.last_item_at,
+    lastFetchedAt: source.last_fetched_at,
+    lastError: source.last_error,
+  });
+  const detail =
+    health === "error"
+      ? source.last_error
+      : health === "stale" && source.last_item_at
+        ? `Newest item ${formatDateTime(source.last_item_at)}`
+        : health === "never"
+          ? "Nothing has been ingested from this feed"
+          : null;
+  return (
+    <span className="inline-flex flex-col gap-0.5">
+      <span
+        className={`w-fit rounded border px-1.5 py-0.5 text-[10px] uppercase ${HEALTH_STYLE[health]}`}
+        title={detail ?? undefined}
+      >
+        {FEED_HEALTH_LABEL[health]}
+      </span>
+      {detail ? (
+        <span className="max-w-[190px] truncate text-[10px] text-slate-400" title={detail}>
+          {detail}
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 function byName(a: SettingsSource, b: SettingsSource) {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
@@ -234,7 +289,7 @@ export function SourcesPanel({
               <th className="py-1.5 pr-3 font-medium">Category</th>
               <th className="py-1.5 pr-3 font-medium">Type</th>
               <th className="py-1.5 pr-3 font-medium">URL</th>
-              <th className="py-1.5 pr-3 font-medium">Active</th>
+              <th className="py-1.5 pr-3 font-medium">Status</th>
               <th className="py-1.5 pr-3 font-medium">Kept / Dropped</th>
               <th className="py-1.5 text-right font-medium">Actions</th>
             </tr>
@@ -274,15 +329,7 @@ export function SourcesPanel({
                     {(s.feed_type === "rss" ? s.feed_url : s.url) ?? "-"}
                   </td>
                   <td className="py-2 pr-3">
-                    <span
-                      className={`rounded border px-1.5 py-0.5 text-[10px] uppercase ${
-                        s.active
-                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                          : "border-slate-300 bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {s.active ? "Active" : "Off"}
-                    </span>
+                    <FeedStatus source={s} />
                   </td>
                   <td className="py-2 pr-3 whitespace-nowrap">
                     <KeepDrop kept={s.posts_kept} dropped={s.posts_dropped} />

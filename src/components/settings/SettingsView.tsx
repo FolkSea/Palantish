@@ -23,6 +23,7 @@ import type { AccountRole } from "@/lib/account-role";
 import type { ReadingPrefs } from "@/lib/reading-prefs";
 import type { ManagedUser } from "@/lib/user-management-types";
 import type { SubscriptionRow } from "@/app/settings/subscription-actions";
+import type { SettingsTab as Tab } from "@/lib/settings-tabs";
 
 export type SettingsSource = {
   id: string;
@@ -34,18 +35,11 @@ export type SettingsSource = {
   active: boolean;
   posts_kept: number;
   posts_dropped: number;
+  // Feed health, as distinct from the active toggle.
+  last_item_at: string | null;
+  last_fetched_at: string | null;
+  last_error: string | null;
 };
-
-type Tab =
-  | "account"
-  | "subscriptions"
-  | "users"
-  | "sources"
-  | "actors"
-  | "hidden"
-  | "dropped"
-  | "review"
-  | "memory";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "account", label: "Account", hint: "Display name and password" },
@@ -79,6 +73,7 @@ export function SettingsView({
   subscriptions,
   subscriptionOptions,
   reading,
+  initialTab,
 }: {
   email: string;
   role: AccountRole;
@@ -95,8 +90,10 @@ export function SettingsView({
   subscriptions: SubscriptionRow[];
   subscriptionOptions: SubscriptionOptions;
   reading: ReadingPrefs;
+  /** Which panel to open on, so a notification can link straight to it. */
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("account");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "account");
   const tabs =
     role === "administrator"
       ? TABS

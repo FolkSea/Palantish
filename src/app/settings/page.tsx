@@ -8,6 +8,7 @@ import {
   SettingsView,
   type SettingsSource,
 } from "@/components/settings/SettingsView";
+import { parseSettingsTab } from "@/lib/settings-tabs";
 import type { HiddenPost } from "@/components/settings/HiddenPanel";
 import type { Focus } from "@/components/settings/AccountPanel";
 import type { ActorRecord } from "@/lib/actor-catalogue";
@@ -19,7 +20,14 @@ export const dynamic = "force-dynamic";
 // A single-feed update can run inline, so allow the same budget as the cron.
 export const maxDuration = 300;
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  // ?tab= lets a notification open the panel it is about, rather than dropping
+  // the reader on Account to go looking.
+  const { tab } = await searchParams;
   const auth = await getAuthenticatedClient();
   if (!auth) redirect("/login");
   const { supabase, user, role } = auth;
@@ -30,7 +38,7 @@ export default async function SettingsPage() {
     ? await supabase
         .from("sources")
         .select(
-          "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped",
+          "id, name, url, category, feed_type, feed_url, active, posts_kept, posts_dropped, last_item_at, last_fetched_at, last_error",
         )
         .order("name")
     : { data: [] };
@@ -182,7 +190,8 @@ export default async function SettingsPage() {
         role={role}
         displayName={displayName}
         focus={focus}
-        sources={(sources ?? []) as SettingsSource[]}
+        initialTab={parseSettingsTab(tab)}
+      sources={(sources ?? []) as SettingsSource[]}
         users={users}
         actors={(actors ?? []) as ActorRecord[]}
         hidden={hidden}

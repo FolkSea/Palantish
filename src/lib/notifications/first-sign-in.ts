@@ -26,7 +26,7 @@ export async function announceFirstSignIn(
       kind: "new_user",
       title: "New user signed in",
       body: email ? `${email} signed in for the first time.` : undefined,
-      href: "/settings",
+      href: "/settings?tab=users",
       // The subject, not the moment: this is what makes it fire once ever.
       dedupeKey: `new_user:${userId}`,
     });

@@ -65,7 +65,7 @@ describe("buildRunNotifications", () => {
     const iocs = build({ flaggedIocs: 40 }).filter((s) => s.kind === "suspect_iocs");
     expect(iocs).toHaveLength(1);
     expect(iocs[0].title).toBe("40 suspect indicators to review");
-    expect(iocs[0].href).toBe("/settings");
+    expect(iocs[0].href).toBe("/settings?tab=review");
   });
 
   it("says nothing about indicators when none were flagged", () => {
@@ -89,6 +89,9 @@ describe("buildRunNotifications", () => {
     const stale = build({ staleFeeds: 3 }).find((s) => s.kind === "stale_feeds");
     expect(stale?.title).toBe("3 feeds look stale");
     expect(stale?.body).toContain("30 days");
+    // The feed list, not the settings root: the reader should land on the
+    // panel showing which feed is stale.
+    expect(stale?.href).toBe("/settings?tab=sources");
   });
 
   it("gives every notification somewhere to go", () => {

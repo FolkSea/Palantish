@@ -79,7 +79,7 @@ export function buildRunNotifications(outcome: RunOutcome): NewNotification[] {
       // bury everything else in the bell.
       title: `${plural(flaggedIocs, "suspect indicator")} to review`,
       body: "The daily check found indicators that may not be real.",
-      href: "/settings",
+      href: "/settings?tab=review",
       dedupeKey: `suspect_iocs:${runId}`,
     });
   }
@@ -90,7 +90,8 @@ export function buildRunNotifications(outcome: RunOutcome): NewNotification[] {
       title: `Ingest finished with ${plural(errors.length, "error")}`,
       // The first is the one usually worth seeing; the rest are in the run log.
       body: errors[0]?.slice(0, 160) ?? null,
-      href: "/settings",
+      // Feeds, since that is what nearly every ingest error is about.
+      href: "/settings?tab=sources",
       dedupeKey: `ingest_errors:${runId}`,
     });
   }
@@ -100,7 +101,8 @@ export function buildRunNotifications(outcome: RunOutcome): NewNotification[] {
       kind: "stale_feeds",
       title: `${plural(staleFeeds, "feed")} look stale`,
       body: `No items in the last ${staleDays} days, or failing to fetch.`,
-      href: "/settings",
+      // Straight to the feed list, where the state is now shown per feed.
+      href: "/settings?tab=sources",
       dedupeKey: `stale_feeds:${runId}`,
     });
   }
