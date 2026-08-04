@@ -152,9 +152,22 @@ const BENIGN_DOMAINS = [
   "twitter.com", "x.com", "linkedin.com", "facebook.com", "fb.com",
   "instagram.com", "youtube.com", "youtu.be", "reddit.com", "pinterest.com",
   "tiktok.com", "flipboard.com", "whatsapp.com",
+  // The follow-us links a vendor puts in every post. Two GreyNoise reports were
+  // "connected" in the graph solely by this footer - the Bluesky handle, the
+  // Discord invite, the Mastodon profile, the podcast - which is a relationship
+  // between the publisher and itself, not between the reports.
+  "bsky.app", "bsky.social", "discord.gg", "join.slack.com",
+  "infosec.exchange", "mastodon.social", "spotify.com", "threads.net",
   "w3.org", "schema.org", "creativecommons.org", "gravatar.com", "gmpg.org",
   "google-analytics.com", "googletagmanager.com", "doubleclick.net", "feedburner.com",
 ];
+// Deliberately absent, though they appear in the same footers: discord.com,
+// slack.com, t.me and github.com. Each is a real malware-delivery or exfil
+// channel - discord.com/api/webhooks and hooks.slack.com carry stolen data,
+// Telegram channels and GitHub repos host payloads - so excluding the parent
+// domain would suppress genuine indicators to remove a little chrome. The
+// narrower discord.gg and join.slack.com are invitation links only, and carry
+// no such traffic.
 
 // Registrar / managed-DNS nameserver / domain-parking hosts that turn up in IOC
 // appendices (registrar of record, nameservers, WHOIS/abuse contacts) but are

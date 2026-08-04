@@ -278,3 +278,28 @@ describe("code-identifier rejection must not eat live TLDs", () => {
     }
   });
 });
+
+describe("vendor social footers", () => {
+  it("drops the follow-us links that connect a publisher to itself", () => {
+    const i = extractIndicators(
+      "Follow us: https://bsky.app/profile/greynoise.bsky.social , " +
+        "https://discord.gg/VK9ayHSfAd , https://infosec.exchange/@greynoise , " +
+        "https://join.slack.com/t/greynoiseintel/shared_invite/zt-1 , " +
+        "https://open.spotify.com/show/1woJ . C2 at https://real-c2.example.net/p",
+    );
+    expect(i.uris).toEqual(["https://real-c2.example.net/p"]);
+    expect(i.domains.some((d) => d.includes("bsky"))).toBe(false);
+  });
+
+  it("keeps the platforms actually used to deliver and exfiltrate", () => {
+    // Excluding these parents to tidy a footer would discard real indicators:
+    // Discord and Slack webhooks carry stolen data, Telegram and GitHub host
+    // payloads.
+    const i = extractIndicators(
+      "exfil to https://discord.com/api/webhooks/123/abc and " +
+        "https://hooks.slack.com/services/T00/B00 , payload from " +
+        "https://github.com/actor/repo and https://t.me/channel",
+    );
+    expect(i.uris).toHaveLength(4);
+  });
+});
