@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Core, ElementDefinition } from "cytoscape";
 import Link from "next/link";
-import { NODE_COLOR } from "@/lib/graph/build";
+import { NODE_COLOR, parseNodeId } from "@/lib/graph/build";
+import {
+  sharedEntitiesAction,
+  type SharedEntity,
+} from "@/app/network/actions";
 import { edgeWidth } from "@/lib/graph/network";
 import type { GraphData, GraphNode } from "@/lib/graph/types";
 import { NEXUS_ACCENT, type Nexus } from "@/lib/badges";
@@ -75,6 +79,16 @@ function packComponents(cy: Core): void {
   cy.fit(undefined, 40);
 }
 
+// Headings for the shared-indicator list, by the raw iocs.ioc_type.
+const SHARED_GROUP_LABEL: Record<string, string> = {
+  cve: "CVEs",
+  mitre: "Techniques (ATT&CK)",
+  ip: "IP addresses",
+  domain: "Domains",
+  uri: "URLs",
+  file_hash: "File hashes",
+};
+
 function nodeColor(n: GraphNode): string {
   if (n.type === "adversary" && n.nexus)
     return NEXUS_ACCENT[n.nexus as Nexus] ?? NODE_COLOR.adversary;
@@ -95,6 +109,16 @@ export default function NetworkView({
     /** For a connection: the two reports and how much they share. */
     link: { a: string; b: string; weight: number } | null;
   } | null>(null);
+  // The indicators behind the selected connection, fetched on click.
+  const [shared, setShared] = useState<{
+    /** Which connection these belong to, so a slow reply cannot land in a
+     * panel the user has already moved on from. */
+    edgeId: string;
+    entities: SharedEntity[];
+    truncated: boolean;
+    error: string | null;
+  } | null>(null);
+  const [sharedPending, setSharedPending] = useState(false);
   const [minStrength, setMinStrength] = useState(1);
 
   const maxWeight = useMemo(
@@ -227,6 +251,23 @@ export default function NetworkView({
             weight: d.weight,
           },
         });
+        // The strength alone says how related two reports are; which indicators
+        // they share says why, and that is the question an analyst actually has.
+        setShared(null);
+        setSharedPending(true);
+        const edgeId = d.id as string;
+        void sharedEntitiesAction(
+          parseNodeId(d.source as string).key,
+          parseNodeId(d.target as string).key,
+        )
+          .then((res) => {
+            setShared(
+              res.ok
+                ? { edgeId, entities: res.entities, truncated: res.truncated, error: null }
+                : { edgeId, entities: [], truncated: false, error: res.error },
+            );
+          })
+          .finally(() => setSharedPending(false));
       });
       cy.on("tap", (evt) => {
         if (evt.target === cy) setSelected(null);
@@ -285,6 +326,20 @@ export default function NetworkView({
 
   const empty = !graph || graph.nodes.length === 0;
 
+  // Group the shared indicators for display, keeping the order the server sent
+  // (CVEs and techniques first, then network indicators, then hashes).
+  const sharedGroups = useMemo(() => {
+    if (!shared || shared.edgeId !== selected?.node.id) return null;
+    const groups: { key: string; label: string; items: SharedEntity[] }[] = [];
+    for (const e of shared.entities) {
+      const label = SHARED_GROUP_LABEL[e.iocType] ?? e.iocType;
+      const last = groups[groups.length - 1];
+      if (last && last.key === e.iocType) last.items.push(e);
+      else groups.push({ key: e.iocType, label, items: [e] });
+    }
+    return groups;
+  }, [shared, selected]);
+
   return (
     <div className="relative flex-1">
       <div ref={containerRef} className="h-full w-full" />
@@ -335,11 +390,51 @@ export default function NetworkView({
               <p className="text-slate-700">{selected.link.a}</p>
               <p className="my-1 text-center text-slate-400">and</p>
               <p className="text-slate-700">{selected.link.b}</p>
-              <p className="mt-2 text-[11px] text-slate-500">
-                They share {selected.link.weight} indicator
-                {selected.link.weight === 1 ? "" : "s"}. Open either report to
-                see which.
-              </p>
+
+              {sharedPending ? (
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Loading shared indicators...
+                </p>
+              ) : null}
+
+              {shared?.error ? (
+                <p className="mt-2 text-[11px] text-rose-600">{shared.error}</p>
+              ) : null}
+
+              {sharedGroups ? (
+                <div className="mt-2 max-h-[46vh] overflow-y-auto border-t border-slate-100 pt-2">
+                  {sharedGroups.map((g) => (
+                    <div key={g.key} className="mb-2 last:mb-0">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        {g.label} ({g.items.length})
+                      </div>
+                      <ul className="mt-0.5 space-y-0.5">
+                        {g.items.map((e) => (
+                          <li
+                            key={`${e.iocType}:${e.value}`}
+                            // Indicators are long and must not be re-flowed into
+                            // something that reads as a different value.
+                            className="break-all font-mono text-[10.5px] leading-snug text-slate-700"
+                          >
+                            {e.value}
+                            {e.name ? (
+                              <span className="ml-1 font-sans text-slate-400">
+                                {e.name}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  {shared?.truncated ? (
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      Showing the first {sharedGroups.reduce((n, g) => n + g.items.length, 0)}{" "}
+                      of {selected.link.weight}.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </>
           ) : (
             <>

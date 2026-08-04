@@ -2,7 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { nexusForCountry } from "@/lib/actor-classify";
-import { fetchAllPages } from "@/lib/supabase/paging";
+import { fetchAllPages, fetchAllByIds } from "@/lib/supabase/paging";
+import { techniqueInfo } from "@/lib/mitre/techniques";
 import { itemNode, adversaryNodeFor, edge, mergeGraph } from "@/lib/graph/build";
 import { collapseToPairs, type EntityLink } from "@/lib/graph/network";
 import type {
@@ -30,6 +31,89 @@ type ItemRow = {
 };
 
 export type NetworkResult = GraphResult & { droppedEntities?: number };
+
+/** One indicator two reports have in common. */
+export type SharedEntity = {
+  value: string;
+  /** The raw iocs.ioc_type: ip | domain | uri | file_hash | cve | mitre. */
+  iocType: string;
+  /** For a technique, its ATT&CK name when known. */
+  name?: string;
+};
+
+export type SharedEntitiesResult =
+  | { ok: true; entities: SharedEntity[]; truncated: boolean }
+  | { ok: false; error: string };
+
+// A pair can share hundreds of indicators (the strongest here shares 544).
+// Listing every one would be a wall of hashes nobody reads, so the panel shows
+// this many and says how many more there are.
+const SHARED_LIST_CAP = 200;
+
+/**
+ * The indicators two reports have in common.
+ *
+ * Fetched when a connection is clicked rather than shipped with the graph: the
+ * edges already number in the hundreds, and attaching each one's indicator list
+ * would multiply the page payload for data almost all of which is never looked
+ * at.
+ */
+export async function sharedEntitiesAction(
+  itemIdA: string,
+  itemIdB: string,
+): Promise<SharedEntitiesResult> {
+  if (!itemIdA || !itemIdB) return { ok: false, error: "Missing report." };
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Not authorized." };
+
+  const idsFor = async (itemId: string) => {
+    const rows = await fetchAllPages<{ ioc_id: string }>((from, to) =>
+      supabase
+        .from("intel_item_iocs")
+        .select("ioc_id")
+        .eq("intel_item_id", itemId)
+        .order("ioc_id")
+        .range(from, to),
+    );
+    return new Set(rows.map((r) => r.ioc_id));
+  };
+
+  const [a, b] = await Promise.all([idsFor(itemIdA), idsFor(itemIdB)]);
+  const shared = [...a].filter((id) => b.has(id));
+  if (shared.length === 0) return { ok: true, entities: [], truncated: false };
+
+  const rows = await fetchAllByIds<{ id: string; value: string; ioc_type: string }>(
+    shared,
+    (chunk, from, to) =>
+      supabase
+        .from("iocs")
+        .select("id, value, ioc_type")
+        .in("id", chunk)
+        .order("id")
+        .range(from, to),
+  );
+
+  // Group by kind in a fixed order, then alphabetically, so the same pair always
+  // reads the same way and the interesting kinds come first.
+  const ORDER = ["cve", "mitre", "ip", "domain", "uri", "file_hash"];
+  rows.sort((x, y) => {
+    const d = ORDER.indexOf(x.ioc_type) - ORDER.indexOf(y.ioc_type);
+    return d !== 0 ? d : x.value.localeCompare(y.value);
+  });
+
+  const entities: SharedEntity[] = rows.slice(0, SHARED_LIST_CAP).map((r) => ({
+    value: r.value,
+    iocType: r.ioc_type,
+    name:
+      r.ioc_type === "mitre"
+        ? (techniqueInfo(r.value)?.name ?? undefined)
+        : undefined,
+  }));
+  return { ok: true, entities, truncated: rows.length > SHARED_LIST_CAP };
+}
 
 /**
  * The report network: which reports are connected to which, and by how much.
