@@ -364,7 +364,7 @@ export default function NetworkView({
                       href={`/graph?seed=${selected.node.rawHash}`}
                       className="rounded-md border border-[#e5e7eb] px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
                     >
-                      Seed link analysis
+                      Zoom to Cluster
                     </Link>
                   ) : null}
                 </div>
