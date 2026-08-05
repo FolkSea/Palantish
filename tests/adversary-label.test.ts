@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { adversaryLabel, isSpecificAdversary } from "@/lib/badges";
+import {
+  ANIMAL_COUNTRY,
+  adversaryLabel,
+  animalForCountry,
+  isSpecificAdversary,
+} from "@/lib/badges";
 
 describe("isSpecificAdversary", () => {
   it("accepts real group names", () => {
@@ -11,6 +16,24 @@ describe("isSpecificAdversary", () => {
   it("rejects bare animals and placeholders", () => {
     for (const n of ["Bear", "KITTEN", "spider", "Bat", "UNKNOWN", "", null])
       expect(isSpecificAdversary(n)).toBe(false);
+  });
+
+  // These four were missing from the guard while the rest of the app happily
+  // produced them, so a bare "Leopard" drew a lane and a graph node of its own.
+  it("rejects every family the app can produce, not just the big ones", () => {
+    for (const n of Object.keys(ANIMAL_COUNTRY)) {
+      expect(isSpecificAdversary(n)).toBe(false);
+      expect(isSpecificAdversary(n.toLowerCase())).toBe(false);
+    }
+  });
+});
+
+describe("animalForCountry", () => {
+  it("reads the stored country rather than guessing", () => {
+    expect(animalForCountry("India")).toBe("TIGER");
+    expect(animalForCountry(" south korea ")).toBe("CRANE");
+    expect(animalForCountry("Belarus")).toBeNull();
+    expect(animalForCountry(null)).toBeNull();
   });
 });
 
@@ -45,5 +68,21 @@ describe("adversaryLabel", () => {
       adversaryLabel(null, "rest_of_world", "Vietnamese actor targets dissidents"),
     ).toBe("UNID BUFFALO");
     expect(adversaryLabel(null, "rest_of_world", "unknown origin")).toBe("UNID BAT");
+  });
+
+  it("prefers the country on the row to the words in the report", () => {
+    // The card is grouped by the stored country, so the label has to agree with
+    // it: an India-carded report whose summary never says "India" was landing
+    // on the card as UNID BAT.
+    expect(adversaryLabel(null, "rest_of_world", "no country named", "India")).toBe(
+      "UNID TIGER",
+    );
+    // ... and a mention of another country in the prose no longer wins.
+    expect(
+      adversaryLabel(null, "rest_of_world", "attacks on Indian banks", "Pakistan"),
+    ).toBe("UNID LEOPARD");
+    expect(adversaryLabel(null, "rest_of_world", "", "South Korea")).toBe(
+      "UNID CRANE",
+    );
   });
 });

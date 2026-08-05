@@ -1,4 +1,4 @@
-import type { Nexus } from "@/lib/badges";
+import { ANIMAL_COUNTRY, type Nexus } from "@/lib/badges";
 import type { Motivation } from "@/lib/actor-catalogue";
 import { nexusForCountry } from "@/lib/actor-classify";
 import type { GroupEntry } from "./enrich/rules";
@@ -30,21 +30,21 @@ const ANIMAL_NEXUS: Record<string, Nexus> = {
 // adversary from a country outside the big four -> "rest_of_world".
 const NON_STATE_ANIMALS = new Set(["SPIDER", "JACKAL"]);
 
-// Animal cryptonym -> motivation + country. Replaces the old actor_families
-// table; used when loading adversaries so each carries its own classification.
-const ANIMAL_FAMILY: Record<string, { motivation: Motivation; country: string | null }> = {
-  PANDA: { motivation: "nation_state", country: "China" },
-  BEAR: { motivation: "nation_state", country: "Russia" },
-  CHOLLIMA: { motivation: "nation_state", country: "North Korea" },
-  KITTEN: { motivation: "nation_state", country: "Iran" },
-  TIGER: { motivation: "nation_state", country: "India" },
-  WOLF: { motivation: "nation_state", country: "Turkey" },
-  BUFFALO: { motivation: "nation_state", country: "Vietnam" },
-  LEOPARD: { motivation: "nation_state", country: "Pakistan" },
-  BAT: { motivation: "nation_state", country: null },
-  SPIDER: { motivation: "ecrime", country: null },
-  JACKAL: { motivation: "hacktivism", country: null },
+// Motivation per family; every other family is a state-sponsored actor. The
+// countries come from ANIMAL_COUNTRY so this file cannot disagree with the
+// labels the dashboard renders.
+const ANIMAL_MOTIVATION: Record<string, Motivation> = {
+  SPIDER: "ecrime",
+  JACKAL: "hacktivism",
 };
+
+const ANIMAL_FAMILY: Record<string, { motivation: Motivation; country: string | null }> =
+  Object.fromEntries(
+    Object.entries(ANIMAL_COUNTRY).map(([animal, country]) => [
+      animal,
+      { motivation: ANIMAL_MOTIVATION[animal] ?? "nation_state", country },
+    ]),
+  );
 
 /** Classify a CrowdStrike animal (family), e.g. "BAT" -> nation_state / null. */
 export function familyForAnimal(

@@ -128,7 +128,9 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
                           sourceName: b.source_name,
                           date: b.published_at,
                           // Editable in the modal; attributing moves it to research.
-                          adversary: b.crowdstrike_adversary ?? b.adversary_label,
+                          // Label first, as everywhere else: it is the corrected
+                          // form, and the raw column may hold a bare family.
+                          adversary: b.adversary_label ?? b.crowdstrike_adversary,
                           confidence: "medium",
                           rawHash: b.raw_hash,
                         }}

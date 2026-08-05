@@ -84,16 +84,30 @@ export type Nexus =
   | "other";
 
 /**
- * CrowdStrike animal cryptonym per nation-state / eCrime nexus. Used to colour
- * and validate crowdstrike_adversary badges (Panda/Bear/Chollima/Kitten/Spider).
+ * Every CrowdStrike animal family, and the country it implies (null when the
+ * family is not country-specific: BAT is any unidentified state, SPIDER eCrime,
+ * JACKAL hacktivism).
+ *
+ * This is the one list of families in the codebase. It stays in code rather
+ * than the database because it describes the naming convention itself, not the
+ * catalogue: `adversaries` rows carry a name and a country, never a family. It
+ * had drifted into four partial copies - the generic-name guard below, the
+ * rest-of-world lookup, the ingest classifier and the UNID dropdown - which is
+ * how a bare "Kitten" reached the timeline as though it were a group.
  */
-export const CS_ANIMAL_BY_NEXUS: Record<Nexus, string> = {
-  china: "Panda",
-  russia: "Bear",
-  north_korea: "Chollima",
-  iran: "Kitten",
-  rest_of_world: "Tiger",
-  other: "Spider",
+export const ANIMAL_COUNTRY: Record<string, string | null> = {
+  PANDA: "China",
+  BEAR: "Russia",
+  CHOLLIMA: "North Korea",
+  KITTEN: "Iran",
+  TIGER: "India",
+  WOLF: "Turkey",
+  BUFFALO: "Vietnam",
+  LEOPARD: "Pakistan",
+  CRANE: "South Korea",
+  BAT: null,
+  SPIDER: null,
+  JACKAL: null,
 };
 
 // All adversary-name labels share one red scheme, regardless of nexus/animal.
@@ -109,32 +123,47 @@ export const UNID_ANIMAL_BY_NEXUS: Record<Nexus, string> = {
   other: "Spider",
 };
 
-// Within Rest of the World, CrowdStrike animal by country. Falls back to Bat.
-const ROW_ANIMAL_BY_COUNTRY: [RegExp, string][] = [
-  [/\b(india|indian)\b/i, "Tiger"],
-  [/\b(turkey|turkish)\b/i, "Wolf"],
-  [/\b(vietnam|vietnamese)\b/i, "Buffalo"],
-  [/\b(pakistan|pakistani)\b/i, "Leopard"],
-  [/\bsouth korea(n)?\b/i, "Crane"],
-];
+// Country -> animal, for the rest-of-the-world families. Derived, so adding a
+// family above is all it takes.
+const ANIMAL_BY_COUNTRY = new Map(
+  Object.entries(ANIMAL_COUNTRY)
+    .filter(([, country]) => country !== null)
+    .map(([animal, country]) => [country!.toLowerCase(), animal]),
+);
+
+/** The animal family a country implies, or null when it names no family. */
+export function animalForCountry(country: string | null | undefined): string | null {
+  return ANIMAL_BY_COUNTRY.get((country ?? "").trim().toLowerCase()) ?? null;
+}
+
+// Adjective forms, only for the fallback that reads the report text when the
+// row carries no country of its own.
+const COUNTRY_ADJECTIVE: Record<string, string> = {
+  India: "indian",
+  Turkey: "turkish",
+  Vietnam: "vietnamese",
+  Pakistan: "pakistani",
+  "South Korea": "south korean",
+};
+
+const ROW_ANIMAL_BY_COUNTRY: [RegExp, string][] = Object.entries(ANIMAL_COUNTRY)
+  .filter(([, c]) => c !== null && c in COUNTRY_ADJECTIVE)
+  .map(([animal, c]) => [
+    new RegExp(`\\b(${c!.toLowerCase()}|${COUNTRY_ADJECTIVE[c!]})\\b`, "i"),
+    animal,
+  ]);
 
 /** CrowdStrike animal for a Rest-of-the-World item, by country named in text. */
 export function restOfWorldAnimal(text: string): string {
   for (const [re, animal] of ROW_ANIMAL_BY_COUNTRY) if (re.test(text)) return animal;
-  return "Bat";
+  return "BAT";
 }
 
 // Values that name only an animal or a placeholder, i.e. not a specific group.
+// Every family counts: "Kitten" is a naming convention, not an actor.
 const GENERIC_ADVERSARY = new Set([
+  ...Object.keys(ANIMAL_COUNTRY),
   "",
-  "BEAR",
-  "PANDA",
-  "CHOLLIMA",
-  "KITTEN",
-  "SPIDER",
-  "BAT",
-  "TIGER",
-  "JACKAL",
   "UNKNOWN",
   "UNID",
   "UNATTRIBUTED",
@@ -155,11 +184,18 @@ export function adversaryLabel(
   name: string | null | undefined,
   nexus: Nexus,
   text = "",
+  /** The country stored on the row, which beats guessing from the text. */
+  country?: string | null,
 ): string {
   if (isSpecificAdversary(name)) return name as string;
   // Animal (family) is always upper-cased: UNID BAT, UNID PANDA, ...
-  if (nexus === "rest_of_world")
-    return `UNID ${restOfWorldAnimal(text).toUpperCase()}`;
+  if (nexus === "rest_of_world") {
+    // The row states the country; only fall back to the text when it does not.
+    // Reading the text first labelled an India-carded report UNID BAT whenever
+    // its summary happened not to say "India".
+    const animal = animalForCountry(country) ?? restOfWorldAnimal(text);
+    return `UNID ${animal.toUpperCase()}`;
+  }
   return `UNID ${UNID_ANIMAL_BY_NEXUS[nexus].toUpperCase()}`;
 }
 

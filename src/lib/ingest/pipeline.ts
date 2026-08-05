@@ -36,6 +36,7 @@ import { notifyRunOutcome } from "./notify-run";
 import { notifyPocReleases } from "./notify-poc";
 import { extractIndicators, sourceDomain } from "@/lib/report-indicators";
 import { NEXUS_COUNTRY } from "@/lib/actor-classify";
+import { isSpecificAdversary } from "@/lib/badges";
 import { generateAndStoreSummary } from "@/lib/summary/generate";
 import type { EnrichReport } from "./enrich/hybrid";
 import type { EnrichedItem } from "./types";
@@ -295,7 +296,13 @@ export async function runIngest(
           labelGroups,
           item.fetchedText,
         ) ?? null;
-      const attributedActor = item.crowdstrikeAdversary ?? matchedActor;
+      // A bare family - "Kitten", "Bear" - is not an actor, and storing one
+      // here put it on the dashboard as though it were a named group. The
+      // adversary_label below turns the same case into UNID KITTEN, which is
+      // what the reader should see.
+      const attributedActor = isSpecificAdversary(item.crowdstrikeAdversary)
+        ? (item.crowdstrikeAdversary as string)
+        : matchedActor;
 
       // Attribute: prefer the matched adversary's classification, else the nexus.
       const adv = attributedActor
@@ -335,6 +342,7 @@ export async function runIngest(
           item.description,
           labelGroups,
           item.fetchedText,
+          country,
         ),
         cve_id: isExploit ? cveId : null,
         target: isExploit ? item.title.slice(0, 200) : null,

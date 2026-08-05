@@ -1,6 +1,7 @@
 import type { Database } from "@/lib/supabase/database.types";
 import type { GroupEntry } from "@/lib/ingest/enrich/rules";
 import { matchGroup, hasHacktivismKeyword } from "@/lib/ingest/enrich/rules";
+import { adversaryLabel, isSpecificAdversary } from "@/lib/badges";
 
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
 
@@ -48,9 +49,10 @@ export const DEFAULT_FILTERS: TimelineFilters = {
   exploits: true,
 };
 
-// Unattributed streams, one per motivation.
-export const UNID_NATION = "UNID BAT";
-export const UNID_ECRIME = "UNID SPIDER";
+// Unattributed streams, one per motivation. Derived rather than restated, so
+// they cannot drift from the labels the pipeline actually writes.
+export const UNID_NATION = adversaryLabel(null, "rest_of_world");
+export const UNID_ECRIME = adversaryLabel(null, "other");
 export const UNID_HACKTIVISM = "UNID JACKAL";
 
 const EXPLOITS_STREAM = "Exploits";
@@ -103,11 +105,26 @@ export const KIND_LABEL: Record<TimelineKind, string> = {
   exploit: "Exploit",
 };
 
+/**
+ * The lane an item belongs on, taken from what the pipeline stored.
+ *
+ * crowdstrike_adversary is whatever named the actor - the model's answer or a
+ * catalogue match - and is not guaranteed to be a specific group: a report
+ * saying only "an Iranian kitten" could leave a bare "Kitten" there, which was
+ * then drawn as an actor named Kitten. A bare family is not an actor, so it
+ * falls through to the stored label.
+ *
+ * The label is used even when it is a UNID form, because the pipeline already
+ * worked out the right family from the nexus (UNID KITTEN for Iran, UNID PANDA
+ * for China). Discarding it and substituting a fixed UNID BAT threw that away
+ * and put every unattributed nation-state report on one lane, whatever its
+ * nexus.
+ */
 function namedActor(cs: string | null, label: string | null): string | null {
   const fromCs = cs?.trim();
-  if (fromCs) return fromCs;
+  if (isSpecificAdversary(fromCs)) return fromCs as string;
   const l = label?.trim();
-  if (l && !/^unid\b/i.test(l)) return l;
+  if (l) return l;
   return null;
 }
 

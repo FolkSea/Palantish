@@ -1,5 +1,6 @@
 "use server";
 
+import { ANIMAL_COUNTRY } from "@/lib/badges";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -544,30 +545,15 @@ export async function updateReportIocAction(
   return { ok: true, value: normalized };
 }
 
-const UNID_FAMILY_OPTIONS = [
-  "PANDA",
-  "BEAR",
-  "CHOLLIMA",
-  "KITTEN",
-  "TIGER",
-  "WOLF",
-  "BUFFALO",
-  "LEOPARD",
-  "BAT",
-  "SPIDER",
-  "JACKAL",
-].map((a) => `UNID ${a}`);
+// Both derived from the one family list, so a family the app can produce is
+// always a family the editor offers back. CRANE was previously missing from
+// both, which made "UNID CRANE" - a label the app generates itself - read as
+// unrecognised free text.
+const UNID_FAMILY_OPTIONS = Object.keys(ANIMAL_COUNTRY).map((a) => `UNID ${a}`);
 
-const FAMILY_COUNTRIES = [
-  "China",
-  "Russia",
-  "North Korea",
-  "Iran",
-  "India",
-  "Turkey",
-  "Vietnam",
-  "Pakistan",
-];
+const FAMILY_COUNTRIES = Object.values(ANIMAL_COUNTRY).filter(
+  (c): c is string => c !== null,
+);
 
 export async function getAttributionOptionsAction(): Promise<{
   adversaries: string[];

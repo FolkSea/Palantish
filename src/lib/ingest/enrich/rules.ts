@@ -130,6 +130,8 @@ export function computeAdversaryLabel(
   groups: GroupEntry[],
   /** The fetched article, when there is one. */
   body?: string | null,
+  /** The country about to be stored on the row, when one is known. */
+  country?: string | null,
 ): string | null {
   const matched = matchAdversaryGroup(title, description, groups, body);
   // A catalogue hit carries its own nexus, so a report naming a known actor is
@@ -142,6 +144,7 @@ export function computeAdversaryLabel(
     specific,
     effectiveNexus,
     `${title} ${description ?? ""} ${body ?? ""}`,
+    country,
   );
 }
 

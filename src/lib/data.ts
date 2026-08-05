@@ -246,6 +246,7 @@ export async function loadDashboard(): Promise<DashboardData> {
             deriveAdversaryFromText(i.title, i.description, nsGroups),
           nexusForCountry(i.country),
           `${i.title} ${i.description ?? ""}`,
+          i.country,
         ),
       labels: labelsById.get(i.id) ?? [],
     };

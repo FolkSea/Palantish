@@ -89,6 +89,42 @@ function run(
 }
 
 describe("buildTimeline", () => {
+  // Reported from the dashboard: a lane headed "Kitten". A family is a naming
+  // convention, not a group, and the pipeline had already worked out the right
+  // UNID form from the nexus - the lane just was not using it.
+  it("does not make a lane out of a bare animal family", () => {
+    const { events, streams } = run([
+      intel({
+        motivation: "nation_state",
+        country: "Iran",
+        crowdstrike_adversary: "Kitten",
+        adversary_label: "UNID KITTEN",
+      }),
+    ]);
+    expect(events[0].actor).toBe("UNID KITTEN");
+    expect(streams).not.toContain("Kitten");
+  });
+
+  it("keeps each nexus on its own unattributed lane", () => {
+    const { events } = run([
+      intel({
+        motivation: "nation_state",
+        country: "China",
+        adversary_label: "UNID PANDA",
+      }),
+      intel({
+        motivation: "nation_state",
+        country: "Iran",
+        adversary_label: "UNID KITTEN",
+      }),
+    ]);
+    // Both used to collapse onto the one hardcoded UNID BAT lane.
+    expect(events.map((e) => e.actor).sort()).toEqual([
+      "UNID KITTEN",
+      "UNID PANDA",
+    ]);
+  });
+
   it("puts a named nation-state report on its actor lane", () => {
     const { events, streams } = run([
       intel({ motivation: "nation_state", crowdstrike_adversary: "COZY BEAR" }),

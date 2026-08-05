@@ -186,6 +186,8 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     enriched.title,
     enriched.description,
     sortGroups(adversaryGroups),
+    null,
+    country,
   );
   const title = isExploit ? cveId! : enriched.title;
   const confidence = isExploit ? null : "medium";
