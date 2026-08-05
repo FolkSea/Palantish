@@ -9,6 +9,11 @@ import {
   type SharedEntity,
 } from "@/app/network/actions";
 import { edgeWidth } from "@/lib/graph/network";
+import {
+  sliceNetwork,
+  DEFAULT_MIN_STRENGTH,
+  type NetworkSlice,
+} from "@/lib/graph/clusters";
 import type { GraphData, GraphNode } from "@/lib/graph/types";
 import { NEXUS_ACCENT, type Nexus } from "@/lib/badges";
 import { itemHref } from "@/lib/browse-links";
@@ -79,6 +84,29 @@ function packComponents(cy: Core): void {
   cy.fit(undefined, 40);
 }
 
+/**
+ * Show what the slice keeps, hide the rest, and paint each survivor its
+ * cluster's colour.
+ */
+function applySlice(cy: Core, slice: NetworkSlice): void {
+  cy.batch(() => {
+    cy.elements().forEach((el) => {
+      const id = el.id();
+      const shown = slice.nodeIds.has(id) || slice.edgeIds.has(id);
+      el.style("display", shown ? "element" : "none");
+      const color = slice.colorOf.get(id);
+      if (shown && color) el.data("clusterColor", color);
+    });
+  });
+}
+
+/** Fit the view to whatever is currently drawn. */
+function refit(cy: Core): void {
+  const shown = cy.elements().filter((el) => el.style("display") !== "none");
+  if (shown.nonempty()) cy.fit(shown, 40);
+  else cy.fit(undefined, 40);
+}
+
 // Headings for the shared-indicator list, by the raw iocs.ioc_type.
 const SHARED_GROUP_LABEL: Record<string, string> = {
   cve: "CVEs",
@@ -119,12 +147,20 @@ export default function NetworkView({
     error: string | null;
   } | null>(null);
   const [sharedPending, setSharedPending] = useState(false);
-  const [minStrength, setMinStrength] = useState(1);
+  const [minStrength, setMinStrength] = useState(DEFAULT_MIN_STRENGTH);
 
   const maxWeight = useMemo(
     () => graph?.edges.reduce((m, e) => Math.max(m, e.weight ?? 1), 1) ?? 1,
     [graph],
   );
+
+  // What is on the canvas at this threshold, and which cluster each survivor
+  // belongs to. One answer, used for both the picture and the panel beside it.
+  const slice = useMemo(() => sliceNetwork(graph, minStrength), [graph, minStrength]);
+  // The canvas is built once, asynchronously; by the time it settles the slice
+  // is whatever the reader has since chosen, so the layout reads it from here
+  // rather than closing over the value it started with.
+  const sliceRef = useRef(slice);
 
   useEffect(() => {
     let cy: Core | null = null;
@@ -141,6 +177,7 @@ export default function NetworkView({
             label: n.label,
             type: n.type,
             color: nodeColor(n),
+            clusterColor: nodeColor(n),
             icon: iconFor(n.type, n.iocSubtype),
           },
         })),
@@ -151,6 +188,7 @@ export default function NetworkView({
             target: e.target,
             weight: e.weight ?? 1,
             width: edgeWidth(e.weight ?? 1, maxWeight),
+            clusterColor: "#cbd5e1",
             // Actor edges are membership, not shared evidence, so they are drawn
             // as a thin dashed tie and never carry a strength.
             kind: e.weight === undefined ? "actor" : "shared",
@@ -165,7 +203,9 @@ export default function NetworkView({
           {
             selector: "node",
             style: {
-              "background-color": "data(color)",
+              // Cluster colour, not type colour: which structure a node belongs
+              // to is the question here, and shape already says what it is.
+              "background-color": "data(clusterColor)",
               "background-image": "data(icon)",
               "background-fit": "contain",
               "background-width": "62%",
@@ -195,7 +235,7 @@ export default function NetworkView({
             selector: "edge",
             style: {
               width: "data(width)",
-              "line-color": "#cbd5e1",
+              "line-color": "data(clusterColor)",
               "curve-style": "haystack",
               opacity: 0.75,
             },
@@ -224,9 +264,16 @@ export default function NetworkView({
 
       // Run the layout here rather than in the constructor so the components can
       // be re-packed once it has settled.
+      // Laid out in full, then filtered: the threshold changes as the reader
+      // moves the slider, and a layout computed from one setting of it would
+      // scatter every node the moment they did.
       const layout = cy.layout(LAYOUT);
       layout.one("layoutstop", () => {
-        if (cyRef.current) packComponents(cyRef.current);
+        const settled = cyRef.current;
+        if (!settled) return;
+        packComponents(settled);
+        applySlice(settled, sliceRef.current);
+        refit(settled);
       });
       layout.run();
 
@@ -292,39 +339,34 @@ export default function NetworkView({
   }, []);
 
   // Hiding weak connections is the main way to read a graph this dense, so it
-  // filters what is already drawn rather than refetching.
+  // filters what is already drawn rather than refetching. Raising the
+  // threshold splits clusters as their weakest links go, so the colours are
+  // reassigned in the same pass - otherwise two halves of a broken cluster
+  // would go on sharing a colour and read as one.
   useEffect(() => {
+    sliceRef.current = slice;
     const cy = cyRef.current;
     if (!cy) return;
-    cy.batch(() => {
-      cy.edges().forEach((e) => {
-        const w = e.data("weight") ?? 1;
-        const hide = e.data("kind") === "shared" && w < minStrength;
-        e.style("display", hide ? "none" : "element");
-      });
-      cy.nodes().forEach((n) => {
-        const visible = n
-          .connectedEdges()
-          .some((e) => e.style("display") !== "none");
-        n.style("display", visible ? "element" : "none");
-      });
-    });
+    applySlice(cy, slice);
     // Positions are deliberately left alone - a node staying put as the
     // threshold moves is what lets you follow one cluster - but the survivors
     // are scattered across the old extent, so the view has to close in on them
     // or a strict threshold looks like an almost empty canvas.
-    const shown = cy.elements().filter((el) => el.style("display") !== "none");
-    if (shown.nonempty()) cy.fit(shown, 40);
-  }, [minStrength]);
+    refit(cy);
+  }, [slice]);
 
-  const counts = useMemo(() => {
-    const reports = graph?.nodes.filter((n) => n.type === "item").length ?? 0;
-    const actors = graph?.nodes.filter((n) => n.type === "adversary").length ?? 0;
-    const links = graph?.edges.filter((e) => e.weight !== undefined).length ?? 0;
-    return { reports, actors, links };
-  }, [graph]);
+  // Zoom and pan are the two things a reader loses track of on a graph this
+  // size; getting back to the whole picture should not mean reloading the page.
+  function refitNow() {
+    const cy = cyRef.current;
+    if (cy) refit(cy);
+  }
 
   const empty = !graph || graph.nodes.length === 0;
+  // The canvas can be empty while the graph is not: the threshold opens at 3,
+  // and on a small corpus that can hide everything. Saying so beats a blank
+  // page that reads as "no data".
+  const emptyAtThreshold = !empty && slice.nodeIds.size === 0;
 
   // Group the shared indicators for display, keeping the order the server sent
   // (CVEs and techniques first, then network indicators, then hashes).
@@ -346,18 +388,25 @@ export default function NetworkView({
 
       <div className="absolute left-3 top-3 w-56 rounded-[10px] border border-[#e5e7eb] bg-white/95 p-3 text-[11px] shadow-sm">
         <div className="mb-1.5 font-semibold text-slate-700">Report network</div>
+        {/* Counted from what is drawn, not from what was loaded: at a
+            threshold of 3 those are very different numbers, and the one worth
+            showing is the one on the screen. */}
         <dl className="space-y-0.5 text-slate-600">
           <div className="flex justify-between">
             <dt>Reports</dt>
-            <dd className="font-medium text-slate-800">{counts.reports}</dd>
+            <dd className="font-medium text-slate-800">{slice.reports}</dd>
           </div>
           <div className="flex justify-between">
             <dt>Actors</dt>
-            <dd className="font-medium text-slate-800">{counts.actors}</dd>
+            <dd className="font-medium text-slate-800">{slice.actors}</dd>
           </div>
           <div className="flex justify-between">
             <dt>Connections</dt>
-            <dd className="font-medium text-slate-800">{counts.links}</dd>
+            <dd className="font-medium text-slate-800">{slice.links}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt>Clusters</dt>
+            <dd className="font-medium text-slate-800">{slice.clusters}</dd>
           </div>
         </dl>
 
@@ -368,15 +417,24 @@ export default function NetworkView({
           <input
             type="range"
             min={1}
-            max={Math.max(2, Math.min(maxWeight, 40))}
+            max={Math.max(DEFAULT_MIN_STRENGTH, Math.min(maxWeight, 40))}
             value={minStrength}
             onChange={(e) => setMinStrength(Number(e.target.value))}
             className="mt-1 w-full"
           />
         </label>
-        <p className="mt-1 text-[10px] leading-tight text-slate-400">
+        <button
+          type="button"
+          onClick={refitNow}
+          className="mt-2 w-full rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Refit graph
+        </button>
+
+        <p className="mt-2 text-[10px] leading-tight text-slate-400">
           A connection&apos;s strength is how many indicators the two reports
-          share; thicker means more. Dashed amber ties a report to its actor.
+          share; thicker means more. Each cluster has its own colour. Dashed
+          amber ties a report to its actor.
         </p>
       </div>
 
@@ -483,6 +541,13 @@ export default function NetworkView({
         <div className="absolute inset-0 flex items-center justify-center text-[12px] text-slate-500">
           No connected reports yet - indicators have to appear in more than one
           report before a connection exists.
+        </div>
+      ) : null}
+
+      {emptyAtThreshold ? (
+        <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-[12px] text-slate-500">
+          No connection is worth {minStrength} shared indicators. Lower the
+          minimum strength to see the weaker ones.
         </div>
       ) : null}
     </div>

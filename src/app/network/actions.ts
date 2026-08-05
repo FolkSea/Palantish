@@ -123,9 +123,9 @@ export async function sharedEntitiesAction(
  * number of them, because the individual indicators are what the seeded graph
  * is for; here they are evidence for an edge, not things to look at.
  *
- * Reports connected to nothing are omitted. Roughly half the corpus is
- * unconnected, and drawing those as a field of loose dots buries the structure
- * this view exists to show.
+ * A report with no shared indicator is omitted, whatever else is known about
+ * it. Roughly half the corpus is unconnected, and drawing those as a field of
+ * loose dots buries the structure this view exists to show.
  */
 export async function reportNetworkAction(): Promise<NetworkResult> {
   const supabase = await createClient();
@@ -168,22 +168,27 @@ export async function reportNetworkAction(): Promise<NetworkResult> {
 
   const { edges: pairEdges, linked, dropped } = collapseToPairs(links);
 
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [...pairEdges];
+  // Shared indicators are the whole subject of this view, so they decide who
+  // appears. A report with none of its own is not drawn even when an actor
+  // would have vouched for it: an attribution in common is a fact about the
+  // reporting, not evidence that two campaigns are the same one.
+  const keep = new Set(linked);
+
   // Actors. A report attached to an actor that no other report names adds a
   // dangling pair rather than a connection, so an actor has to cover at least
-  // two reports to appear - the same "must connect something" rule the reports
-  // themselves are held to.
+  // two of the reports on the canvas to appear - the same "must connect
+  // something" rule the reports themselves are held to.
   const itemsByActor = new Map<string, ItemRow[]>();
   for (const item of items) {
+    if (!keep.has(item.id)) continue;
     const name = item.crowdstrike_adversary ?? item.adversary_label;
     if (!name) continue;
     const list = itemsByActor.get(name);
     if (list) list.push(item);
     else itemsByActor.set(name, [item]);
   }
-
-  const nodes: GraphNode[] = [];
-  const edges: GraphEdge[] = [...pairEdges];
-  const keep = new Set(linked);
 
   for (const [name, actorItems] of itemsByActor) {
     if (actorItems.length < 2) continue;
@@ -198,10 +203,7 @@ export async function reportNetworkAction(): Promise<NetworkResult> {
     const adv = adversaryNodeFor(name, nexus);
     if (!adv) continue;
     nodes.push(adv);
-    for (const item of actorItems) {
-      keep.add(item.id);
-      edges.push(edge(`item:${item.id}`, adv.id));
-    }
+    for (const item of actorItems) edges.push(edge(`item:${item.id}`, adv.id));
   }
 
   for (const id of keep) {
