@@ -1,6 +1,6 @@
 // Pure helpers for the taxonomy labels the triage agent assigns to a report.
 // A label is `Prefix/PascalValue` - e.g. AI/Claude, Malware/FlyingEagle,
-// Adversary/FancyBear, Target/Zimbra. No DB or server imports, so it is
+// Adversary/FancyBear, Target/Zimbra, Vector/SupplyChain. No DB or server imports, so it is
 // unit-tested directly and shared by the agent and the ingest pipeline.
 
 export const LABEL_PREFIX = {
@@ -8,6 +8,7 @@ export const LABEL_PREFIX = {
   malware: "Malware",
   adversary: "Adversary",
   target: "Target",
+  vector: "Vector",
 } as const;
 
 export type LabelCategory = keyof typeof LABEL_PREFIX;
@@ -37,7 +38,7 @@ export function normalizeLabelValue(raw: string): string {
  */
 export function buildLabel(category: LabelCategory, raw: string): string | null {
   const withoutPrefix = (raw ?? "").replace(
-    /^\s*(ai|malware|adversary|target)\s*\/\s*/i,
+    /^\s*(ai|malware|adversary|target|vector)\s*\/\s*/i,
     "",
   );
   const value = normalizeLabelValue(withoutPrefix);
@@ -51,6 +52,7 @@ const CATEGORY_KEYS: Record<LabelCategory, string[]> = {
   malware: ["malware"],
   adversary: ["adversary", "adversaries", "actor", "actors"],
   target: ["target", "targets", "targetedSystems", "targeted_systems"],
+  vector: ["vector", "vectors"],
 };
 
 function asStringArray(v: unknown): string[] {

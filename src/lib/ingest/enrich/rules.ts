@@ -90,9 +90,30 @@ export function deriveAdversaryFromText(
   title: string,
   description: string | null | undefined,
   groups: GroupEntry[],
+  /** The fetched article, when there is one. */
+  body?: string | null,
 ): string | null {
-  const group = matchGroup(`${title} ${description ?? ""}`.toLowerCase(), groups);
-  return group?.cs ?? null;
+  return matchAdversaryGroup(title, description, groups, body)?.cs ?? null;
+}
+
+/**
+ * The catalogue entry named anywhere in a report - title, feed description, or
+ * the fetched article.
+ *
+ * The body is the important part. Matching used to see only the title and the
+ * feed description, so a report headlined "QuickFox Supply Chain Attack
+ * Delivers FDMTP Backdoor" went unattributed even though the article named
+ * TWILL TYPHOON, which the catalogue already lists as an alias of MUSTANG
+ * PANDA. The alias list was right; nothing ever read the text containing it.
+ */
+export function matchAdversaryGroup(
+  title: string,
+  description: string | null | undefined,
+  groups: GroupEntry[],
+  body?: string | null,
+): GroupEntry | null {
+  const haystack = `${title} ${description ?? ""} ${body ?? ""}`.toLowerCase();
+  return matchGroup(haystack, groups);
 }
 
 /**
@@ -107,11 +128,21 @@ export function computeAdversaryLabel(
   title: string,
   description: string | null | undefined,
   groups: GroupEntry[],
+  /** The fetched article, when there is one. */
+  body?: string | null,
 ): string | null {
-  if (!nexus) return null;
-  const specific =
-    crowdstrikeAdversary ?? deriveAdversaryFromText(title, description, groups);
-  return adversaryLabel(specific, nexus, `${title} ${description ?? ""}`);
+  const matched = matchAdversaryGroup(title, description, groups, body);
+  // A catalogue hit carries its own nexus, so a report naming a known actor is
+  // attributed even when the model offered no nexus of its own. Without this,
+  // recognising the actor in the body still yielded nothing.
+  const effectiveNexus = nexus ?? matched?.nexus ?? null;
+  if (!effectiveNexus) return null;
+  const specific = crowdstrikeAdversary ?? matched?.cs ?? null;
+  return adversaryLabel(
+    specific,
+    effectiveNexus,
+    `${title} ${description ?? ""} ${body ?? ""}`,
+  );
 }
 
 export function isMarketing(c: RawCandidate): boolean {

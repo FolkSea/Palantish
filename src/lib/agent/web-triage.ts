@@ -114,7 +114,7 @@ STEP 2 - CLASSIFY and EXTRACT, then return ONLY strict JSON of this exact shape 
   "dashboardKind": "research" | "breach" | "exploit" | "other",
   "confidence": "confirmed" | "suspected" | "poc",
   "crowdstrikeAdversary": string | null,
-  "labels": { "malware": string[], "adversary": string[], "target": string[], "ai": string[] },
+  "labels": { "malware": string[], "adversary": string[], "target": string[], "vector": string[], "ai": string[] },
   "indicators": {
     "ipv4": string[], "ipv6": string[], "domains": string[], "urls": string[], "fileHashes": string[], "cves": string[]
   },
@@ -127,9 +127,14 @@ STEP 2 - CLASSIFY and EXTRACT, then return ONLY strict JSON of this exact shape 
 RULES:
 - relevant=false for marketing, product news, vendor self-promotion, roundups, opinion, or anything that is not genuine threat intelligence; put a short "reason" when you drop.
 - fetchStatus must reflect what actually happened: "full" only when web_fetch returned the article body; "feed_only" when you fell back to the feed; "failed" when you could not classify at all.
-- nexus: attributed nation-state, "rest_of_world" for another nation-state, "other" for eCrime/hacktivism, else null. crowdstrikeAdversary is the public CrowdStrike cryptonym when one clearly applies, else null.
+- nexus: attributed nation-state, "rest_of_world" for another nation-state, "other" for eCrime/hacktivism, else null. crowdstrikeAdversary is the public CrowdStrike cryptonym when one clearly applies, else null. Report the group even when the article names it under another vendor's alias (Twill Typhoon, Earth Preta and Bronze President are all MUSTANG PANDA); if you are unsure of the cryptonym, give the name the article uses rather than null, and never put a victim or product here.
 - dashboardKind: "exploit" for a CVE/advisory/PoC, "breach" for an unattributed breach/leak/extortion, "research" for named-actor activity or analysis, else "other".
-- labels: short bare names per category, reusing an exact label from the memory brief's "Known labels" list when one matches.
+- labels: short bare names per category, reusing an exact label from the memory brief's "Known labels" list when one matches. The categories are not interchangeable:
+  - adversary: ONLY the attacker - a threat group, crew or state-sponsored actor. Never a victim, never a compromised product, never a vendor.
+  - target: who or what was attacked - the victim organisation or sector, and the software, service or device that was compromised or abused to reach them.
+  - vector: how the attack was delivered, from this closed list ONLY, and only when the report is clearly about it: SupplyChain (the attacker compromised a legitimate product, update, installer, package or dependency to reach its users). Omit the category entirely when none applies.
+  - malware: named malware families, tools and backdoors. ai: AI products or models involved.
+  In a supply-chain report the compromised product is the TARGET and the vector is SupplyChain; the adversary is the group behind it, or no adversary label at all when the report names none. A report titled "QuickFox Supply Chain Attack Delivers FDMTP Backdoor via Trojanized Windows Installer" yields target QuickFox, vector SupplyChain, malware FDMTP - and adversary only if the article names the group.
 - indicators: return ONLY indicators that appear verbatim in the fetched report. Do NOT infer, guess, complete, or invent any value. IPv4/IPv6/domains/urls/fileHashes(MD5/SHA1/SHA256)/cves(CVE-YYYY-NNNN). For each indicator you return, add an { value, excerpt } entry to "evidence" quoting the surrounding text from the report so the value can be verified. If you did not fetch the report, return empty indicator arrays.
 - mitreTechniques: ATT&CK technique ids (T1059, T1059.003) explicitly named in the report.
 - summary: 1-3 plain ASCII sentences of the report's substance.`;

@@ -66,3 +66,32 @@ describe("parseLabels", () => {
     expect(parseLabels({})).toEqual([]);
   });
 });
+
+describe("Vector labels", () => {
+  it("builds a SupplyChain label from the model's wording", () => {
+    expect(buildLabel("vector", "supply chain")).toBe("Vector/SupplyChain");
+    expect(buildLabel("vector", "SupplyChain")).toBe("Vector/SupplyChain");
+  });
+
+  it("lets the category govern the prefix the model prepends", () => {
+    expect(buildLabel("vector", "Vector/SupplyChain")).toBe("Vector/SupplyChain");
+    // The reported bug: a compromised product belongs under Target, and asking
+    // for that category must not leave the model's "Adversary/" prefix on it.
+    expect(buildLabel("target", "Adversary/QuickFox")).toBe("Target/QuickFox");
+  });
+
+  it("reads the vector key from the model's JSON", () => {
+    const out = parseLabels({
+      vector: ["SupplyChain"],
+      target: ["QuickFox"],
+      malware: ["FDMTP"],
+    });
+    expect(out).toContain("Vector/SupplyChain");
+    expect(out).toContain("Target/QuickFox");
+    expect(out).toContain("Malware/FDMTP");
+  });
+
+  it("ignores the category when the model omits it", () => {
+    expect(parseLabels({ target: ["QuickFox"] })).toEqual(["Target/QuickFox"]);
+  });
+});

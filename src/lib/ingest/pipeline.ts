@@ -9,6 +9,7 @@ import { buildGroupsFromAdversaries } from "./adversaries";
 import {
   classifyExploitStatus,
   computeAdversaryLabel,
+  deriveAdversaryFromText,
   isVulnAdvisory,
   sortGroups,
 } from "./enrich/rules";
@@ -282,9 +283,23 @@ export async function runIngest(
       const publishedDate = item.publishedAt.toISOString().slice(0, 10);
       const sourceId = sourceIdByName.get(item.sourceName) ?? null;
 
+      // The actor named anywhere in the report, including the fetched article.
+      // The model reports an actor only when it recognises one; the catalogue
+      // knows the aliases it does not, so this fills the gap deterministically -
+      // an article naming TWILL TYPHOON attributes to MUSTANG PANDA because the
+      // catalogue lists it, whether or not the model made that connection.
+      const matchedActor =
+        deriveAdversaryFromText(
+          item.title,
+          item.description,
+          labelGroups,
+          item.fetchedText,
+        ) ?? null;
+      const attributedActor = item.crowdstrikeAdversary ?? matchedActor;
+
       // Attribute: prefer the matched adversary's classification, else the nexus.
-      const adv = item.crowdstrikeAdversary
-        ? advByName.get(item.crowdstrikeAdversary.toLowerCase())
+      const adv = attributedActor
+        ? advByName.get(attributedActor.toLowerCase())
         : undefined;
       let motivation: string | null = null;
       let country: string | null = null;
@@ -311,14 +326,15 @@ export async function runIngest(
         // Reports carry an attribution confidence (Medium default); exploits use
         // exploit_status (poc/confirmed/suspected) instead.
         confidence: isExploit ? null : "medium",
-        crowdstrike_adversary: item.crowdstrikeAdversary,
+        crowdstrike_adversary: attributedActor,
         // Store the derived adversary label so it can be edited later.
         adversary_label: computeAdversaryLabel(
-          item.crowdstrikeAdversary,
+          attributedActor,
           item.nexus,
           item.title,
           item.description,
           labelGroups,
+          item.fetchedText,
         ),
         cve_id: isExploit ? cveId : null,
         target: isExploit ? item.title.slice(0, 200) : null,
