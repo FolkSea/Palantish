@@ -33,6 +33,36 @@ export type TimelineStream = {
   color: string;
 };
 
+/**
+ * How far back the timeline can look, shortest first.
+ *
+ * Anything past the dashboard's own window is fetched on demand rather than
+ * shipped with every page load, so a reader who never asks for a year of
+ * history never pays for one.
+ */
+export const TIMELINE_RANGES: { days: number; label: string }[] = [
+  { days: 7, label: "7 days" },
+  { days: 14, label: "14 days" },
+  { days: 30, label: "30 days" },
+  { days: 90, label: "90 days" },
+  { days: 182, label: "6 months" },
+  { days: 365, label: "12 months" },
+];
+
+export const DEFAULT_TIMELINE_DAYS = 90;
+
+/**
+ * The nearest offered range for an arbitrary value. Both the stored preference
+ * and the server action take a number from outside, and neither should be able
+ * to ask for an unbounded window.
+ */
+export function normalizeTimelineDays(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_TIMELINE_DAYS;
+  const match = TIMELINE_RANGES.find((r) => r.days === n);
+  return match ? match.days : DEFAULT_TIMELINE_DAYS;
+}
+
 export type TimelineFilters = {
   nation_state: boolean;
   ecrime: boolean;

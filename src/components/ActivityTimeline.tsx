@@ -15,8 +15,10 @@ import "chartjs-adapter-date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { itemHref } from "@/lib/browse-links";
+import { loadTimelineRangeAction } from "@/app/timeline-actions";
 import {
   eventVisible,
+  TIMELINE_RANGES,
   KIND_LABEL,
   CATEGORY_LABEL,
   POC_COLOR,
@@ -86,14 +88,25 @@ export default function ActivityTimeline({
   events,
   streams,
   initialFilters,
+  initialDays,
+  loadedDays,
   now,
 }: {
   events: TimelineEvent[];
   streams: TimelineStream[];
   initialFilters: TimelineFilters;
+  /** The range to open on. */
+  initialDays: number;
+  /** The window `events` covers, which the server matches to initialDays. */
+  loadedDays: number;
   now: number;
 }) {
   const [filters, setFilters] = useState<TimelineFilters>(initialFilters);
+  const [days, setDays] = useState(initialDays);
+  // What we hold, and the window it covers. A shorter range filters this in
+  // place; only a longer one is worth a round trip.
+  const [loaded, setLoaded] = useState({ days: loadedDays, events, streams });
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   function toggle(key: keyof TimelineFilters) {
@@ -103,13 +116,35 @@ export default function ActivityTimeline({
     void createClient().auth.updateUser({ data: { timelineFilters: next } });
   }
 
+  async function changeRange(next: number) {
+    setDays(next);
+    // Persist alongside the filters, so the view survives a reload - the server
+    // then ships that window on the next load and this fetch is not repeated.
+    void createClient().auth.updateUser({ data: { timelineDays: next } });
+    // A shorter window is already in hand; only a longer one needs the server.
+    if (next <= loaded.days) return;
+    setLoading(true);
+    try {
+      const data = await loadTimelineRangeAction(next);
+      setLoaded({ days: next, ...data });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const { datasets, rowLabels, rowColors, xMin, xMax, rows, lanes } = useMemo(() => {
     const xMax = now + DAY / 2;
-    const xMin = now - 30 * DAY;
+    const xMin = now - days * DAY;
 
-    const visibleEvents = events.filter((e) => eventVisible(e, filters));
+    // Lanes follow the events that survive the range and the filters, so
+    // narrowing the window drops the actors it leaves behind with it.
+    const visibleEvents = loaded.events.filter(
+      (e) =>
+        eventVisible(e, filters) &&
+        new Date(`${e.date}T12:00:00Z`).getTime() >= xMin,
+    );
     const present = new Set(visibleEvents.map((e) => e.actor));
-    const lanes = streams.filter((s) => present.has(s.actor));
+    const lanes = loaded.streams.filter((s) => present.has(s.actor));
 
     // Top row = first lane; y counts down so lane 0 sits at the top.
     const yOf = (actor: string) =>
@@ -162,7 +197,7 @@ export default function ActivityTimeline({
       rows: lanes.length,
       lanes,
     };
-  }, [events, streams, filters, now]);
+  }, [loaded, filters, days, now]);
 
   const options: ChartOptions<"scatter"> = {
     responsive: true,
@@ -183,7 +218,12 @@ export default function ActivityTimeline({
         type: "time",
         min: xMin,
         max: xMax,
-        time: { unit: "day", tooltipFormat: "MMM d, yyyy" },
+        // Daily ticks are unreadable past a few weeks; the tooltip still
+        // gives the exact date.
+        time: {
+          unit: days <= 14 ? "day" : days <= 90 ? "week" : "month",
+          tooltipFormat: "MMM d, yyyy",
+        },
         grid: { color: "#f1f5f9" },
         ticks: { color: "#6b7280", font: { size: 10 }, maxRotation: 0 },
       },
@@ -218,9 +258,27 @@ export default function ActivityTimeline({
 
   return (
     <section className="rounded-[10px] border border-[#e5e7eb] bg-white p-4">
-      <h2 className="text-[13px] font-semibold text-slate-900">
-        Activity timeline (last 30 days)
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-[13px] font-semibold text-slate-900">
+          Activity timeline
+        </h2>
+        <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
+          Range
+          <select
+            value={days}
+            disabled={loading}
+            onChange={(e) => void changeRange(Number(e.target.value))}
+            className="rounded-[6px] border border-[#e5e7eb] bg-white px-2 py-1 text-[11px] font-medium text-slate-700 disabled:opacity-50"
+          >
+            {TIMELINE_RANGES.map((r) => (
+              <option key={r.days} value={r.days}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          {loading ? <span className="text-slate-400">Loading...</span> : null}
+        </label>
+      </div>
       <p className="mt-0.5 text-[11px] text-slate-500">
         One lane per adversary; shape denotes the record type. Red marks PoC
         exploits and amber breaches; reports take the actor colour (grey when

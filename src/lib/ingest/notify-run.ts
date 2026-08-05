@@ -4,7 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { notifyQuietly } from "@/lib/notifications/create";
 import { buildRunNotifications } from "@/lib/notifications/run-messages";
-import { TIMELINE_DAYS } from "@/lib/data";
+// Staleness has its own window, independent of how much history the dashboard
+// happens to show.
+import { STALE_DAYS } from "@/lib/feed-status";
 
 type Db = SupabaseClient<Database>;
 
@@ -30,7 +32,7 @@ export async function notifyRunOutcome(
   const notifications = buildRunNotifications({
     ...summary,
     staleFeeds: await staleFeedCount(db),
-    staleDays: TIMELINE_DAYS,
+    staleDays: STALE_DAYS,
   });
   return notifyQuietly(db, notifications, "administrators");
 }
@@ -41,7 +43,7 @@ export async function notifyRunOutcome(
  */
 async function staleFeedCount(db: Db): Promise<number> {
   const cutoff = new Date(
-    Date.now() - TIMELINE_DAYS * 24 * 60 * 60 * 1000,
+    Date.now() - STALE_DAYS * 24 * 60 * 60 * 1000,
   ).toISOString();
   const { count } = await db
     .from("sources")

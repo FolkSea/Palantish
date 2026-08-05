@@ -4,6 +4,9 @@ import {
   eventVisible,
   DEFAULT_FILTERS,
   UNID_NATION,
+  TIMELINE_RANGES,
+  DEFAULT_TIMELINE_DAYS,
+  normalizeTimelineDays,
   UNID_ECRIME,
   UNID_HACKTIVISM,
   POC_COLOR,
@@ -269,5 +272,24 @@ describe("eventVisible", () => {
     const e = { ...base, actor: "Breaches", category: "breach", kind: "breach" } as const;
     expect(eventVisible(e, off("breaches"))).toBe(false);
     expect(eventVisible(e, off("ecrime"))).toBe(true);
+  });
+});
+
+describe("normalizeTimelineDays", () => {
+  it("accepts every offered range", () => {
+    for (const r of TIMELINE_RANGES)
+      expect(normalizeTimelineDays(r.days)).toBe(r.days);
+  });
+
+  // The server action takes this from a POST body, so anything can arrive.
+  it("falls back to the default for anything else", () => {
+    for (const bad of [0, -30, 5000, 45, NaN, "lots", null, undefined, {}])
+      expect(normalizeTimelineDays(bad)).toBe(DEFAULT_TIMELINE_DAYS);
+  });
+
+  it("offers the ranges shortest first", () => {
+    const days = TIMELINE_RANGES.map((r) => r.days);
+    expect(days).toEqual([...days].sort((a, b) => a - b));
+    expect(days).toContain(DEFAULT_TIMELINE_DAYS);
   });
 });

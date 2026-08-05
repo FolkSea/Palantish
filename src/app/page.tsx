@@ -1,9 +1,13 @@
 import { getAuthenticatedClient } from "@/lib/auth";
-import { loadDashboard } from "@/lib/data";
+import { HISTORY_DAYS, loadDashboard, loadTimelineWindow } from "@/lib/data";
 import { SiteHeader } from "@/components/SiteHeader";
 import { readingPrefsFrom } from "@/lib/reading-prefs";
 import ActivityTimeline from "@/components/ActivityTimeline";
-import { DEFAULT_FILTERS, type TimelineFilters } from "@/lib/timeline";
+import {
+  DEFAULT_FILTERS,
+  normalizeTimelineDays,
+  type TimelineFilters,
+} from "@/lib/timeline";
 import { ExecutiveSummaryPanel } from "@/components/ExecutiveSummary";
 import { StaleFeedsPanel } from "@/components/StaleFeedsPanel";
 import { Ticker, Footnote } from "@/components/DashboardSections";
@@ -34,6 +38,15 @@ export default async function DashboardPage() {
     | Partial<TimelineFilters>
     | undefined;
   const timelineFilters: TimelineFilters = { ...DEFAULT_FILTERS, ...savedFilters };
+  // The dashboard ships HISTORY_DAYS. A reader who saved a longer range gets
+  // it loaded here rather than after a round trip - and only they pay for it,
+  // which is the point of not making the default window a year.
+  const timelineDays = normalizeTimelineDays(user?.user_metadata?.timelineDays);
+  const timelineWindow = Math.max(timelineDays, HISTORY_DAYS);
+  const timeline =
+    timelineWindow > HISTORY_DAYS
+      ? await loadTimelineWindow(timelineWindow)
+      : data.timeline;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -54,9 +67,11 @@ export default async function DashboardPage() {
 
       <div className="space-y-4">
         <ActivityTimeline
-          events={data.timeline.events}
-          streams={data.timeline.streams}
+          events={timeline.events}
+          streams={timeline.streams}
           initialFilters={timelineFilters}
+          initialDays={timelineDays}
+          loadedDays={timelineWindow}
           now={timelineNow}
         />
 
