@@ -8,7 +8,11 @@ import {
 import type { GraphData, GraphNode } from "@/lib/graph/types";
 
 function item(id: string): GraphNode {
-  return { id: `item:${id}`, type: "item", label: id };
+  return { id: `item:${id}`, type: "item", label: id, itemKind: "research" };
+}
+/** A CVE advisory: an exploit row, whose title is the CVE id. */
+function advisory(id: string): GraphNode {
+  return { id: `item:${id}`, type: "item", label: id, itemKind: "exploit" };
 }
 function actor(name: string): GraphNode {
   return { id: `adv:${name}`, type: "adversary", label: name };
@@ -110,5 +114,61 @@ describe("clusterColor", () => {
   // Amber is the actor ties; a cluster wearing it would read as one.
   it("leaves the actor tie's amber out of the palette", () => {
     expect(CLUSTER_COLORS).not.toContain("#fbbf24");
+  });
+});
+
+describe("advisory-only clusters", () => {
+  // Several advisories about one CVE are connected because that is how they
+  // were written. It says nothing an analyst did not already know from the
+  // vulnerabilities list.
+  it("drops a cluster made only of CVE advisories", () => {
+    const g: GraphData = {
+      nodes: [advisory("cve1"), advisory("cve2"), item("a"), item("b")],
+      edges: [link("cve1", "cve2", 9), link("a", "b", 9)],
+    };
+    const slice = sliceNetwork(g, 3);
+    expect(slice.clusters).toBe(1);
+    expect(slice.nodeIds.has("item:cve1")).toBe(false);
+    expect(slice.nodeIds.has("item:a")).toBe(true);
+    expect(slice.reports).toBe(2);
+    expect(slice.links).toBe(1);
+  });
+
+  // One piece of reporting makes the advisories context for something.
+  it("keeps a cluster where reporting sits among the advisories", () => {
+    const g: GraphData = {
+      nodes: [advisory("cve1"), advisory("cve2"), item("a")],
+      edges: [link("cve1", "cve2", 9), link("cve2", "a", 9)],
+    };
+    const slice = sliceNetwork(g, 3);
+    expect(slice.clusters).toBe(1);
+    expect(slice.nodeIds.has("item:cve1")).toBe(true);
+    expect(slice.reports).toBe(3);
+  });
+
+  // The threshold breaks clusters apart, and a piece that is all advisories
+  // has to go the same way a whole one would.
+  it("drops a piece that becomes advisory-only when the threshold splits it", () => {
+    const g: GraphData = {
+      nodes: [advisory("cve1"), advisory("cve2"), item("a"), item("b")],
+      edges: [link("cve1", "cve2", 9), link("cve2", "a", 2), link("a", "b", 9)],
+    };
+    expect(sliceNetwork(g, 1).clusters).toBe(1);
+    const cut = sliceNetwork(g, 3);
+    expect(cut.clusters).toBe(1);
+    expect(cut.nodeIds.has("item:cve1")).toBe(false);
+    expect(cut.nodeIds.has("item:a")).toBe(true);
+  });
+
+  // The actor is not reporting; it cannot make an advisory cluster worth
+  // drawing on its own.
+  it("drops an advisory-only cluster even with an actor attached", () => {
+    const g: GraphData = {
+      nodes: [advisory("cve1"), advisory("cve2"), actor("Wicked Panda")],
+      edges: [link("cve1", "cve2", 9), tie("cve1", "Wicked Panda")],
+    };
+    const slice = sliceNetwork(g, 3);
+    expect(slice.nodeIds.size).toBe(0);
+    expect(slice.actors).toBe(0);
   });
 });

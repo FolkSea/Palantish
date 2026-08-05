@@ -38,6 +38,12 @@ export type GraphNode = {
   label: string;
   // Item nodes carry enough to open the report modal without another fetch.
   rawHash?: string | null;
+  /**
+   * intel_items.kind for an item node - research, breach, exploit, other. An
+   * exploit is a CVE advisory whose title is the CVE id, which the network
+   * view treats differently from reporting.
+   */
+  itemKind?: string | null;
   url?: string | null;
   description?: string | null;
   source?: string | null;

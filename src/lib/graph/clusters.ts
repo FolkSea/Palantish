@@ -112,26 +112,29 @@ export function sliceNetwork(
   const strongEnough = (weight: number | undefined) =>
     isActorTie(weight) ? false : (weight as number) >= minStrength;
 
+  const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
+  const isReport = (id: string) => nodeById.get(id)?.type !== "adversary";
+  // An exploit row is a CVE advisory: the pipeline titles it with the CVE id.
+  const isAdvisory = (id: string) => nodeById.get(id)?.itemKind === "exploit";
+
   // A report survives on its own connections. Actor ties then follow the
   // reports that made it, so an actor cannot drag a report back onto a canvas
   // its own evidence was too weak for.
-  const nodeIds = new Set<string>();
-  const edgeIds = new Set<string>();
-  const kept: { id: string; source: string; target: string }[] = [];
+  const shownNodes = new Set<string>();
+  type Kept = { id: string; source: string; target: string; tie: boolean };
+  const kept: Kept[] = [];
   for (const e of graph.edges) {
     if (!strongEnough(e.weight)) continue;
-    edgeIds.add(e.id);
-    kept.push(e);
-    nodeIds.add(e.source);
-    nodeIds.add(e.target);
+    kept.push({ id: e.id, source: e.source, target: e.target, tie: false });
+    shownNodes.add(e.source);
+    shownNodes.add(e.target);
   }
-  const links = kept.length;
 
   // Only reports can survive on their own evidence, so this is exactly the set
   // of reports still on the canvas. It is taken before any actor is added,
   // because an actor that had already been let in would otherwise vouch for
   // the next report on its list and undo the threshold.
-  const survivingReports = new Set(nodeIds);
+  const survivingReports = new Set(shownNodes);
 
   for (const e of graph.edges) {
     if (!isActorTie(e.weight)) continue;
@@ -139,25 +142,53 @@ export function sliceNetwork(
     // report is still here.
     if (!survivingReports.has(e.source) && !survivingReports.has(e.target))
       continue;
-    edgeIds.add(e.id);
-    kept.push(e);
-    nodeIds.add(e.source);
-    nodeIds.add(e.target);
+    kept.push({ id: e.id, source: e.source, target: e.target, tie: true });
+    shownNodes.add(e.source);
+    shownNodes.add(e.target);
   }
 
   const ds = new DisjointSet();
-  for (const id of nodeIds) ds.find(id);
+  for (const id of shownNodes) ds.find(id);
   for (const e of kept) ds.union(e.source, e.target);
 
   const members = new Map<string, string[]>();
-  for (const id of nodeIds) {
+  for (const id of shownNodes) {
     const root = ds.find(id);
     const list = members.get(root);
     if (list) list.push(id);
     else members.set(root, [id]);
   }
 
-  const ordered = [...members.values()].sort(
+  // A cluster of nothing but CVE advisories says only that several advisories
+  // cover the same CVE - which is how they were written, not a finding. The
+  // CVE is already on the vulnerabilities list; here it is a knot of identical
+  // nodes competing with the reporting for the eye. One piece of actual
+  // reporting keeps the cluster, because then the advisories are context for
+  // something.
+  const allAdvisory = (ids: string[]) => {
+    const reports = ids.filter(isReport);
+    return reports.length > 0 && reports.every(isAdvisory);
+  };
+
+  const clustersShown: string[][] = [];
+  const nodeIds = new Set<string>();
+  for (const ids of members.values()) {
+    if (allAdvisory(ids)) continue;
+    clustersShown.push(ids);
+    for (const id of ids) nodeIds.add(id);
+  }
+
+  const edgeIds = new Set<string>();
+  let links = 0;
+  for (const e of kept) {
+    if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue;
+    edgeIds.add(e.id);
+    if (!e.tie) links += 1;
+  }
+
+  // Largest cluster first, so the biggest structures keep the most distinct
+  // colours; the id tie-break makes the same graph colour the same way twice.
+  const ordered = clustersShown.sort(
     (a, b) => b.length - a.length || [...a].sort()[0].localeCompare([...b].sort()[0]),
   );
   const colorOf = new Map<string, string>();
@@ -166,6 +197,7 @@ export function sliceNetwork(
     for (const id of ids) colorOf.set(id, color);
   });
   for (const e of kept) {
+    if (!edgeIds.has(e.id)) continue;
     const color = colorOf.get(e.source);
     if (color) colorOf.set(e.id, color);
   }

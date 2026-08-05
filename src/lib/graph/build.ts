@@ -37,6 +37,7 @@ export type ItemRow = {
   description?: string | null;
   source_name?: string | null;
   published_at?: string | null;
+  kind?: string | null;
 };
 
 export function itemNode(row: ItemRow): GraphNode {
@@ -49,6 +50,7 @@ export function itemNode(row: ItemRow): GraphNode {
     description: row.description ?? null,
     source: row.source_name ?? null,
     date: row.published_at ?? null,
+    itemKind: row.kind ?? null,
   };
 }
 

@@ -14,10 +14,11 @@ import type {
 } from "@/lib/graph/types";
 
 const ITEM_COLS =
-  "id, title, raw_hash, url, description, source_name, published_at, crowdstrike_adversary, adversary_label, country, motivation";
+  "id, kind, title, raw_hash, url, description, source_name, published_at, crowdstrike_adversary, adversary_label, country, motivation";
 
 type ItemRow = {
   id: string;
+  kind: string;
   title: string;
   raw_hash: string;
   url: string | null;
