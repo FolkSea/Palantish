@@ -275,6 +275,23 @@ describe("eventVisible", () => {
   });
 });
 
+describe("tooltip text", () => {
+  it("trims a long description to something a tooltip can show", () => {
+    const long = "x".repeat(500);
+    const { events } = run([intel({ motivation: "nation_state", description: long })]);
+    const shown = events[0].description ?? "";
+    expect(shown.length).toBeLessThan(long.length);
+    expect(shown.endsWith("...")).toBe(true);
+  });
+
+  it("leaves a short description exactly as it is", () => {
+    const { events } = run([
+      intel({ motivation: "nation_state", description: "A short note." }),
+    ]);
+    expect(events[0].description).toBe("A short note.");
+  });
+});
+
 describe("normalizeTimelineDays", () => {
   it("accepts every offered range", () => {
     for (const r of TIMELINE_RANGES)

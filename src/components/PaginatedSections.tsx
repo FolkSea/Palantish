@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { Card, EmptyState } from "@/components/Card";
 import {
   PriorityBadge,
@@ -10,24 +9,25 @@ import {
 import { ReportTitle } from "@/components/ReportDetail";
 import { LabelChips } from "@/components/LabelChips";
 import { ReportTable } from "@/components/ReportTable";
-import { usePaginated, PaginationFooter } from "@/components/Pagination";
+import { useServerPaginated, PaginationFooter } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
 import { sourceHref } from "@/lib/browse-links";
-import { prioritiseVulns } from "@/lib/vuln-priority";
-import type {
-  BreachRow,
-  LabeledIntelRow,
-  VulnerabilityRow,
-} from "@/lib/data";
+import type { PrioritisedVuln } from "@/lib/vuln-priority";
+import type { Page } from "@/lib/page";
+import type { BreachRow, LabeledIntelRow } from "@/lib/data";
+import {
+  breachesPageAction,
+  reportsPageAction,
+  vulnerabilitiesPageAction,
+} from "@/app/dashboard-actions";
 
-export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
-  // Collapse to one row per CVE, assign a priority from the statuses present,
-  // sort by priority (then recency), and drop Low-priority CVEs.
-  const prioritised = useMemo(() => prioritiseVulns(rows), [rows]);
-  const p = usePaginated(prioritised);
+// The rows arrive collapsed to one per CVE, prioritised and sorted on the
+// server - so a page is ten CVEs, not ten reports about three of them.
+export function VulnTable({ page }: { page: Page<PrioritisedVuln> }) {
+  const p = useServerPaginated(page, vulnerabilitiesPageAction);
   return (
     <Card title="Trending exploits and vulnerabilities">
-      {prioritised.length === 0 ? (
+      {p.total === 0 ? (
         <EmptyState>
           No PoC or confirmed-exploited vulnerabilities right now.
         </EmptyState>
@@ -99,11 +99,11 @@ export function VulnTable({ rows }: { rows: VulnerabilityRow[] }) {
   );
 }
 
-export function BreachTable({ rows }: { rows: BreachRow[] }) {
-  const p = usePaginated(rows);
+export function BreachTable({ page }: { page: Page<BreachRow> }) {
+  const p = useServerPaginated(page, breachesPageAction);
   return (
     <Card title="Reported breaches">
-      {rows.length === 0 ? (
+      {p.total === 0 ? (
         <EmptyState>No breaches loaded yet.</EmptyState>
       ) : (
         <>
@@ -161,11 +161,13 @@ export function BreachTable({ rows }: { rows: BreachRow[] }) {
   );
 }
 
-export function ReportsList({ items }: { items: LabeledIntelRow[] }) {
+export function ReportsList({ page }: { page: Page<LabeledIntelRow> }) {
+  const p = useServerPaginated(page, reportsPageAction);
   return (
     <ReportTable
       title="Other reporting"
-      items={items}
+      items={page.rows}
+      pager={p}
       empty="No reports loaded yet."
     />
   );

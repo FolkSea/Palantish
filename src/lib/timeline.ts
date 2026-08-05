@@ -14,6 +14,23 @@ export type TimelineCategory =
   | "breach"
   | "exploit";
 
+/**
+ * The timeline is a chart, so it cannot be paged the way the lists are: every
+ * point in the window has to arrive for the shape of it to mean anything. What
+ * it does not need is the whole report - the description only ever appears in
+ * a hover tooltip, where a thousand words is unreadable anyway, and shipping
+ * them all was most of the page weight.
+ */
+const TOOLTIP_CHARS = 180;
+
+function tooltipText(text: string | null): string | null {
+  if (!text) return null;
+  const trimmed = text.trim();
+  return trimmed.length <= TOOLTIP_CHARS
+    ? trimmed
+    : `${trimmed.slice(0, TOOLTIP_CHARS).trimEnd()}...`;
+}
+
 export type TimelineEvent = {
   id: string;
   date: string; // ISO (yyyy-mm-dd or full)
@@ -170,7 +187,7 @@ function intelEvent(
     category,
     kind: "report",
     title: i.title,
-    description: i.description,
+    description: tooltipText(i.description),
     source: i.source_name,
     url: i.url,
     rawHash: i.raw_hash,
@@ -189,7 +206,7 @@ function breachEvent(
     category,
     kind: "breach",
     title: i.title,
-    description: i.description,
+    description: tooltipText(i.description),
     source: i.source_name,
     url: i.url,
     rawHash: i.raw_hash,
@@ -223,7 +240,9 @@ export function buildTimeline(
         category: "exploit",
         kind: "exploit",
         title: i.cve_id ?? i.title,
-        description: i.target ? `Target: ${i.target}` : i.description,
+        description: i.target
+          ? `Target: ${i.target}`
+          : tooltipText(i.description),
         source: i.source_name,
         url: i.url,
         rawHash: i.raw_hash,

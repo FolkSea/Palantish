@@ -40,6 +40,65 @@ export function usePaginated<T>(items: T[], initial = 10): Paged<T> {
   return { pageItems, size, setSize, page: clamped, setPage, pageCount, total, start, end };
 }
 
+/** One page from the server, and how many rows there are behind it. */
+export type ServerPage<T> = { rows: T[]; total: number };
+
+/**
+ * The same pager, over a list the server holds.
+ *
+ * The dashboard reads a 90-day window but sends one page of it, so paging has
+ * to ask rather than slice. The first page arrives with the page render; every
+ * other one is fetched, and `loading` disables the controls while it is.
+ *
+ * Until the reader moves, the props win: a hidden or deleted item refreshes the
+ * server render, and state held here would have gone on showing the old row.
+ * Once they have paged, fetched data is the only thing that could be right.
+ */
+export function useServerPaginated<T>(
+  first: ServerPage<T>,
+  fetchPage: (page: number, size: number | null) => Promise<ServerPage<T>>,
+  initial: PageSize = 10,
+): Paged<T> & { loading: boolean } {
+  const [size, setSizeState] = useState<PageSize>(initial);
+  const [page, setPageState] = useState(0);
+  const [fetched, setFetched] = useState<ServerPage<T> | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const pristine = page === 0 && size === initial;
+  const view = pristine || !fetched ? first : fetched;
+
+  async function go(nextPage: number, nextSize: PageSize) {
+    setPageState(nextPage);
+    setSizeState(nextSize);
+    setLoading(true);
+    try {
+      setFetched(
+        await fetchPage(nextPage, nextSize === "all" ? null : nextSize),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const total = view.total;
+  const pageCount = size === "all" ? 1 : Math.max(1, Math.ceil(total / size));
+  const clamped = Math.min(page, pageCount - 1);
+  const start = size === "all" ? 0 : clamped * size;
+
+  return {
+    pageItems: view.rows,
+    size,
+    setSize: (s: PageSize) => void go(0, s),
+    page: clamped,
+    setPage: (p: number) => void go(p, size),
+    pageCount,
+    total,
+    start,
+    end: Math.min(total, start + view.rows.length),
+    loading,
+  };
+}
+
 const btn =
   "rounded border border-[#e5e7eb] bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 enabled:hover:bg-slate-50 disabled:opacity-40";
 

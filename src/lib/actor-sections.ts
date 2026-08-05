@@ -1,7 +1,7 @@
 import type { Database } from "@/lib/supabase/database.types";
 import type { GroupEntry } from "@/lib/ingest/enrich/rules";
 import { matchGroup, hasHacktivismKeyword } from "@/lib/ingest/enrich/rules";
-import { NEXUS_ACCENT } from "@/lib/badges";
+import { isSpecificAdversary, NEXUS_ACCENT } from "@/lib/badges";
 
 type IntelItemRow = Database["public"]["Tables"]["intel_items"]["Row"];
 
@@ -32,12 +32,22 @@ export type ActorItem = {
 
 export type LabelsById = Map<string, string[]>;
 
+/**
+ * The three sections of Activity by actor. A card key is only unique within
+ * one of them - "Non Attributed" appears in all three - so a page request has
+ * to name both.
+ */
+export type ActorSection = "nation_state" | "ecrime" | "hacktivism";
+
 export type ActorCard = {
   key: string;
   label: string;
   accent: string; // top-border colour
   flag: string | null; // country flag (nation-state only)
+  /** The page being shown - not necessarily every report on the card. */
   items: ActorItem[];
+  /** Every report on the card, which is what the header counts. */
+  total: number;
 };
 
 function intelToItem(i: IntelItemRow, labels: string[]): ActorItem {
@@ -56,11 +66,16 @@ function intelToItem(i: IntelItemRow, labels: string[]): ActorItem {
   };
 }
 
+/**
+ * The specific group a report names, or null. A bare animal family is a naming
+ * convention rather than an actor, so it never becomes a card of its own - the
+ * same rule the timeline lanes follow.
+ */
 function namedActor(cs: string | null, label: string | null): string | null {
   const fromCs = cs?.trim();
-  if (fromCs) return fromCs;
+  if (isSpecificAdversary(fromCs)) return fromCs as string;
   const l = label?.trim();
-  if (l && !/^unid\b/i.test(l)) return l;
+  if (isSpecificAdversary(l)) return l as string;
   return null;
 }
 
@@ -90,12 +105,13 @@ function toCards(
         accent,
         flag: null,
         items: items.map((it) => ({ ...it, adversary })),
+        total: items.length,
       };
     })
     .sort((a, b) => {
       if (a.label === NON_ATTRIBUTED) return 1;
       if (b.label === NON_ATTRIBUTED) return -1;
-      return b.items.length - a.items.length || a.label.localeCompare(b.label);
+      return b.total - a.total || a.label.localeCompare(b.label);
     });
 }
 

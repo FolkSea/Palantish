@@ -9,7 +9,11 @@ import { ItemActions } from "@/components/ItemActions";
 import { AdversaryBadge, SourceBadge } from "@/components/Badges";
 import { ReportTitle } from "@/components/ReportDetail";
 import { LabelChips } from "@/components/LabelChips";
-import { usePaginated, PaginationFooter } from "@/components/Pagination";
+import {
+  usePaginated,
+  PaginationFooter,
+  type Paged,
+} from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
 import { adversaryHref, sourceHref } from "@/lib/browse-links";
 
@@ -37,6 +41,7 @@ export function ReportTable({
   items,
   empty = "No reports.",
   subtitle,
+  pager,
 }: {
   title: string;
   items: ReportTableRow[];
@@ -44,11 +49,18 @@ export function ReportTable({
   empty?: string;
   /** Optional line under the title, e.g. a count. */
   subtitle?: string;
+  /**
+   * A pager over a list the server holds, for views whose rows do not all
+   * arrive at once. Without it the table pages `items` itself, which is what
+   * the browse, search and feed views want.
+   */
+  pager?: Paged<ReportTableRow> & { loading?: boolean };
 }) {
-  const p = usePaginated(items);
+  const local = usePaginated(items);
+  const p = pager ?? local;
   return (
     <Card title={title} subtitle={subtitle}>
-      {items.length === 0 ? (
+      {p.total === 0 ? (
         <EmptyState>{empty}</EmptyState>
       ) : (
         <>

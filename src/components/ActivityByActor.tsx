@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { ActorCard, ActorItem } from "@/lib/data";
+import { CARD_PAGE_SIZE } from "@/lib/page";
+import type { ActorCard, ActorItem, ActorSection } from "@/lib/data";
+import { actorCardPageAction } from "@/app/dashboard-actions";
 import type { Focus } from "@/components/settings/AccountPanel";
 import {
   AdversaryBadge,
@@ -12,7 +14,7 @@ import { ItemActions } from "@/components/ItemActions";
 import { LabelChips } from "@/components/LabelChips";
 import { adversaryHref, sourceHref } from "@/lib/browse-links";
 import { ReportTitle } from "@/components/ReportDetail";
-import { usePaginated, type Paged } from "@/components/Pagination";
+import { useServerPaginated, type Paged } from "@/components/Pagination";
 import { formatDate } from "@/lib/format";
 
 function displayDate(d: string | null): string {
@@ -31,9 +33,10 @@ export function ActivityByActor({
   hacktivismCards: ActorCard[];
   focus: Focus;
 }) {
-  const nsCount = nationStateCards.reduce((n, c) => n + c.items.length, 0);
-  const ecCount = ecrimeCards.reduce((n, c) => n + c.items.length, 0);
-  const hkCount = hacktivismCards.reduce((n, c) => n + c.items.length, 0);
+  // Totals, not what is on show: each card ships one page of its reports.
+  const nsCount = nationStateCards.reduce((n, c) => n + c.total, 0);
+  const ecCount = ecrimeCards.reduce((n, c) => n + c.total, 0);
+  const hkCount = hacktivismCards.reduce((n, c) => n + c.total, 0);
 
   const startsOpen = (which: Focus) => focus === "all" || focus === which;
 
@@ -51,7 +54,7 @@ export function ActivityByActor({
           {nationStateCards.length ? (
             <CardGrid>
               {nationStateCards.map((c) => (
-                <ActorCardView key={c.key} card={c} />
+                <ActorCardView key={c.key} card={c} section="nation_state" />
               ))}
             </CardGrid>
           ) : (
@@ -67,7 +70,7 @@ export function ActivityByActor({
           {ecrimeCards.length ? (
             <CardGrid>
               {ecrimeCards.map((c) => (
-                <ActorCardView key={c.key} card={c} />
+                <ActorCardView key={c.key} card={c} section="ecrime" />
               ))}
             </CardGrid>
           ) : (
@@ -83,7 +86,7 @@ export function ActivityByActor({
           {hacktivismCards.length ? (
             <CardGrid>
               {hacktivismCards.map((c) => (
-                <ActorCardView key={c.key} card={c} />
+                <ActorCardView key={c.key} card={c} section="hacktivism" />
               ))}
             </CardGrid>
           ) : (
@@ -159,8 +162,18 @@ function Empty({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ActorCardView({ card }: { card: ActorCard }) {
-  const p = usePaginated(card.items, 5);
+function ActorCardView({
+  card,
+  section,
+}: {
+  card: ActorCard;
+  section: ActorSection;
+}) {
+  const p = useServerPaginated(
+    { rows: card.items, total: card.total },
+    (page, size) => actorCardPageAction(section, card.key, page, size),
+    CARD_PAGE_SIZE,
+  );
   return (
     <div className="flex flex-col rounded-[10px] border border-[#e5e7eb] bg-white">
       <div
@@ -173,7 +186,7 @@ function ActorCardView({ card }: { card: ActorCard }) {
           </h3>
           <span className="flex items-center gap-2">
             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">
-              {card.items.length}
+              {card.total}
             </span>
             {card.flag ? (
               <span className="text-[18px] leading-none">{card.flag}</span>
@@ -188,7 +201,7 @@ function ActorCardView({ card }: { card: ActorCard }) {
         ))}
       </div>
 
-      {card.items.length > 5 ? <CardPager p={p} /> : null}
+      {card.total > CARD_PAGE_SIZE ? <CardPager p={p} /> : null}
     </div>
   );
 }

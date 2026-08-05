@@ -82,9 +82,9 @@ export default async function DashboardPage() {
           focus={focus}
         />
 
-        <VulnTable rows={data.vulnerabilities} />
-        <BreachTable rows={data.breaches} />
-        <ReportsList items={data.reports} />
+        <VulnTable page={data.vulnerabilities} />
+        <BreachTable page={data.breaches} />
+        <ReportsList page={data.reports} />
 
         <Footnote />
 

@@ -1,4 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  pageOf,
+  CARD_PAGE_SIZE,
+  DEFAULT_PAGE_SIZE,
+  type Page,
+} from "@/lib/page";
 import { fetchAllPages } from "@/lib/supabase/paging";
 import { loadLabelsFor } from "@/lib/report-labels";
 import { STALE_DAYS } from "@/lib/feed-status";
@@ -16,11 +22,13 @@ import {
   deriveAdversaryFromText,
   type GroupEntry,
 } from "@/lib/ingest/enrich/rules";
+import { prioritiseVulns, type PrioritisedVuln } from "@/lib/vuln-priority";
 import {
   buildActorSectionCards,
   type ActorItem,
   type ActorCard,
   type LabelsById,
+  type ActorSection,
 } from "@/lib/actor-sections";
 import {
   buildTimeline,
@@ -33,6 +41,8 @@ export type TimelineData = {
   events: TimelineEvent[];
   streams: TimelineStream[];
 };
+
+export type { Page, ActorSection };
 
 // A single card/item shape drives all three activity-by-actor sections.
 export type { ActorItem, ActorCard };
@@ -92,9 +102,9 @@ export type DashboardData = {
   timeline: TimelineData;
   // Breaking ticker: PoC exploits + breaches from the last ~24h. Nothing else.
   breaking: TickerItem[];
-  reports: LabeledIntelRow[];
-  vulnerabilities: VulnerabilityRow[];
-  breaches: BreachRow[];
+  reports: Page<LabeledIntelRow>;
+  vulnerabilities: Page<PrioritisedVuln>;
+  breaches: Page<BreachRow>;
   staleFeeds: StaleFeed[];
 };
 
@@ -178,6 +188,60 @@ async function loadActorGroups(db: Db): Promise<ActorGroups> {
 }
 
 /**
+ * Nation-state activity as one card per country, plus a "Non Attributed" card
+ * for items with no country. Most-active country first, and Non Attributed
+ * always last.
+ *
+ * Every item gets an adversary label: the stored one if present (so operator
+ * edits stick), otherwise a computed fallback - the specific name, or
+ * "UNID <animal>" keyed by the actor's nexus.
+ */
+function nationStateCardsFrom(
+  reports: IntelItemRow[],
+  nsGroups: GroupEntry[],
+  labelsById: LabelsById,
+): ActorCard[] {
+  const byCountry = new Map<string, ActorItem[]>();
+  for (const i of reports) {
+    if (i.motivation !== "nation_state") continue;
+    const item: ActorItem = {
+      ...i,
+      adversary:
+        i.adversary_label ??
+        adversaryLabel(
+          i.crowdstrike_adversary ??
+            deriveAdversaryFromText(i.title, i.description, nsGroups),
+          nexusForCountry(i.country),
+          `${i.title} ${i.description ?? ""}`,
+          i.country,
+        ),
+      labels: labelsById.get(i.id) ?? [],
+    };
+    const key = i.country ?? "";
+    const arr = byCountry.get(key);
+    if (arr) arr.push(item);
+    else byCountry.set(key, [item]);
+  }
+  return [...byCountry.entries()]
+    .map(([key, items]) => {
+      const nexus: Nexus = key ? nexusForCountry(key) : "other";
+      return {
+        key: key || "__none__",
+        label: key || "Non Attributed",
+        accent: NEXUS_ACCENT[nexus] ?? "#475569",
+        flag: key ? countryFlag(key) : null,
+        items,
+        total: items.length,
+      };
+    })
+    .sort((a, b) => {
+      if (a.key === "__none__") return 1;
+      if (b.key === "__none__") return -1;
+      return b.total - a.total || a.label.localeCompare(b.label);
+    });
+}
+
+/**
  * Loads every section of the dashboard in parallel. All queries run under the
  * caller's RLS context.
  */
@@ -242,54 +306,15 @@ export async function loadDashboard(): Promise<DashboardData> {
     ),
   ]);
 
-  // Every country-attributed item gets a label: the stored adversary_label if
-  // present (so operator edits stick), otherwise a computed fallback - the
-  // specific name, or "UNID <animal>" keyed by the actor's nexus (country-
-  // specific for Rest of the World).
   const { nsGroups, ecrimeGroups, hacktivismGroups } = groups;
-  // Research items feed the actor sections + timeline over the whole window;
-  // the section components paginate each card to 5 items.
+  // Research items feed the actor sections and the timeline over the whole
+  // window; the cards show a page of each.
   const researchItems = researchRows.filter(keep);
-  // Nation-state activity grouped into one card per country, plus a
-  // "Non Attributed" card for nation-state items without a country.
-  const nsByCountry = new Map<string, ActorItem[]>();
-  for (const i of researchItems) {
-    if (i.motivation !== "nation_state") continue;
-    const item: ActorItem = {
-      ...i,
-      adversary:
-        i.adversary_label ??
-        adversaryLabel(
-          i.crowdstrike_adversary ??
-            deriveAdversaryFromText(i.title, i.description, nsGroups),
-          nexusForCountry(i.country),
-          `${i.title} ${i.description ?? ""}`,
-          i.country,
-        ),
-      labels: labelsById.get(i.id) ?? [],
-    };
-    const key = i.country ?? "";
-    const arr = nsByCountry.get(key);
-    if (arr) arr.push(item);
-    else nsByCountry.set(key, [item]);
-  }
-  // Most-active country first; the "Non Attributed" card always sorts last.
-  const nationStateCards: ActorCard[] = [...nsByCountry.entries()]
-    .map(([key, items]) => {
-      const nexus: Nexus = key ? nexusForCountry(key) : "other";
-      return {
-        key: key || "__none__",
-        label: key || "Non Attributed",
-        accent: NEXUS_ACCENT[nexus] ?? "#475569",
-        flag: key ? countryFlag(key) : null,
-        items,
-      };
-    })
-    .sort((a, b) => {
-      if (a.key === "__none__") return 1;
-      if (b.key === "__none__") return -1;
-      return b.items.length - a.items.length || a.label.localeCompare(b.label);
-    });
+  const nationStateCards = nationStateCardsFrom(
+    researchItems,
+    nsGroups,
+    labelsById,
+  );
 
   const latestRefresh = refreshRes.data?.[0];
   const compiledAt =
@@ -312,14 +337,24 @@ export async function loadDashboard(): Promise<DashboardData> {
     ...r,
     labels: labelsById.get(r.id) ?? [],
   });
-  // Each list is the whole window; the section components paginate it.
+  // The lists are paged on this side: the reader gets one page and a count,
+  // and asks for the next one. Everything below still works from the whole
+  // window, because the ticker, the cards and the timeline each need all of it.
   const breachItems = breachRows.filter(keep);
-  const breaches = breachItems.map(withLabels);
+  const breaches = pageOf(breachItems.map(withLabels), 0, DEFAULT_PAGE_SIZE);
 
   const exploitItems = exploitRows.filter((v) => !hidden.has(v.raw_hash));
-  const vulnerabilities = exploitItems;
+  const vulnerabilities = pageOf(
+    prioritiseVulns(exploitItems),
+    0,
+    DEFAULT_PAGE_SIZE,
+  );
 
-  const reports = otherRows.filter(keep).map(withLabels);
+  const reports = pageOf(
+    otherRows.filter(keep).map(withLabels),
+    0,
+    DEFAULT_PAGE_SIZE,
+  );
 
   // Breaking ticker: PoC exploits and breaches observed in the last ~24h only,
   // newest first. Nothing else feeds the ticker.
@@ -369,9 +404,11 @@ export async function loadDashboard(): Promise<DashboardData> {
   return {
     compiledAt,
     executiveSummary,
-    nationStateCards,
-    ecrimeCards,
-    hacktivismCards,
+    // Cards keep their totals but carry only the page on show; a card the
+    // reader pages through asks for the rest.
+    nationStateCards: firstPageOfCards(nationStateCards),
+    ecrimeCards: firstPageOfCards(ecrimeCards),
+    hacktivismCards: firstPageOfCards(hacktivismCards),
     timeline,
     breaking,
     reports,
@@ -418,6 +455,107 @@ export async function loadTimelineWindow(days: number): Promise<TimelineData> {
     groups.ecrimeGroups,
     groups.hacktivismGroups,
   );
+}
+
+/** Trim every card to its first page, leaving `total` to say what is behind it. */
+function firstPageOfCards(cards: ActorCard[]): ActorCard[] {
+  return cards.map((c) => ({ ...c, items: c.items.slice(0, CARD_PAGE_SIZE) }));
+}
+
+/**
+ * One page of a dashboard list.
+ *
+ * Each of these re-reads its own window rather than the whole dashboard: a
+ * reader clicking Next should not pay for the timeline and the actor cards
+ * again. The filtering (marketing, hidden items, CVE aggregation) happens in
+ * memory rather than in SQL, so the page cannot be taken with LIMIT/OFFSET -
+ * but the rows stay on this side, which is the point.
+ */
+export async function loadReportsPage(
+  page: number,
+  size: number | null,
+): Promise<Page<LabeledIntelRow>> {
+  const db = await createClient();
+  const [rows, hidden] = await Promise.all([
+    itemsSince(db, "other", daysAgo(HISTORY_DAYS)),
+    loadHidden(db),
+  ]);
+  const kept = rows.filter(
+    (r) => isThreatIntel(r.title, r.description) && !hidden.has(r.raw_hash),
+  );
+  const labels = await loadLabelsFor(db, kept.map((r) => r.id));
+  return pageOf(
+    kept.map((r) => ({ ...r, labels: labels.get(r.id) ?? [] })),
+    page,
+    size,
+  );
+}
+
+export async function loadBreachesPage(
+  page: number,
+  size: number | null,
+): Promise<Page<BreachRow>> {
+  const db = await createClient();
+  const [rows, hidden] = await Promise.all([
+    itemsSince(db, "breach", daysAgo(HISTORY_DAYS)),
+    loadHidden(db),
+  ]);
+  const kept = rows.filter(
+    (r) => isThreatIntel(r.title, r.description) && !hidden.has(r.raw_hash),
+  );
+  const labels = await loadLabelsFor(db, kept.map((r) => r.id));
+  return pageOf(
+    kept.map((r) => ({ ...r, labels: labels.get(r.id) ?? [] })),
+    page,
+    size,
+  );
+}
+
+export async function loadVulnerabilitiesPage(
+  page: number,
+  size: number | null,
+): Promise<Page<PrioritisedVuln>> {
+  const db = await createClient();
+  const [rows, hidden] = await Promise.all([
+    itemsSince(db, "exploit", daysAgo(HISTORY_DAYS)),
+    loadHidden(db),
+  ]);
+  // Aggregated to one row per CVE before paging, so a page is ten CVEs and
+  // not ten reports about three of them.
+  return pageOf(
+    prioritiseVulns(rows.filter((v) => !hidden.has(v.raw_hash))),
+    page,
+    size,
+  );
+}
+
+export async function loadActorCardPage(
+  section: ActorSection,
+  key: string,
+  page: number,
+  size: number | null,
+): Promise<Page<ActorItem>> {
+  const db = await createClient();
+  const [rows, groups, hidden] = await Promise.all([
+    itemsSince(db, "research", daysAgo(HISTORY_DAYS)),
+    loadActorGroups(db),
+    loadHidden(db),
+  ]);
+  const kept = rows.filter(
+    (r) => isThreatIntel(r.title, r.description) && !hidden.has(r.raw_hash),
+  );
+  const labels = await loadLabelsFor(db, kept.map((r) => r.id));
+  const cards =
+    section === "nation_state"
+      ? nationStateCardsFrom(kept, groups.nsGroups, labels)
+      : buildActorSectionCards(
+          kept,
+          groups.ecrimeGroups,
+          groups.hacktivismGroups,
+          labels,
+        )[section === "ecrime" ? "ecrimeCards" : "hacktivismCards"];
+  const card = cards.find((c) => c.key === key);
+  return pageOf(card?.items ?? [], page, size);
 }
 
 /**

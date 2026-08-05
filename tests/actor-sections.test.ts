@@ -104,3 +104,31 @@ describe("buildActorSectionCards (reports only)", () => {
     expect(hacktivismCards).toHaveLength(0);
   });
 });
+
+describe("card totals and bare families", () => {
+  // The dashboard trims each card to a page and pages the rest from the
+  // server, so the count in the header has to come from `total`, not from the
+  // items that happen to be on show.
+  it("counts every report on the card, not the page", () => {
+    const { ecrimeCards } = run([
+      report({ title: "LockBit unpacked", description: "LockBit tooling" }),
+      report({ title: "LockBit again", description: "more LockBit" }),
+    ]);
+    expect(ecrimeCards[0].total).toBe(2);
+    expect(ecrimeCards[0].total).toBe(ecrimeCards[0].items.length);
+  });
+
+  // Same rule as the timeline lanes: "Spider" is a naming convention, not a
+  // crew, and must not open a card of its own.
+  it("does not make a card out of a bare animal family", () => {
+    const { ecrimeCards } = run([
+      report({
+        title: "eCrime trends",
+        motivation: "ecrime",
+        crowdstrike_adversary: "Spider",
+      }),
+    ]);
+    expect(ecrimeCards.map((c) => c.label)).toEqual(["Non Attributed"]);
+    expect(ecrimeCards[0].items[0].adversary).toBe("UNID SPIDER");
+  });
+});
