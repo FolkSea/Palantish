@@ -11,7 +11,7 @@ import {
   validIndicator,
   isNonRoutableIp,
   isNonRoutableIpv6,
-  validIpv4,
+  isIpv4Indicator,
   shouldExcludeDomain,
   shouldExcludeIp,
   isFilenameOrCode,
@@ -48,7 +48,7 @@ function isExcluded(type: string, value: string, ex: Excludes): boolean {
     return !h || shouldExcludeDomain(h, ex.excludeDomains);
   }
   if (type === "ip") {
-    if (validIpv4(value)) return shouldExcludeIp(value, ex.excludeIps);
+    if (isIpv4Indicator(value)) return shouldExcludeIp(value, ex.excludeIps);
     return isNonRoutableIpv6(value); // IPv6: drop loopback/link-local/ULA
   }
   return false;
@@ -100,7 +100,7 @@ export function reconcileIndicators(
     for (const raw of values) {
       const v = normalizeIndicatorValue(normalizeIndicator(raw), type);
       if (!v || !validIndicator(v, type)) continue;
-      if (type === "ip" && validIpv4(v) && isNonRoutableIp(v)) continue;
+      if (type === "ip" && isIpv4Indicator(v) && isNonRoutableIp(v)) continue;
       if (isExcluded(type, v, ex)) continue;
       if (!present(v)) continue; // reject values not in the source
       add(type, v);

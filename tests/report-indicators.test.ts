@@ -7,6 +7,10 @@ import {
   normalizeIndicatorValue,
   isNonRoutableIp,
   shouldExcludeIp,
+  ipAddressOf,
+  isIpv4Indicator,
+  validIpv4Cidr,
+  validIpv6Cidr,
 } from "@/lib/report-indicators";
 
 describe("extractIndicators", () => {
@@ -301,5 +305,66 @@ describe("vendor social footers", () => {
         "https://github.com/actor/repo and https://t.me/channel",
     );
     expect(i.uris).toHaveLength(4);
+  });
+});
+
+describe("IP ranges", () => {
+  it("extracts a CIDR range as the range, not the base address", () => {
+    const i = extractIndicators(
+      "Infrastructure sits in 104.192.108.0/22 and 45.86.230.12.",
+    );
+    expect(i.ips).toContain("104.192.108.0/22");
+    expect(i.ips).not.toContain("104.192.108.0");
+    expect(i.ips).toContain("45.86.230.12");
+  });
+
+  it("takes the prefix from either end of the usual range", () => {
+    for (const cidr of ["45.0.0.0/0", "203.0.113.0/24", "45.86.230.12/32"]) {
+      expect(extractIndicators(`seen at ${cidr} today`).ips).toContain(cidr);
+    }
+  });
+
+  // The 24 in a URL is a path. Reading it as a prefix would invent a range the
+  // report never named - the address is still the indicator it always was.
+  it("does not read a URL path as a prefix", () => {
+    const i = extractIndicators("beacon to http://45.86.230.12/24 hourly");
+    expect(i.ips).toContain("45.86.230.12");
+    expect(i.ips).not.toContain("45.86.230.12/24");
+  });
+
+  it("drops a private range, the same as a private address", () => {
+    const i = extractIndicators("lateral movement across 10.0.0.0/8 and 10.1.2.3");
+    expect(i.ips).toHaveLength(0);
+  });
+
+  it("keeps a nonsense prefix as the plain address", () => {
+    // /33 is not a v4 prefix; the address is real either way.
+    const i = extractIndicators("saw 45.86.230.12/33 in the logs");
+    expect(i.ips).toEqual(["45.86.230.12"]);
+  });
+});
+
+describe("IP range validation", () => {
+  it("accepts ranges an analyst types by hand", () => {
+    for (const v of ["104.192.108.0/22", "10.0.0.0/8", "2001:db8::/32"])
+      expect(validIndicator(v, "ip")).toBe(true);
+  });
+
+  it("rejects an impossible prefix or a malformed one", () => {
+    for (const v of ["45.86.230.12/33", "45.86.230.12/", "45.86.230.12/08"])
+      expect(validIpv4Cidr(v)).toBe(false);
+    expect(validIpv6Cidr("2001:db8::/129")).toBe(false);
+  });
+
+  it("reads the address out of a range", () => {
+    expect(ipAddressOf("104.192.108.0/22")).toBe("104.192.108.0");
+    expect(ipAddressOf("45.86.230.12")).toBe("45.86.230.12");
+  });
+
+  it("treats a range as an IPv4 indicator, so the IP rules apply to it", () => {
+    expect(isIpv4Indicator("104.192.108.0/22")).toBe(true);
+    expect(isIpv4Indicator("2001:db8::/32")).toBe(false);
+    expect(isNonRoutableIp("192.168.0.0/16")).toBe(true);
+    expect(shouldExcludeIp("127.0.0.0/8")).toBe(true);
   });
 });

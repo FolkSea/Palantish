@@ -30,7 +30,10 @@ const FILE_EXT =
 // domains to sacrifice.
 
 const URI_RE = /\bhttps?:\/\/[^\s"'<>()\]]+/gi;
-const IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+// An address, optionally with a CIDR prefix: 104.192.108.0/22. Reports name a
+// range whenever an actor's infrastructure sits in one, and the range is the
+// indicator - dropping the /22 leaves a single address nothing ever talks to.
+const IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,3})?\b/g;
 const DOMAIN_RE = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b/gi;
 // Match SHA256 (64) / SHA1 (40) / MD5 (32) hex hashes, longest first.
 const HASH_RE = /\b(?:[a-f0-9]{64}|[a-f0-9]{40}|[a-f0-9]{32})\b/gi;
@@ -107,6 +110,66 @@ function uniq(arr: string[]): string[] {
 function matchAll(text: string, re: RegExp): string[] {
   return text.match(re) ?? [];
 }
+
+/**
+ * IPv4 addresses and CIDR ranges in the text.
+ *
+ * A trailing /nn is a prefix length only when the address is not the host of a
+ * URL: in http://1.2.3.4/24 the 24 is a path, and reading it as a range would
+ * invent an indicator the report never gave. The address is still kept in that
+ * case - it was always an indicator, and still is.
+ */
+function extractIpv4s(text: string): string[] {
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  IPV4_RE.lastIndex = 0;
+  while ((m = IPV4_RE.exec(text)) !== null) {
+    const value = m[0];
+    const address = ipAddressOf(value);
+    if (!validIpv4(address)) continue;
+    if (address === value) {
+      out.push(value);
+      continue;
+    }
+    const afterSlashes = text.slice(Math.max(0, m.index - 2), m.index) === "//";
+    out.push(afterSlashes || !validIpv4Cidr(value) ? address : value);
+  }
+  return out;
+}
+/** The address part of an IP indicator: 10.0.0.0/8 -> 10.0.0.0. */
+export function ipAddressOf(value: string): string {
+  const v = (value ?? "").trim();
+  const slash = v.indexOf("/");
+  return slash === -1 ? v : v.slice(0, slash);
+}
+
+/** The CIDR prefix length, or null when the value carries none. */
+function prefixLengthOf(value: string): number | null {
+  const slash = (value ?? "").trim().indexOf("/");
+  if (slash === -1) return null;
+  const raw = value.trim().slice(slash + 1);
+  // No leading zeros and no empty prefix: /08 and / are malformed, not a /8.
+  if (!/^\d{1,3}$/.test(raw) || (raw.length > 1 && raw.startsWith("0"))) return null;
+  return Number(raw);
+}
+
+/** True for an IPv4 CIDR range: a valid address and a prefix of 0-32. */
+export function validIpv4Cidr(value: string): boolean {
+  const len = prefixLengthOf(value);
+  return len !== null && len <= 32 && validIpv4(ipAddressOf(value));
+}
+
+/** True for an IPv6 CIDR range: a valid address and a prefix of 0-128. */
+export function validIpv6Cidr(value: string): boolean {
+  const len = prefixLengthOf(value);
+  return len !== null && len <= 128 && validIpv6(ipAddressOf(value));
+}
+
+/** True for an IPv4 address or range - the two forms an IP indicator takes. */
+export function isIpv4Indicator(value: string): boolean {
+  return validIpv4(value) || validIpv4Cidr(value);
+}
+
 export function validIpv4(ip: string): boolean {
   const parts = ip.split(".");
   return (
@@ -127,7 +190,8 @@ export function validIpv4(ip: string): boolean {
  * a reviewer may still want to see, and belong in the allowlist if unwanted.
  */
 export function isNonRoutableIp(ip: string): boolean {
-  const p = ip.split(".").map(Number);
+  // A range is non-routable when its address is: 10.0.0.0/8 is still RFC 1918.
+  const p = ipAddressOf(ip).split(".").map(Number);
   if (p.length !== 4 || p.some((n) => !Number.isInteger(n) || n < 0 || n > 255))
     return false;
   const [a, b] = p;
@@ -282,7 +346,7 @@ export function extractIndicators(
   const uris = uniq(matchAll(t, URI_RE)).filter(
     (u) => !isExcludedDomain(hostOf(u), excluded),
   );
-  const ips = uniq(matchAll(t, IPV4_RE).filter(validIpv4)).filter(
+  const ips = uniq(extractIpv4s(t)).filter(
     (ip) => !isNonRoutableIp(ip) && !ipExcluded.has(ip),
   );
   const ipSet = new Set(ips);
@@ -343,7 +407,7 @@ export function validIpv6(value: string): boolean {
 /** IPv6 addresses that are never a reportable IOC: unspecified (::), loopback
  * (::1), link-local (fe80::/10), and unique-local (fc00::/7). */
 export function isNonRoutableIpv6(value: string): boolean {
-  const v = (value ?? "").trim().toLowerCase();
+  const v = ipAddressOf(value).toLowerCase();
   if (v === "::" || v === "::1") return true;
   if (/^fe[89ab][0-9a-f]?:/.test(v)) return true; // fe80::/10
   if (/^f[cd][0-9a-f]{2}:/.test(v)) return true; // fc00::/7
@@ -357,7 +421,9 @@ export function validIndicator(value: string, type: string): boolean {
   if (!v) return false;
   switch (type) {
     case "ip":
-      return validIpv4(v) || validIpv6(v);
+      return (
+        validIpv4(v) || validIpv6(v) || validIpv4Cidr(v) || validIpv6Cidr(v)
+      );
     case "domain":
       return DOMAIN_FULL_RE.test(v);
     case "uri":
