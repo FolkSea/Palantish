@@ -21,7 +21,8 @@ describe("extractIndicators", () => {
       "and 203.0.113.42, plus the domain updates.malwarehost.net.";
     const i = extractIndicators(text);
     expect(i.ips).toContain("203.0.113.42");
-    expect(i.uris).toContain("http://evil.example.com/beacon");
+    // The URL itself is not an indicator; its host is.
+    expect(i.domains).toContain("evil.example.com");
     expect(i.domains).toContain("updates.malwarehost.net");
     expect(i.mitre.sort()).toEqual(["T1059.003", "T1566"]);
     expect(i.files).toContain("da39a3ee5e6b4b0d3255bfef95601890afd80709");
@@ -46,7 +47,7 @@ describe("extractIndicators", () => {
   it("returns defanged indicators to their original format", () => {
     const i = extractIndicators("beacon to 8.8.8[.]8 via hxxps://bad[.]tld/x");
     expect(i.ips).toContain("8.8.8.8");
-    expect(i.uris).toContain("https://bad.tld/x");
+    expect(i.domains).toContain("bad.tld");
   });
 
   it("refangs a bare defanged domain", () => {
@@ -87,28 +88,28 @@ describe("extractIndicators", () => {
     expect(i.domains).not.toContain("cdn.securelist.com");
   });
 
-  it("drops URIs hosted on an excluded/benign domain", () => {
+  it("keeps a URL's host as a domain, unless the host is benign", () => {
     const i = extractIndicators(
       "share https://twitter.com/intent/tweet and payload https://evil.example.com/a",
       ["blog.example.org"],
     );
-    expect(i.uris).toContain("https://evil.example.com/a");
-    expect(i.uris.some((u) => u.includes("twitter.com"))).toBe(false);
+    expect(i.domains).toContain("evil.example.com");
+    expect(i.domains.some((d) => d.includes("twitter.com"))).toBe(false);
   });
 
-  it("applies an operator allowlist entry to URLs, not just bare domains", () => {
+  it("applies an operator allowlist entry to a host met inside a URL", () => {
     // The ioc_allowlist reaches the extractor as excludeDomains. A press or CDN
-    // domain has to be suppressed in whichever form the scraper met it -
-    // allowlisting it and still storing the article URL as an IOC is the bug
-    // this guards.
+    // domain has to be suppressed whether the scraper met it bare or as the
+    // host of a link.
     const i = extractIndicators(
       "image https://blogger.googleusercontent.com/img/a/AVvXsEg and " +
         "writeup https://www.thehackernews.com/2026/01/post.html and " +
         "c2 https://real-c2.example.net/panel plus bare thehackernews.com",
       ["thehackernews.com", "blogger.googleusercontent.com"],
     );
-    expect(i.uris).toEqual(["https://real-c2.example.net/panel"]);
+    expect(i.domains).toContain("real-c2.example.net");
     expect(i.domains.some((d) => d.includes("thehackernews"))).toBe(false);
+    expect(i.domains.some((d) => d.includes("googleusercontent"))).toBe(false);
   });
 
   it("does not let an allowlisted domain hide a lookalike host", () => {
@@ -118,14 +119,13 @@ describe("extractIndicators", () => {
       "https://not-thehackernews.com.evil.ru/x",
       ["thehackernews.com"],
     );
-    expect(i.uris).toEqual(["https://not-thehackernews.com.evil.ru/x"]);
+    expect(i.domains).toEqual(["not-thehackernews.com.evil.ru"]);
   });
 
   it("returns empty sets when nothing is present", () => {
     const i = extractIndicators("A generic advisory with no indicators.");
     expect(i.ips).toHaveLength(0);
     expect(i.domains).toHaveLength(0);
-    expect(i.uris).toHaveLength(0);
     expect(i.files).toHaveLength(0);
     expect(i.cves).toHaveLength(0);
     expect(i.mitre).toHaveLength(0);
@@ -291,20 +291,21 @@ describe("vendor social footers", () => {
         "https://join.slack.com/t/greynoiseintel/shared_invite/zt-1 , " +
         "https://open.spotify.com/show/1woJ . C2 at https://real-c2.example.net/p",
     );
-    expect(i.uris).toEqual(["https://real-c2.example.net/p"]);
+    expect(i.domains).toContain("real-c2.example.net");
     expect(i.domains.some((d) => d.includes("bsky"))).toBe(false);
   });
 
   it("keeps the platforms actually used to deliver and exfiltrate", () => {
     // Excluding these parents to tidy a footer would discard real indicators:
     // Discord and Slack webhooks carry stolen data, Telegram and GitHub host
-    // payloads.
+    // payloads. The URL is not stored, but the host still is.
     const i = extractIndicators(
       "exfil to https://discord.com/api/webhooks/123/abc and " +
         "https://hooks.slack.com/services/T00/B00 , payload from " +
         "https://github.com/actor/repo and https://t.me/channel",
     );
-    expect(i.uris).toHaveLength(4);
+    for (const host of ["discord.com", "hooks.slack.com", "github.com", "t.me"])
+      expect(i.domains).toContain(host);
   });
 });
 

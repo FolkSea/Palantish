@@ -8,11 +8,17 @@ type Db = SupabaseClient<Database>;
 
 export type IocRow = { value: string; ioc_type: string };
 
+/**
+ * The rows to store for a report's indicators.
+ *
+ * No uri rows: a URL is not stored as an indicator any more - a report is full
+ * of them and almost none are attacker infrastructure. The host is stored as a
+ * domain instead.
+ */
 export function indicatorRows(indicators: Indicators): IocRow[] {
   return [
     ...indicators.ips.map((value) => ({ value, ioc_type: "ip" })),
     ...indicators.domains.map((value) => ({ value, ioc_type: "domain" })),
-    ...indicators.uris.map((value) => ({ value, ioc_type: "uri" })),
     ...indicators.files.map((value) => ({ value, ioc_type: "file_hash" })),
     ...indicators.cves.map((value) => ({ value, ioc_type: "cve" })),
   ].filter((r) => r.value.trim().length > 0);

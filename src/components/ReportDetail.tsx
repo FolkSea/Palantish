@@ -406,7 +406,6 @@ export function ReportDetail({
     !!stored &&
     stored.ips.length +
       stored.domains.length +
-      stored.uris.length +
       stored.files.length +
       stored.cves.length >
       0;
@@ -718,17 +717,6 @@ export function ReportDetail({
                 editable={iocsEditable}
                 onRemove={(v) => removeIoc("domains", v)}
                 onEdit={(o, n) => editIoc("domains", "domain", o, n)}
-                onSearch={searchForIoc}
-              />
-            </CollapsibleCard>
-
-            <CollapsibleCard title="URIs" count={indicators.uris.length}>
-              <EditableIocList
-                items={indicators.uris}
-                type="uri"
-                editable={iocsEditable}
-                onRemove={(v) => removeIoc("uris", v)}
-                onEdit={(o, n) => editIoc("uris", "uri", o, n)}
                 onSearch={searchForIoc}
               />
             </CollapsibleCard>

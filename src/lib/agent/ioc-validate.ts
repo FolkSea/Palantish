@@ -92,7 +92,6 @@ export function reconcileIndicators(
     ["ip", indicators.ipv4],
     ["ip", indicators.ipv6],
     ["domain", indicators.domains],
-    ["uri", indicators.urls],
     ["file_hash", indicators.fileHashes],
     ["cve", indicators.cves],
   ];
@@ -123,7 +122,6 @@ export function reconcileIndicators(
     const det = extractIndicators(detText, ex.excludeDomains, ex.excludeIps);
     for (const v of det.ips) add("ip", v);
     for (const v of det.domains) add("domain", v);
-    for (const v of det.uris) if (!isExcluded("uri", v, ex)) add("uri", v);
     for (const v of det.files) add("file_hash", v);
     for (const v of det.cves) add("cve", v);
     for (const v of det.mitre) add("mitre", v);

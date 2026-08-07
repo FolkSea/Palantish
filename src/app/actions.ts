@@ -341,7 +341,6 @@ export async function getReportIndicatorsAction(
   const empty: Indicators = {
     ips: [],
     domains: [],
-    uris: [],
     files: [],
     cves: [],
     mitre: [],
@@ -431,7 +430,6 @@ export async function getReportIndicatorsAction(
   const grouped: Indicators = {
     ips: [],
     domains: [],
-    uris: [],
     files: [],
     cves: [],
     mitre: [],
@@ -439,7 +437,7 @@ export async function getReportIndicatorsAction(
   for (const ioc of iocsRes.data ?? []) {
     if (ioc.ioc_type === "ip") grouped.ips.push(ioc.value);
     else if (ioc.ioc_type === "domain") grouped.domains.push(ioc.value);
-    else if (ioc.ioc_type === "uri") grouped.uris.push(ioc.value);
+    // uri rows predate the type being retired; they are neither read nor shown.
     else if (ioc.ioc_type === "file_hash") grouped.files.push(ioc.value);
     else if (ioc.ioc_type === "cve") grouped.cves.push(ioc.value);
     else if (ioc.ioc_type === "mitre") grouped.mitre.push(ioc.value);

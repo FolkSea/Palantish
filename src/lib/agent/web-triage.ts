@@ -13,7 +13,6 @@ export type LlmIndicators = {
   ipv4: string[];
   ipv6: string[];
   domains: string[];
-  urls: string[];
   fileHashes: string[];
   cves: string[];
 };
@@ -116,7 +115,7 @@ STEP 2 - CLASSIFY and EXTRACT, then return ONLY strict JSON of this exact shape 
   "crowdstrikeAdversary": string | null,
   "labels": { "malware": string[], "adversary": string[], "target": string[], "vector": string[], "ai": string[] },
   "indicators": {
-    "ipv4": string[], "ipv6": string[], "domains": string[], "urls": string[], "fileHashes": string[], "cves": string[]
+    "ipv4": string[], "ipv6": string[], "domains": string[], "fileHashes": string[], "cves": string[]
   },
   "mitreTechniques": string[],
   "summary": string,
@@ -135,7 +134,7 @@ RULES:
   - vector: how the attack was delivered, from this closed list ONLY, and only when the report is clearly about it: SupplyChain (the attacker compromised a legitimate product, update, installer, package or dependency to reach its users). Omit the category entirely when none applies.
   - malware: named malware families, tools and backdoors. ai: AI products or models involved.
   In a supply-chain report the compromised product is the TARGET and the vector is SupplyChain; the adversary is the group behind it, or no adversary label at all when the report names none. A report titled "QuickFox Supply Chain Attack Delivers FDMTP Backdoor via Trojanized Windows Installer" yields target QuickFox, vector SupplyChain, malware FDMTP - and adversary only if the article names the group.
-- indicators: return ONLY indicators that appear verbatim in the fetched report. Do NOT infer, guess, complete, or invent any value. IPv4/IPv6/domains/urls/fileHashes(MD5/SHA1/SHA256)/cves(CVE-YYYY-NNNN). For each indicator you return, add an { value, excerpt } entry to "evidence" quoting the surrounding text from the report so the value can be verified. If you did not fetch the report, return empty indicator arrays.
+- indicators: return ONLY indicators that appear verbatim in the fetched report. Do NOT infer, guess, complete, or invent any value. IPv4/IPv6/domains/fileHashes(MD5/SHA1/SHA256)/cves(CVE-YYYY-NNNN). Report a URL's host as a domain; do not return URLs. For each indicator you return, add an { value, excerpt } entry to "evidence" quoting the surrounding text from the report so the value can be verified. If you did not fetch the report, return empty indicator arrays.
 - mitreTechniques: ATT&CK technique ids (T1059, T1059.003) explicitly named in the report.
 - summary: 1-3 plain ASCII sentences of the report's substance.`;
 
@@ -236,7 +235,6 @@ function parseIndicators(v: unknown): LlmIndicators {
     ipv4: pick("ipv4", "ips", "ip"),
     ipv6: pick("ipv6"),
     domains: pick("domains", "domain"),
-    urls: pick("urls", "uris", "uri"),
     fileHashes: pick("fileHashes", "file_hashes", "hashes", "files"),
     cves: pick("cves", "cve"),
   };

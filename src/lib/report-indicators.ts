@@ -1,11 +1,16 @@
 // Best-effort extraction of indicators of compromise (IOCs) and MITRE ATT&CK
 // technique ids from a report's text. Pure and regex-based - no LLM - so it
 // only surfaces indicators that literally appear in the title/description.
+//
+// URLs are deliberately not extracted. Every report is full of them - the
+// vendor's own links, references, share buttons, the CVE it cites - and a
+// regex cannot tell those from a payload URL, so the type was mostly false
+// positives. What identifies the infrastructure is the host, and that is
+// picked up as a domain.
 
 export type Indicators = {
   ips: string[];
   domains: string[];
-  uris: string[];
   files: string[]; // file hashes (MD5 / SHA1 / SHA256)
   cves: string[]; // CVE identifiers (CVE-YYYY-NNNN)
   mitre: string[];
@@ -29,7 +34,6 @@ const FILE_EXT =
 // filename, so those keep the filename reading; the rest are too common as real
 // domains to sacrifice.
 
-const URI_RE = /\bhttps?:\/\/[^\s"'<>()\]]+/gi;
 // An address, optionally with a CIDR prefix: 104.192.108.0/22. Reports name a
 // range whenever an actor's infrastructure sits in one, and the range is the
 // indicator - dropping the /22 leaves a single address nothing ever talks to.
@@ -206,14 +210,6 @@ export function isNonRoutableIp(ip: string): boolean {
 function isFileExt(domain: string): boolean {
   return EXT_ONLY_RE.test(domain.split(".").pop() ?? "");
 }
-function hostOf(uri: string): string {
-  try {
-    return new URL(uri).hostname.toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
 // Web/social/blog-chrome domains that appear on report pages but are never the
 // reported infrastructure. The report's own source domain is excluded too (see
 // the excludeDomains argument), so a blog's own domain is not treated as an IOC.
@@ -343,14 +339,10 @@ export function extractIndicators(
     }
   }
 
-  const uris = uniq(matchAll(t, URI_RE)).filter(
-    (u) => !isExcludedDomain(hostOf(u), excluded),
-  );
   const ips = uniq(extractIpv4s(t)).filter(
     (ip) => !isNonRoutableIp(ip) && !ipExcluded.has(ip),
   );
   const ipSet = new Set(ips);
-  const uriHosts = new Set(uris.map(hostOf));
 
   const domains = uniq(
     matchAll(t, DOMAIN_RE)
@@ -363,7 +355,6 @@ export function extractIndicators(
           !ipSet.has(d) &&
           !isFileExt(d) &&
           !isCodeIdentifier(d) &&
-          !uriHosts.has(d) &&
           !isExcludedDomain(d, excluded),
       ),
   );
@@ -374,7 +365,7 @@ export function extractIndicators(
 
   const mitre = uniq(matchAll(t, MITRE_RE).map((m) => m.toUpperCase()));
 
-  return { ips, domains, uris, files, cves, mitre };
+  return { ips, domains, files, cves, mitre };
 }
 
 /** Total number of indicators found (for badges / empty-state checks). */
@@ -382,7 +373,6 @@ export function indicatorCount(i: Indicators): number {
   return (
     i.ips.length +
     i.domains.length +
-    i.uris.length +
     i.files.length +
     i.cves.length
   );

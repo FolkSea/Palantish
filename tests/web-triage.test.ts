@@ -44,7 +44,6 @@ const TRIAGE_JSON = {
     ipv4: ["45.86.230.12"],
     ipv6: [],
     domains: ["evil.example.com"],
-    urls: [],
     fileHashes: ["d41d8cd98f00b204e9800998ecf8427e"],
     cves: ["CVE-2026-1234"],
   },
@@ -312,7 +311,6 @@ describe("classification, labels and IOC validation", () => {
         ipv4: ["203.0.113.99", "999.1.1.1"], // not in text; malformed
         ipv6: [],
         domains: ["not-in-report.example"], // hallucinated (absent from text)
-        urls: [],
         fileHashes: ["zzzz"], // malformed
         cves: ["CVE-2026-1234"], // present -> kept
       },
@@ -336,7 +334,6 @@ describe("classification, labels and IOC validation", () => {
         ipv4: ["127.0.0.1", "45.86.230.12"],
         ipv6: [],
         domains: ["vendor.example", "evil.example.com"],
-        urls: [],
         fileHashes: [],
         cves: [],
       },
@@ -359,13 +356,14 @@ describe("classification, labels and IOC validation", () => {
       "![logo](https://cdn.chrome.example/logo-270x270.jpeg)\n" +
       "The implant beacons to hxxp://evil[.]example/gate and 45.86.230.12.";
     const rows = reconcileIndicators(
-      { ipv4: [], ipv6: [], domains: [], urls: [], fileHashes: [], cves: [] },
+      { ipv4: [], ipv6: [], domains: [], fileHashes: [], cves: [] },
       [],
       md,
     );
     const values = rows.map((r) => r.value);
     expect(values).toContain("45.86.230.12");
-    expect(values).toContain("http://evil.example/gate"); // refanged prose IOC
+    // The URL is no longer an indicator; its host, refanged, still is.
+    expect(values).toContain("evil.example");
     expect(values.some((v) => v.includes("ads.tracker.example"))).toBe(false);
     expect(values.some((v) => v.includes("cdn.chrome.example"))).toBe(false);
     expect(values).not.toContain("269a8aff73d4feb8e5383e0565f15df5"); // hex in ad URL
