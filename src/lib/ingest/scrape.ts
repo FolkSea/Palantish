@@ -4,6 +4,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import { toAscii } from "@/lib/text";
 import { serverEnv } from "@/lib/env";
 import {
+  MAX_PDF_BYTES,
+  isPdfContentType,
+  isPdfUrl,
+  looksLikePdf,
+  tooLargeMessage,
+} from "./pdf";
+import {
   htmlToArticleMarkdown,
   plainFromMarkdown,
   unwrapLinkedImages,
@@ -32,6 +39,10 @@ const BROWSER_HEADERS: Record<string, string> = {
   "Upgrade-Insecure-Requests": "1",
 };
 const AI_MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5";
+
+// Reading a whole report is slower than a metadata call over page text; the
+// cap is a clean failure rather than a hung import.
+const PDF_READ_TIMEOUT_MS = 90000;
 
 /** Reject non-http(s) URLs and obvious internal/loopback hosts (basic SSRF guard). */
 export function assertPublicHttpUrl(raw: string): URL {
@@ -151,13 +162,19 @@ function bodyExcerpt(html: string): string | null {
   return text || null;
 }
 
-type FetchedPage = {
+type SiteIdentity = { finalUrl: string; domain: string; siteName: string };
+
+type FetchedPage = SiteIdentity & {
   html: string;
-  finalUrl: string;
-  domain: string;
-  siteName: string;
   frameable: boolean;
 };
+
+/** A fetched PDF, base64-encoded for the model to read. */
+type FetchedPdf = SiteIdentity & { base64: string };
+
+type FetchedDocument =
+  | ({ kind: "html" } & FetchedPage)
+  | ({ kind: "pdf" } & FetchedPdf);
 
 /**
  * Decide, from a response's framing headers, whether a different origin (this
@@ -174,9 +191,14 @@ function computeFrameable(res: Response): boolean {
   return true;
 }
 
-/** Fetch a URL and return its HTML plus derived site identity. Throws on any
- * network / status / content-type problem so callers can offer a fallback. */
-async function fetchPage(rawUrl: string): Promise<FetchedPage> {
+/**
+ * Fetch a URL and return either its HTML or, when the link is to a PDF, the
+ * document itself for the model to read.
+ *
+ * One request either way: a report link is a report link, and deciding what it
+ * is only after fetching avoids a HEAD round trip on every import.
+ */
+async function fetchDocument(rawUrl: string): Promise<FetchedDocument> {
   const target = assertPublicHttpUrl(rawUrl.trim());
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -195,10 +217,7 @@ async function fetchPage(rawUrl: string): Promise<FetchedPage> {
     clearTimeout(timer);
   }
   if (!res.ok) throw new Error(`The page returned HTTP ${res.status}.`);
-  if (!/html/i.test(res.headers.get("content-type") ?? "")) {
-    throw new Error("That URL is not an HTML page.");
-  }
-  const html = await res.text();
+
   const finalUrl = res.url || target.toString();
   const host = (() => {
     try {
@@ -208,10 +227,67 @@ async function fetchPage(rawUrl: string): Promise<FetchedPage> {
     }
   })();
   const domain = host.hostname.replace(/^www\./, "");
-  const siteName =
-    toAscii(metaContent(html, ["og:site_name", "application-name"]) ?? "").trim() ||
-    domain;
-  return { html, finalUrl, domain, siteName, frameable: computeFrameable(res) };
+  const contentType = res.headers.get("content-type");
+
+  // HTML wins on the content type, even at a .pdf link: a report URL behind a
+  // login wall or a viewer page answers with a page, and scraping that page is
+  // a better outcome than reporting that the PDF could not be read.
+  if (/html/i.test(contentType ?? "")) {
+    const html = await res.text();
+    const siteName =
+      toAscii(metaContent(html, ["og:site_name", "application-name"]) ?? "").trim() ||
+      domain;
+    return {
+      kind: "html",
+      html,
+      finalUrl,
+      domain,
+      siteName,
+      frameable: computeFrameable(res),
+    };
+  }
+
+  // Anything else is a PDF only if its bytes say so. The signature is the
+  // authority: hosts serve reports as application/octet-stream, and a content
+  // type of application/pdf on an error page is not a PDF.
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_PDF_BYTES) {
+    throw new Error(tooLargeMessage(declared));
+  }
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (looksLikePdf(bytes)) return { kind: "pdf", ...pdfFromBytes(bytes, finalUrl, domain) };
+  if (isPdfContentType(contentType) || isPdfUrl(finalUrl)) {
+    throw new Error("That link did not return a readable PDF.");
+  }
+  throw new Error("That URL is not an HTML page or a PDF.");
+}
+
+/** A downloaded PDF, ready to send. */
+function pdfFromBytes(
+  bytes: Uint8Array,
+  finalUrl: string,
+  domain: string,
+): FetchedPdf {
+  // Checked again after the download: content-length is advisory and absent on
+  // a chunked response.
+  if (bytes.byteLength > MAX_PDF_BYTES) {
+    throw new Error(tooLargeMessage(bytes.byteLength));
+  }
+  return {
+    base64: Buffer.from(bytes).toString("base64"),
+    finalUrl,
+    domain,
+    // A PDF carries no og:site_name, so the host is the best name available.
+    siteName: domain,
+  };
+}
+
+/** Fetch a URL and return its HTML plus derived site identity. Throws on any
+ * network / status / content-type problem so callers can offer a fallback. */
+async function fetchPage(rawUrl: string): Promise<FetchedPage> {
+  const doc = await fetchDocument(rawUrl);
+  if (doc.kind === "pdf") throw new Error("That URL is a PDF, not an HTML page.");
+  return doc;
 }
 
 /** Derive a site identity from a bare URL (no fetch), for the paste fallback. */
@@ -222,13 +298,103 @@ export function siteIdentity(rawUrl: string): { finalUrl: string; domain: string
 }
 
 /**
+ * Read a PDF report: hand the document to the model and take back a title,
+ * summary and date.
+ *
+ * There is no heuristic path here as there is for HTML - a PDF has no <title>
+ * or og:description to read, and parsing one properly means a parser and its
+ * dependencies. The model reads the document as a document, which is also what
+ * makes it work on a scanned or image-heavy report.
+ */
+async function readPdfArticle(doc: FetchedPdf): Promise<ScrapedArticle> {
+  const key = serverEnv.anthropicApiKey;
+  if (!key) {
+    throw new Error("Reading PDFs is not configured. Paste the text instead.");
+  }
+  const client = new Anthropic({ apiKey: key });
+  let message: Anthropic.Message;
+  try {
+    message = await client.messages.create(
+      {
+        model: AI_MODEL,
+        max_tokens: 1024,
+        system:
+          "You extract report metadata from a PDF. Return ONLY strict JSON " +
+          '{"title": string, "summary": string, "publishedDate": string|null}. ' +
+          "title is the report's own title, not the file name. " +
+          "summary is 2-4 plain sentences describing the report's substance: " +
+          "who it is about, what they did, and to whom. " +
+          "publishedDate is ISO 8601 (YYYY-MM-DD) if the document states one, else null. " +
+          "Use ASCII only.",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: doc.base64,
+                },
+              },
+              {
+                type: "text",
+                text: `URL: ${doc.finalUrl}\n\nExtract the report metadata.`,
+              },
+            ],
+          },
+        ],
+      },
+      { timeout: PDF_READ_TIMEOUT_MS },
+    );
+  } catch (err) {
+    // A long report exceeds the API's page limit, which is not something the
+    // importer can work around - say so rather than reporting it as a fetch
+    // failure the user could retry.
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      /page|too large|exceed/i.test(detail)
+        ? "That PDF is too long to read automatically. Paste the text instead."
+        : `Could not read that PDF: ${detail}`,
+    );
+  }
+
+  const parsed = parseAiJson(
+    message.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join(""),
+  );
+  const title = toAscii(parsed?.title ?? "").trim();
+  if (!title) {
+    throw new Error("Could not find a title in that PDF. Paste the text instead.");
+  }
+  return {
+    title,
+    description: parsed?.summary
+      ? toAscii(parsed.summary).trim().slice(0, 800)
+      : null,
+    publishedAt: parseDate(parsed?.publishedDate ?? null),
+    finalUrl: doc.finalUrl,
+    siteName: doc.siteName,
+    domain: doc.domain,
+  };
+}
+
+/**
  * Fetch a blog/article URL and extract a normalised summary using Open Graph /
  * meta tags, falling back to <title> and the article body. Never returns
  * non-ASCII. Throws when the page cannot be fetched or has no title, so the
  * caller can offer the AI or paste fallback.
+ *
+ * A link to a PDF is read by the model instead - there are no meta tags to
+ * scrape, so the heuristic path does not apply.
  */
 export async function scrapeArticle(rawUrl: string): Promise<ScrapedArticle> {
-  const { html, finalUrl, domain, siteName } = await fetchPage(rawUrl);
+  const doc = await fetchDocument(rawUrl);
+  if (doc.kind === "pdf") return readPdfArticle(doc);
+  const { html, finalUrl, domain, siteName } = doc;
 
   const title =
     toAscii(
@@ -278,7 +444,9 @@ function parseAiJson(text: string): AiExtract | null {
  * the page has no readable text.
  */
 export async function scrapeArticleWithAI(rawUrl: string): Promise<ScrapedArticle> {
-  const { html, finalUrl, domain, siteName } = await fetchPage(rawUrl);
+  const doc = await fetchDocument(rawUrl);
+  if (doc.kind === "pdf") return readPdfArticle(doc);
+  const { html, finalUrl, domain, siteName } = doc;
 
   const key = serverEnv.anthropicApiKey;
   if (!key) {
