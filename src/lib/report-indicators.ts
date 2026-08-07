@@ -80,11 +80,16 @@ const CVE_RE = /\bCVE-\d{4}-\d{4,7}\b/gi;
 
 /** Normalise common defanged forms (1.2.3[.]4, hxxp://, example[dot]com). */
 function defang(text: string): string {
-  return text
-    .replace(/\[\.\]|\(\.\)|\{\.\}|\[dot\]/gi, ".")
-    .replace(/\[:\]/g, ":")
-    .replace(/\[\/\]/g, "/")
-    .replace(/\bhxxp(s?)\b/gi, "http$1");
+  return (
+    text
+      .replace(/\[\.\]|\(\.\)|\{\.\}|\[dot\]|\(dot\)/gi, ".")
+      // The scheme separator is often wrapped whole - hxxp[://]evil.com - which
+      // the per-character rules below leave intact and every URL pattern misses.
+      .replace(/\[:\/\/\]/g, "://")
+      .replace(/\[:\]/g, ":")
+      .replace(/\[\/\]/g, "/")
+      .replace(/\bhxxp(s?)\b/gi, "http$1")
+  );
 }
 
 /**

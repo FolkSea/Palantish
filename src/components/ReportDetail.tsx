@@ -24,7 +24,8 @@ import {
   getAttributionOptionsAction,
 } from "@/app/actions";
 import { EditableIocList } from "./EditableIocList";
-import { Markdown } from "./Markdown";
+import { Markdown, type Highlight } from "./Markdown";
+import { stepHit } from "@/lib/text-search";
 import { AdversaryBadge } from "./Badges";
 import { BookmarkButton } from "./BookmarkButton";
 import { ShareButton } from "./ItemControls";
@@ -123,6 +124,13 @@ export function ReportDetail({
   bookmarked?: boolean;
 }) {
   const router = useRouter();
+  // Find in report. `hits` is counted from what was actually drawn rather than
+  // from a second pass over the text: the two could disagree, and the count
+  // beside the box has to be the count under the reader's cursor.
+  const [search, setSearch] = useState("");
+  const [activeHit, setActiveHit] = useState(0);
+  const [hits, setHits] = useState(0);
+  const bodyRef = useRef<HTMLDivElement>(null);
   // Every report renders in the same clean reading view: the article extracted
   // from the fetched page, ads and site chrome removed, illustrations kept. The
   // original page stays one click away - live in a frame where the source's
@@ -329,6 +337,25 @@ export function ReportDetail({
   // rawHash changes can reuse the mounted details panel, so clear stale data
   // before the replacement query resolves.
   /* eslint-disable react-hooks/set-state-in-effect */
+  // The hit count is read back from the rendered document rather than counted
+  // a second time from the text: a separate pass could disagree with what was
+  // drawn, and "3 of 7" has to mean the seven marks on the page.
+  useEffect(() => {
+    const found =
+      bodyRef.current?.querySelectorAll("mark[data-hit]").length ?? 0;
+    setHits(found);
+    // Editing or removing an IOC can take away the hit the reader was standing
+    // on; land them on the last one rather than on nothing.
+    setActiveHit((a) => (found === 0 ? 0 : Math.min(a, found - 1)));
+  }, [search, view, showOriginal]);
+
+  // Bring the current hit into view, the way find-in-page does.
+  useEffect(() => {
+    bodyRef.current
+      ?.querySelector('mark[data-active="true"]')
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeHit, hits, search]);
+
   useEffect(() => {
     if (!rawHash) {
       setStored(null);
@@ -397,6 +424,17 @@ export function ReportDetail({
   // edit actions convert it and return moved:true, which flips kind here).
   const attributable = kind === "intel" || kind === "breach";
   const iocsEditable = attributable;
+
+  /**
+   * Search the report for an indicator. Replaces whatever was in the box: the
+   * reader clicked a different question, not a refinement of the last one.
+   */
+  function searchForIoc(value: string) {
+    setSearch(value);
+    setActiveHit(0);
+    // Highlighting only exists in the reading view, so bring them back to it.
+    setShowOriginal(false);
+  }
 
   function removeIoc(key: keyof Indicators, value: string) {
     setIocEdits((cur) => {
@@ -543,14 +581,29 @@ export function ReportDetail({
               ) : null}
             </div>
           </header>
-          <div className="flex-1 overflow-hidden p-3">
-            <div className="h-full overflow-hidden rounded-md border border-[#e5e7eb]">
+          <div className="flex flex-1 flex-col overflow-hidden p-3">
+            <ReportSearch
+              query={search}
+              hits={hits}
+              active={activeHit}
+              // The original page is an iframe from another origin; nothing in
+              // this document can search or highlight inside it.
+              disabled={showOriginal || view.status !== "ready"}
+              onQuery={(q) => {
+                setSearch(q);
+                setActiveHit(0);
+              }}
+              onStep={(delta) => setActiveHit((a) => stepHit(a, hits, delta))}
+            />
+            <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-[#e5e7eb]">
               <ReportBody
                 view={view}
                 url={report.url}
                 showOriginal={showOriginal}
                 onToggleOriginal={() => setShowOriginal((o) => !o)}
                 reading={reading}
+                highlight={search ? { query: search, active: activeHit } : undefined}
+                bodyRef={bodyRef}
               />
             </div>
           </div>
@@ -654,6 +707,7 @@ export function ReportDetail({
                 editable={iocsEditable}
                 onRemove={(v) => removeIoc("ips", v)}
                 onEdit={(o, n) => editIoc("ips", "ip", o, n)}
+                onSearch={searchForIoc}
               />
             </CollapsibleCard>
 
@@ -664,6 +718,7 @@ export function ReportDetail({
                 editable={iocsEditable}
                 onRemove={(v) => removeIoc("domains", v)}
                 onEdit={(o, n) => editIoc("domains", "domain", o, n)}
+                onSearch={searchForIoc}
               />
             </CollapsibleCard>
 
@@ -674,6 +729,7 @@ export function ReportDetail({
                 editable={iocsEditable}
                 onRemove={(v) => removeIoc("uris", v)}
                 onEdit={(o, n) => editIoc("uris", "uri", o, n)}
+                onSearch={searchForIoc}
               />
             </CollapsibleCard>
 
@@ -684,6 +740,7 @@ export function ReportDetail({
                 editable={iocsEditable}
                 onRemove={(v) => removeIoc("files", v)}
                 onEdit={(o, n) => editIoc("files", "file_hash", o, n)}
+                onSearch={searchForIoc}
               />
             </CollapsibleCard>
 
@@ -694,6 +751,7 @@ export function ReportDetail({
                 editable={iocsEditable}
                 onRemove={(v) => removeIoc("cves", v)}
                 onEdit={(o, n) => editIoc("cves", "cve", o, n)}
+                onSearch={searchForIoc}
               />
             </CollapsibleCard>
 
@@ -725,6 +783,7 @@ export function ReportDetail({
                   tooltip={techniqueTip}
                   onRemove={(v) => removeIoc("mitre", v)}
                   onEdit={(o, n) => editIoc("mitre", "mitre", o, n)}
+                onSearch={searchForIoc}
                   emptyLabel="Use Discover to infer techniques from the report."
                 />
               )}
@@ -757,18 +816,107 @@ export function ReportDetail({
  * page (a live frame where the source permits it, else a fetched snapshot) for
  * anything the extractor reads poorly.
  */
+/**
+ * Find in report: a box, a running count, and the two arrows.
+ *
+ * Deliberately the shape every reader already knows - Enter and the down arrow
+ * go forward, shift-Enter and the up arrow go back, Escape clears - because a
+ * search box that behaves its own way is worse than none.
+ */
+function ReportSearch({
+  query,
+  hits,
+  active,
+  disabled,
+  onQuery,
+  onStep,
+}: {
+  query: string;
+  hits: number;
+  active: number;
+  disabled: boolean;
+  onQuery: (q: string) => void;
+  onStep: (delta: number) => void;
+}) {
+  const step =
+    "rounded border border-[#e5e7eb] bg-white px-1.5 py-1 text-slate-500 enabled:hover:bg-slate-100 disabled:opacity-40";
+  return (
+    <div className="mb-2 flex shrink-0 items-center gap-1.5">
+      <div className="relative min-w-0 flex-1">
+        <input
+          type="search"
+          value={query}
+          disabled={disabled}
+          onChange={(e) => onQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onStep(e.shiftKey ? -1 : 1);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onQuery("");
+            }
+          }}
+          placeholder={
+            disabled ? "Search is available in the reading view" : "Find in report"
+          }
+          aria-label="Find in report"
+          className="w-full rounded-md border border-[#e5e7eb] bg-white py-1 pl-2.5 pr-16 text-[12px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-slate-400 disabled:bg-slate-50"
+        />
+        {query ? (
+          <span
+            aria-live="polite"
+            className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[11px] tabular-nums text-slate-400"
+          >
+            {hits ? `${active + 1} of ${hits}` : "No matches"}
+          </span>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        onClick={() => onStep(-1)}
+        disabled={disabled || hits === 0}
+        title="Previous match (Shift+Enter)"
+        aria-label="Previous match"
+        className={step}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="18 15 12 9 6 15" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={() => onStep(1)}
+        disabled={disabled || hits === 0}
+        title="Next match (Enter)"
+        aria-label="Next match"
+        className={step}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 function ReportBody({
   view,
   url,
   showOriginal,
   onToggleOriginal,
   reading,
+  highlight,
+  bodyRef,
 }: {
   view: ViewState;
   url: string | null;
   showOriginal: boolean;
   onToggleOriginal: () => void;
   reading: ReadingPrefs;
+  highlight?: Highlight;
+  /** The scrolling article pane, so a hit can be brought into view. */
+  bodyRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   if (view.status === "loading") {
     return (
@@ -847,13 +995,13 @@ function ReportBody({
           />
         )
       ) : (
-        <div className="flex-1 overflow-y-auto bg-white px-4 py-3">
+        <div ref={bodyRef} className="flex-1 overflow-y-auto bg-white px-4 py-3">
           {hasReading ? (
             <div
               className="max-w-3xl space-y-2 leading-relaxed"
               style={readingStyle(reading)}
             >
-              <Markdown text={view.markdown} />
+              <Markdown text={view.markdown} highlight={highlight} />
             </div>
           ) : (
             <div className="text-[12px] text-slate-500">

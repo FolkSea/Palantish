@@ -24,6 +24,7 @@ export function EditableIocList({
   onEdit,
   display,
   tooltip,
+  onSearch,
   emptyLabel = "None.",
 }: {
   items: string[];
@@ -35,6 +36,8 @@ export function EditableIocList({
   display?: (value: string) => string;
   /** Optional hover tooltip text for the label (recomputed per value). */
   tooltip?: (value: string) => string;
+  /** When given, the value becomes a button that searches the report for it. */
+  onSearch?: (value: string) => void;
   emptyLabel?: string;
 }) {
   if (!items.length) {
@@ -52,6 +55,7 @@ export function EditableIocList({
           onEdit={onEdit}
           display={display}
           tooltip={tooltip}
+          onSearch={onSearch}
         />
       ))}
     </ul>
@@ -66,6 +70,7 @@ function IocLabel({
   onEdit,
   display,
   tooltip,
+  onSearch,
 }: {
   value: string;
   type: string;
@@ -74,6 +79,7 @@ function IocLabel({
   onEdit: (oldValue: string, newValue: string) => Promise<string | null>;
   display?: (value: string) => string;
   tooltip?: (value: string) => string;
+  onSearch?: (value: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -152,22 +158,39 @@ function IocLabel({
 
   return (
     <li className="group flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">
-      <span
-        onMouseEnter={
-          tooltip
-            ? (e) => {
-                const r = e.currentTarget.getBoundingClientRect();
-                setTip({ top: r.bottom + 6, right: window.innerWidth - r.right });
-              }
-            : undefined
-        }
-        onMouseLeave={tooltip ? () => setTip(null) : undefined}
-        className={`min-w-0 flex-1 text-[12px] text-slate-700 ${
-          display ? `break-words ${tooltip ? "cursor-help" : ""}` : "break-all font-mono"
-        }`}
-      >
-        {display ? display(value) : value}
-      </span>
+      {(() => {
+        const hover = tooltip
+          ? (e: React.MouseEvent<HTMLElement>) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setTip({ top: r.bottom + 6, right: window.innerWidth - r.right });
+            }
+          : undefined;
+        const shape = `min-w-0 flex-1 text-left text-[12px] text-slate-700 ${
+          display ? "break-words" : "break-all font-mono"
+        }`;
+        // An indicator is something you go and look at in the report, so it is
+        // a button wherever the reader has a report to look at.
+        return onSearch ? (
+          <button
+            type="button"
+            onClick={() => onSearch(value)}
+            onMouseEnter={hover}
+            onMouseLeave={tooltip ? () => setTip(null) : undefined}
+            title={`Find "${value}" in the report`}
+            className={`${shape} cursor-pointer rounded hover:bg-amber-100 hover:text-slate-900`}
+          >
+            {display ? display(value) : value}
+          </button>
+        ) : (
+          <span
+            onMouseEnter={hover}
+            onMouseLeave={tooltip ? () => setTip(null) : undefined}
+            className={`${shape} ${display && tooltip ? "cursor-help" : ""}`}
+          >
+            {display ? display(value) : value}
+          </span>
+        );
+      })()}
       {tooltip && tip ? (
         <div
           className="pointer-events-none fixed z-[70] max-w-xs rounded-md bg-slate-800 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg"
