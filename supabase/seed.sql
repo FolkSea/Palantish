@@ -8,7 +8,8 @@
 
 -- Access allow-list ----------------------------------------------------------
 insert into allowed_users (email, note) values
-  ('andrew.m.dove@gmail.com', 'owner')
+  ('andrew.m.dove@gmail.com', 'owner'),
+  ('andy@example.com', 'local dev user')
 on conflict (email) do nothing;
 
 -- Nation-state activity is grouped per country, derived from each intel item's
