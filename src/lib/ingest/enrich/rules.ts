@@ -2,6 +2,7 @@ import type { Nexus, Confidence } from "@/lib/badges";
 import { adversaryLabel } from "@/lib/badges";
 import type { Motivation } from "@/lib/actor-catalogue";
 import { computeHash } from "@/lib/ingest/dedup";
+import { isStrongAlias } from "@/lib/ingest/alias-quality";
 import type { Enricher, EnrichedItem, ItemType, RawCandidate } from "@/lib/ingest/types";
 
 /**
@@ -112,8 +113,16 @@ export function matchAdversaryGroup(
   groups: GroupEntry[],
   body?: string | null,
 ): GroupEntry | null {
-  const haystack = `${title} ${description ?? ""} ${body ?? ""}`.toLowerCase();
-  return matchGroup(haystack, groups);
+  // What the report itself says it is about. An actor named here was named on
+  // purpose, so any alias will do.
+  const stated = matchGroup(`${title} ${description ?? ""}`.toLowerCase(), groups);
+  if (stated || !body) return stated;
+
+  // Nothing stated, so fall back to the article - but the article is the whole
+  // fetched page, navigation and related-story teasers included, and a lone
+  // coined word in it may be a link to last week's report rather than this
+  // one's subject. Only a phrase or a designator carrying a digit counts here.
+  return matchGroup(body.toLowerCase(), groups.filter((g) => isStrongAlias(g.alias)));
 }
 
 /**

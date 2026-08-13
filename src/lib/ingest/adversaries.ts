@@ -1,6 +1,7 @@
 import { ANIMAL_COUNTRY, type Nexus } from "@/lib/badges";
 import type { Motivation } from "@/lib/actor-catalogue";
 import type { GroupEntry } from "./enrich/rules";
+import { isMatchableAlias } from "./alias-quality";
 
 // The `adversaries` table is the only catalogue. It used to be loaded from a
 // committed adversaries.json, which meant an actor deleted in the app came
@@ -31,8 +32,7 @@ export function familyForAnimal(
   return ANIMAL_FAMILY[animal.trim().toUpperCase()] ?? null;
 }
 
-// Aliases shorter than this are too generic to match safely.
-const MIN_ALIAS_LEN = 4;
+
 
 /** The stored adversary shape used to build the alias matcher (nexus + motivation
  * come straight from the row - derived at load time). */
@@ -66,7 +66,8 @@ export function buildGroupsFromAdversaries(
     ];
     for (const raw of aliases) {
       const alias = (raw ?? "").trim().toLowerCase();
-      if (alias.length < MIN_ALIAS_LEN) continue;
+      // An alias that is also an ordinary word attributes everything it reads.
+      if (!isMatchableAlias(alias)) continue;
       const key = `${alias}|${a.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
