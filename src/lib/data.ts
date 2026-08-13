@@ -6,7 +6,7 @@ import {
   type Page,
 } from "@/lib/page";
 import { fetchAllPages } from "@/lib/supabase/paging";
-import { loadLabelsFor } from "@/lib/report-labels";
+import { loadLabelsFor, loadLabelsSince } from "@/lib/report-labels";
 import { STALE_DAYS } from "@/lib/feed-status";
 import type { Database } from "@/lib/supabase/database.types";
 import {
@@ -264,6 +264,7 @@ export async function loadDashboard(): Promise<DashboardData> {
     otherRows,
     groups,
     hidden,
+    labelsInWindow,
     summaryRes,
     staleFeedsRes,
     refreshRes,
@@ -274,6 +275,9 @@ export async function loadDashboard(): Promise<DashboardData> {
     itemsSince(supabase, "other", historyCutoff),
     loadActorGroups(supabase),
     loadHidden(supabase),
+    // In the same wave as the reports rather than after them: the labels are
+    // scoped by the same window, so they never needed the report ids.
+    loadLabelsSince(supabase, historyCutoff),
     supabase
       .from("executive_summaries")
       .select("summary, source, model, generated_at, citations")
@@ -300,11 +304,13 @@ export async function loadDashboard(): Promise<DashboardData> {
   // and drop anything this user has hidden.
   const keep = (i: { title: string | null; description?: string | null; raw_hash: string }) =>
     isThreatIntel(i.title, i.description) && !hidden.has(i.raw_hash);
-  const labelsById: LabelsById = await loadLabelsFor(supabase, [
-    ...new Set(
-      [...researchRows, ...breachRows, ...otherRows].map((r) => r.id),
-    ),
-  ]);
+  // The windowed query is the fast path; if it failed, pay for the extra round
+  // trip rather than render a dashboard with the label chips missing.
+  const labelsById: LabelsById =
+    labelsInWindow ??
+    (await loadLabelsFor(supabase, [
+      ...new Set([...researchRows, ...breachRows, ...otherRows].map((r) => r.id)),
+    ]));
 
   const { nsGroups, ecrimeGroups, hacktivismGroups } = groups;
   // Research items feed the actor sections and the timeline over the whole

@@ -136,22 +136,14 @@ export async function reportNetworkAction(): Promise<NetworkResult> {
   if (!user) return { ok: false, error: "Not authorized." };
   const db = supabase;
 
-  const { data: hiddenRows } = await db.from("hidden_items").select("raw_hash");
-  const hidden = new Set((hiddenRows ?? []).map((r) => r.raw_hash));
-
-  // Paged: both tables run past PostgREST's 1000-row cap, which truncates
-  // silently rather than erroring.
-  const items = (
-    await fetchAllPages<ItemRow>(
-      (from, to) =>
-        db.from("intel_items").select(ITEM_COLS).order("id").range(from, to) as unknown as
-          PromiseLike<{ data: ItemRow[] | null }>,
-    )
-  ).filter((i) => !hidden.has(i.raw_hash));
-  const itemById = new Map(items.map((i) => [i.id, i]));
-
-  const rawLinks = await fetchAllPages<{ intel_item_id: string; ioc_id: string }>(
-    (from, to) =>
+  // Two independent reads, so they go together rather than one after the other.
+  // Every query here crosses the network, and this page used to make three
+  // waves of them before it drew anything.
+  const [hiddenRows, rawLinks] = await Promise.all([
+    db.from("hidden_items").select("raw_hash"),
+    // Paged: this table runs past PostgREST's 1000-row cap, which truncates
+    // silently rather than erroring.
+    fetchAllPages<{ intel_item_id: string; ioc_id: string }>((from, to) =>
       db
         .from("intel_item_iocs")
         .select("intel_item_id, ioc_id")
@@ -162,7 +154,30 @@ export async function reportNetworkAction(): Promise<NetworkResult> {
         .order("ioc_id")
         .order("intel_item_id")
         .range(from, to),
-  );
+    ),
+  ]);
+  const hidden = new Set((hiddenRows.data ?? []).map((r) => r.raw_hash));
+
+  // Only reports that carry an indicator can end up on this canvas, so only
+  // those are worth fetching - the whole corpus was being read to draw the
+  // half of it that connects to something. Chunked by id, which runs the
+  // chunks concurrently rather than paging the table in sequence.
+  const linkedIds = [...new Set(rawLinks.map((l) => l.intel_item_id))];
+  const items = (
+    await fetchAllByIds<ItemRow>(linkedIds, (chunk, from, to) =>
+      db
+        .from("intel_items")
+        .select(ITEM_COLS)
+        .in("id", chunk)
+        .order("id")
+        .range(from, to) as unknown as PromiseLike<{ data: ItemRow[] | null }>,
+    )
+  ).filter((i) => !hidden.has(i.raw_hash));
+  const itemById = new Map(items.map((i) => [i.id, i]));
+
+  // Filtered before collapsing, not after: a hidden report must not count
+  // towards an indicator's fan-out, or dropping it would change which
+  // indicators are judged too widely shared to mean anything.
   const links: EntityLink[] = rawLinks
     .filter((l) => itemById.has(l.intel_item_id))
     .map((l) => ({ itemId: l.intel_item_id, entityId: l.ioc_id }));
