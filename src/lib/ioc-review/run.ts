@@ -179,15 +179,7 @@ function isAllowlisted(
   iocType: string,
   allowed: string[],
 ): boolean {
-  let host = value.toLowerCase();
-  if (iocType === "uri") {
-    try {
-      host = new URL(value).hostname.replace(/^www\./, "").toLowerCase();
-    } catch {
-      return false;
-    }
-  } else if (iocType !== "domain") {
-    return false;
-  }
+  if (iocType !== "domain") return false;
+  const host = value.toLowerCase();
   return allowed.some((a) => host === a || host.endsWith(`.${a}`));
 }

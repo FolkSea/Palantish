@@ -102,7 +102,7 @@ export async function sharedEntitiesAction(
 
   // Group by kind in a fixed order, then alphabetically, so the same pair always
   // reads the same way and the interesting kinds come first.
-  const ORDER = ["cve", "mitre", "ip", "domain", "uri", "file_hash"];
+  const ORDER = ["cve", "mitre", "ip", "domain", "file_hash"];
   rows.sort((x, y) => {
     const d = ORDER.indexOf(x.ioc_type) - ORDER.indexOf(y.ioc_type);
     return d !== 0 ? d : x.value.localeCompare(y.value);

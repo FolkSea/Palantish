@@ -28,7 +28,7 @@ export type Corpus = {
 
 type Db = Awaited<ReturnType<typeof createClient>>;
 
-const INDICATOR_FIELDS: Field[] = ["ip", "domain", "url", "hash", "cve", "ioc", "ttp"];
+const INDICATOR_FIELDS: Field[] = ["ip", "domain", "hash", "cve", "ioc", "ttp"];
 
 type IocsByItem = Map<string, { type: string; value: string }[]>;
 type IocRow = {

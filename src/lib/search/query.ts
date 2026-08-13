@@ -18,7 +18,6 @@ export type Field =
   | "cve"
   | "ip"
   | "domain"
-  | "url"
   | "hash"
   | "ioc"
   | "source";
@@ -44,8 +43,6 @@ export const FIELD_ALIASES: Record<string, Field> = {
   ip: "ip",
   dom: "domain",
   domain: "domain",
-  url: "url",
-  uri: "url",
   hash: "hash",
   filehash: "hash",
   file: "hash",
@@ -60,7 +57,6 @@ export const FIELD_ALIASES: Record<string, Field> = {
 const INDICATOR_FIELDS = new Set<Field>([
   "ip",
   "domain",
-  "url",
   "hash",
   "cve",
   "ioc",

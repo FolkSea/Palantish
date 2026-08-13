@@ -380,7 +380,6 @@ export function indicatorCount(i: Indicators): number {
 
 // Full-string validators for editing an indicator by type.
 const DOMAIN_FULL_RE = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/i;
-const URI_FULL_RE = /^https?:\/\/[^\s]+$/i;
 const HASH_FULL_RE = /^(?:[a-f0-9]{32}|[a-f0-9]{40}|[a-f0-9]{64})$/i;
 const CVE_FULL_RE = /^CVE-\d{4}-\d{4,7}$/i;
 const MITRE_FULL_RE = /^T\d{4}(?:\.\d{3})?$/i;
@@ -416,8 +415,6 @@ export function validIndicator(value: string, type: string): boolean {
       );
     case "domain":
       return DOMAIN_FULL_RE.test(v);
-    case "uri":
-      return URI_FULL_RE.test(v);
     case "file_hash":
       return HASH_FULL_RE.test(v);
     case "cve":
@@ -425,7 +422,11 @@ export function validIndicator(value: string, type: string): boolean {
     case "mitre":
       return MITRE_FULL_RE.test(v);
     default:
-      return true;
+      // An unrecognised type is not a valid indicator. This read `true` while
+      // every type in the system had a case above, so nothing ever reached it;
+      // retiring uri did, and a permissive default would have accepted any
+      // value under a type nothing knows how to check.
+      return false;
   }
 }
 

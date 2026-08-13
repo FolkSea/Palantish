@@ -183,12 +183,15 @@ describe("never-flag guardrail", () => {
     expect(out.map((o) => o.value)).toEqual(["evil.example"]);
   });
 
+  // The value used to be a URL here, because uri was a reviewable type and the
+  // guardrail pulled the host out of it. URLs are not indicators any more, so
+  // the review only ever sees the host itself.
   it("covers subdomains of a protected host", () => {
     const out = parseReviewResponse(
       JSON.stringify({
         flagged: [
           {
-            value: "https://cdn.discordapp.com/attachments/1/2/p.exe",
+            value: "cdn.discordapp.com",
             category: "general-purpose-platform",
             reason: "x",
           },
@@ -202,9 +205,9 @@ describe("never-flag guardrail", () => {
   it("protects the parent, because allowlisting one suffixes to the others", () => {
     // Blessing google.com would also silence drive.google.com, so the parent
     // has to be protected even though the bare domain looks like pure noise.
-    expect(isNeverFlagged("google.com", "domain")).toBe(true);
-    expect(isNeverFlagged("drive.google.com", "domain")).toBe(true);
-    expect(isNeverFlagged("notgoogle.com", "domain")).toBe(false);
-    expect(isNeverFlagged("google.com.evil.ru", "domain")).toBe(false);
+    expect(isNeverFlagged("google.com")).toBe(true);
+    expect(isNeverFlagged("drive.google.com")).toBe(true);
+    expect(isNeverFlagged("notgoogle.com")).toBe(false);
+    expect(isNeverFlagged("google.com.evil.ru")).toBe(false);
   });
 });

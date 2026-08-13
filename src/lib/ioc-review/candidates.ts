@@ -27,7 +27,7 @@ export type ReviewVerdict = {
  * of them. CVEs and ATT&CK techniques are excluded outright - reports sharing a
  * CVE is the system working, not a fault - which also keeps the prompt small.
  */
-export const REVIEWABLE_TYPES = ["ip", "domain", "uri", "file_hash"];
+export const REVIEWABLE_TYPES = ["ip", "domain", "file_hash"];
 
 /** Reviewed per run. Enough to cover the connected part of a day's graph while
  * keeping one cheap call, and the highest fan-out is where the damage is. */
@@ -80,21 +80,15 @@ export const NEVER_FLAG = [
   "proton.me", "protonmail.com", "tutanota.com", "zoho.com",
 ];
 
-/** The host a value would be allowlisted under, for the never-flag check. */
-function hostOfValue(value: string, iocType: string): string {
-  if (iocType === "uri") {
-    try {
-      return new URL(value).hostname.replace(/^www\./, "").toLowerCase();
-    } catch {
-      return "";
-    }
-  }
-  return value.trim().toLowerCase();
-}
-
-/** Whether this value is one the review must never raise. */
-export function isNeverFlagged(value: string, iocType: string): boolean {
-  const host = hostOfValue(value, iocType);
+/**
+ * Whether this value is one the review must never raise.
+ *
+ * The value used to be turned into a host first, because a uri indicator meant
+ * comparing the allowlist against the URL's hostname. URLs are not indicators
+ * any more, so every remaining type is already the thing being compared.
+ */
+export function isNeverFlagged(value: string): boolean {
+  const host = value.trim().toLowerCase();
   if (!host) return false;
   return NEVER_FLAG.some((n) => host === n || host.endsWith(`.${n}`));
 }
@@ -167,7 +161,7 @@ export function parseReviewResponse(
     if (!match || seen.has(match.iocId)) continue;
     // The guardrail, not a suggestion: never offer an administrator the chance
     // to delete and allowlist a platform whose abuse is routine.
-    if (isNeverFlagged(match.value, match.iocType)) continue;
+    if (isNeverFlagged(match.value)) continue;
     seen.add(match.iocId);
     out.push({
       value: match.value,

@@ -24,7 +24,6 @@ function doc(over: Partial<SearchDoc> = {}): SearchDoc {
     labels: [],
     ip: [],
     domain: [],
-    url: [],
     hash: [],
     cve: [],
     ttp: [],
@@ -55,8 +54,6 @@ describe("parseQuery: fields", () => {
       ["ip:x", "ip"],
       ["dom:x", "domain"],
       ["domain:x", "domain"],
-      ["url:x", "url"],
-      ["uri:x", "url"],
       ["hash:x", "hash"],
       ["file:x", "hash"],
       ["ioc:x", "ioc"],
@@ -106,8 +103,8 @@ describe("parseQuery: fields", () => {
     expect(parse("dom:evil[.]com")).toMatchObject({
       matcher: { kind: "contains", value: "evil.com" },
     });
-    expect(parse("url:hxxps://evil[.]com/a")).toMatchObject({
-      matcher: { kind: "contains", value: "https://evil.com/a" },
+    expect(parse("ip:185.220.101[.]4")).toMatchObject({
+      matcher: { kind: "contains", value: "185.220.101.4" },
     });
     // Defanging is for indicators only; a label is matched as typed.
     expect(parse("label:a[.]b")).toMatchObject({
@@ -307,7 +304,6 @@ describe("matchesDoc", () => {
     labels: ["Malware/ZimReaper", "Target/Zimbra", "AI/Claude"],
     ip: ["91.108.106.229"],
     domain: ["evil.example.ru"],
-    url: ["https://evil.example.ru/panel"],
     hash: ["d41d8cd98f00b204e9800998ecf8427e"],
     cve: ["CVE-2026-42897"],
     ttp: ["T1059.001"],
@@ -322,7 +318,6 @@ describe("matchesDoc", () => {
       'src:"hacker news"',
       "ip:91.108",
       "dom:example.ru",
-      "url:/panel",
       "hash:d41d8cd9",
       "cve:2026-42897",
       "ttp:T1059",
@@ -420,14 +415,12 @@ describe("toDoc", () => {
     const d = toDoc(row, ["Target/Zimbra"], [
       { type: "ip", value: "1.2.3.4" },
       { type: "domain", value: "evil.ru" },
-      { type: "uri", value: "https://evil.ru/a" },
-      { type: "file_hash", value: "abc123" },
+        { type: "file_hash", value: "abc123" },
       { type: "cve", value: "CVE-2026-1111" },
       { type: "mitre", value: "T1059" },
     ]);
     expect(d.ip).toEqual(["1.2.3.4"]);
     expect(d.domain).toEqual(["evil.ru"]);
-    expect(d.url).toEqual(["https://evil.ru/a"]);
     expect(d.hash).toEqual(["abc123"]);
     expect(d.ttp).toEqual(["T1059"]);
     expect(d.labels).toEqual(["Target/Zimbra"]);

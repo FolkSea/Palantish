@@ -21,14 +21,6 @@ import type { LlmIndicators } from "./web-triage";
 
 const MITRE_FULL_RE = /^T\d{4}(?:\.\d{3})?$/i;
 
-function hostOf(uri: string): string {
-  try {
-    return new URL(uri).hostname.replace(/^www\./, "").toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
 type Excludes = {
   excludeDomains?: Iterable<string>;
   excludeIps?: Iterable<string>;
@@ -42,10 +34,6 @@ function isExcluded(type: string, value: string, ex: Excludes): boolean {
     // domains - the model reports them in good faith, they simply are not.
     if (isFilenameOrCode(value)) return true;
     return shouldExcludeDomain(value, ex.excludeDomains);
-  }
-  if (type === "uri") {
-    const h = hostOf(value);
-    return !h || shouldExcludeDomain(h, ex.excludeDomains);
   }
   if (type === "ip") {
     if (isIpv4Indicator(value)) return shouldExcludeIp(value, ex.excludeIps);

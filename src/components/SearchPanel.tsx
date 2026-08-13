@@ -174,7 +174,7 @@ function QueryHelp({ onPick }: { onPick: (query: string) => void }) {
     ["adv: / actor:", "attributed adversary, either spelling"],
     ["ttp: / mitre:", "ATT&CK technique, e.g. T1059.001"],
     ["cve:", "CVE id, on the report or its indicators"],
-    ["ip: dom: url: hash:", "indicators by type; defanged input is fine"],
+    ["ip: dom: hash:", "indicators by type; defanged input is fine"],
     ["ioc:", "any indicator, whatever its type"],
     ["src:", "source feed name"],
     ["(bare words)", "title, summary and affected product"],

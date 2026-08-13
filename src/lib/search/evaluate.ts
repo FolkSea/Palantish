@@ -24,7 +24,6 @@ export type SearchDoc = {
   /** Indicator values by type, as stored (fanged). */
   ip: string[];
   domain: string[];
-  url: string[];
   hash: string[];
   cve: string[];
   ttp: string[];
@@ -45,8 +44,6 @@ function valuesFor(doc: SearchDoc, field: Field): readonly (string | null)[] {
       return doc.ip;
     case "domain":
       return doc.domain;
-    case "url":
-      return doc.url;
     case "hash":
       return doc.hash;
     case "cve":
@@ -56,7 +53,7 @@ function valuesFor(doc: SearchDoc, field: Field): readonly (string | null)[] {
     case "ioc":
       // Any indicator, whatever its type - the catch-all for "is this value
       // anywhere in our indicator set".
-      return [...doc.ip, ...doc.domain, ...doc.url, ...doc.hash, ...doc.cve];
+      return [...doc.ip, ...doc.domain, ...doc.hash, ...doc.cve];
   }
 }
 
@@ -131,7 +128,6 @@ export function toDoc(
     labels,
     ip: [],
     domain: [],
-    url: [],
     hash: [],
     // An exploit item carries its CVE directly, not only as a linked indicator.
     cve: row.cve_id ? [row.cve_id] : [],
@@ -144,9 +140,6 @@ export function toDoc(
         break;
       case "domain":
         doc.domain.push(value);
-        break;
-      case "uri":
-        doc.url.push(value);
         break;
       case "file_hash":
         doc.hash.push(value);

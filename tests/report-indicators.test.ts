@@ -138,8 +138,9 @@ describe("validIndicator", () => {
     expect(validIndicator("8.8.8.256", "ip")).toBe(false);
     expect(validIndicator("evil.com", "domain")).toBe(true);
     expect(validIndicator("not a domain", "domain")).toBe(false);
-    expect(validIndicator("https://evil.com/a", "uri")).toBe(true);
-    expect(validIndicator("evil.com", "uri")).toBe(false);
+    // uri is not a type an indicator can be any more, so nothing validates as
+    // one - including a value that used to.
+    expect(validIndicator("https://evil.com/a", "uri")).toBe(false);
     expect(validIndicator("d41d8cd98f00b204e9800998ecf8427e", "file_hash")).toBe(true);
     expect(validIndicator("zzz", "file_hash")).toBe(false);
     expect(validIndicator("CVE-2026-1234", "cve")).toBe(true);

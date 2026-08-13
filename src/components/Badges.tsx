@@ -77,18 +77,3 @@ export function SourceBadge({
     );
   return <span className={cls}>{name}</span>;
 }
-
-export function StatusPill({ status }: { status: "active" | "quiet" }) {
-  const active = status === "active";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none ${
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-slate-300 bg-slate-100 text-slate-500"
-      }`}
-    >
-      {active ? "ACTIVE" : "NO NEW REPORTING"}
-    </span>
-  );
-}

@@ -127,13 +127,6 @@ export async function keepFlaggedIndicators(
 function allowlistValueFor(value: string, iocType: string): string | null {
   if (iocType === "domain") return value.toLowerCase().trim() || null;
   if (iocType === "ip") return value.trim() || null;
-  if (iocType === "uri") {
-    try {
-      return new URL(value).hostname.replace(/^www\./, "").toLowerCase();
-    } catch {
-      return null;
-    }
-  }
   // A file hash is specific to one artefact; allowlisting it protects nothing.
   return null;
 }

@@ -2,7 +2,6 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
-  scrapeArticle,
   scrapeArticleWithAI,
   siteIdentity,
   type ScrapedArticle,
@@ -249,11 +248,6 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     sourceCreated,
     report,
   };
-}
-
-/** Default path: heuristic scrape of the URL, then ingest. */
-export async function importBlogPost(rawUrl: string): Promise<ImportResult> {
-  return ingestArticle(await scrapeArticle(rawUrl));
 }
 
 /** Fallback: let the LLM read the fetched page, then ingest. */

@@ -29,13 +29,6 @@ export type ReviewStatus = {
 /** The host an allowlist entry would cover, so the consequence is on screen. */
 function allowlistPreview(value: string, iocType: string): string | null {
   if (iocType === "domain" || iocType === "ip") return value;
-  if (iocType === "uri") {
-    try {
-      return new URL(value).hostname.replace(/^www\./, "");
-    } catch {
-      return null;
-    }
-  }
   return null;
 }
 

@@ -15,6 +15,7 @@ import {
 } from "@/lib/actor-catalogue";
 import type { Nexus } from "@/lib/badges";
 import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
+import { nexusForCountry } from "@/lib/actor-classify";
 import { sortGroups, matchGroup } from "@/lib/ingest/enrich/rules";
 
 function toList(csv: string): string[] {
@@ -28,22 +29,11 @@ const ACTOR_SELECT =
   "id, name, motivation, country, community_identifiers, description";
 
 // The ingest attributes intel by nexus, so derive it from the actor's
-// motivation + country (the four tracked states map to their own nexus, other
-// nation-states to rest_of_world, and eCrime/hacktivism to other).
+// motivation + country. This used to carry its own copy of the country switch,
+// which meant the nexus an actor was stored under and the nexus the dashboard
+// grouped it by came from two places that could drift apart.
 function nexusFor(motivation: Motivation, country: string | null): Nexus {
-  if (motivation !== "nation_state") return "other";
-  switch ((country ?? "").trim().toLowerCase()) {
-    case "china":
-      return "china";
-    case "russia":
-      return "russia";
-    case "north korea":
-      return "north_korea";
-    case "iran":
-      return "iran";
-    default:
-      return "rest_of_world";
-  }
+  return motivation === "nation_state" ? nexusForCountry(country) : "other";
 }
 
 function actorRow(input: ActorInput) {
