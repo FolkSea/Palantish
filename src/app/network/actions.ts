@@ -5,7 +5,10 @@ import { nexusForCountry } from "@/lib/actor-classify";
 import { fetchAllPages, fetchAllByIds } from "@/lib/supabase/paging";
 import { techniqueInfo } from "@/lib/mitre/techniques";
 import { itemNode, adversaryNodeFor, edge, mergeGraph } from "@/lib/graph/build";
-import { collapseToPairs, type EntityLink } from "@/lib/graph/network";
+// How widely an indicator may be shared before it stops meaning a
+// relationship. One CVE in two hundred advisories says only "these are all
+// advisories", and would cost a pair for every combination of them.
+const MAX_FANOUT = 25;
 import type {
   GraphData,
   GraphEdge,
@@ -136,53 +139,42 @@ export async function reportNetworkAction(): Promise<NetworkResult> {
   if (!user) return { ok: false, error: "Not authorized." };
   const db = supabase;
 
-  // Two independent reads, so they go together rather than one after the other.
-  // Every query here crosses the network, and this page used to make three
-  // waves of them before it drew anything.
-  const [hiddenRows, rawLinks] = await Promise.all([
-    db.from("hidden_items").select("raw_hash"),
-    // Paged: this table runs past PostgREST's 1000-row cap, which truncates
-    // silently rather than erroring.
-    fetchAllPages<{ intel_item_id: string; ioc_id: string }>((from, to) =>
-      db
-        .from("intel_item_iocs")
-        .select("intel_item_id, ioc_id")
-        // Both columns, because range paging over a non-unique sort is not
-        // stable: ioc_id alone repeats across thousands of rows, so rows either
-        // side of a page boundary can reorder between requests and go missing.
-        // Together they are the primary key, so the order is total.
-        .order("ioc_id")
-        .order("intel_item_id")
-        .range(from, to),
-    ),
-  ]);
-  const hidden = new Set((hiddenRows.data ?? []).map((r) => r.raw_hash));
+  // One call. The pairs are what the page draws; the intel_item_iocs rows they
+  // are computed from - thousands of them - stay in the database, which is
+  // where the work belongs. report_network runs under the caller's row-level
+  // security and drops the reader's hidden reports before it counts fan-out.
+  const { data, error } = await db.rpc("report_network", {
+    max_fanout: MAX_FANOUT,
+  });
+  if (error) return { ok: false, error: error.message };
+  const payload = (data ?? {}) as {
+    pairs?: [string, string, number][];
+    dropped?: number;
+  };
+  const pairs = payload.pairs ?? [];
 
-  // Only reports that carry an indicator can end up on this canvas, so only
-  // those are worth fetching - the whole corpus was being read to draw the
-  // half of it that connects to something. Chunked by id, which runs the
-  // chunks concurrently rather than paging the table in sequence.
-  const linkedIds = [...new Set(rawLinks.map((l) => l.intel_item_id))];
-  const items = (
-    await fetchAllByIds<ItemRow>(linkedIds, (chunk, from, to) =>
-      db
-        .from("intel_items")
-        .select(ITEM_COLS)
-        .in("id", chunk)
-        .order("id")
-        .range(from, to) as unknown as PromiseLike<{ data: ItemRow[] | null }>,
-    )
-  ).filter((i) => !hidden.has(i.raw_hash));
+  // Only reports that ended up in a pair can be drawn, so only those are
+  // fetched - chunked by id, which runs the chunks concurrently.
+  const linkedIds = [...new Set(pairs.flatMap(([a, b]) => [a, b]))];
+  const items = await fetchAllByIds<ItemRow>(linkedIds, (chunk, from, to) =>
+    db
+      .from("intel_items")
+      .select(ITEM_COLS)
+      .in("id", chunk)
+      .order("id")
+      .range(from, to) as unknown as PromiseLike<{ data: ItemRow[] | null }>,
+  );
   const itemById = new Map(items.map((i) => [i.id, i]));
 
-  // Filtered before collapsing, not after: a hidden report must not count
-  // towards an indicator's fan-out, or dropping it would change which
-  // indicators are judged too widely shared to mean anything.
-  const links: EntityLink[] = rawLinks
-    .filter((l) => itemById.has(l.intel_item_id))
-    .map((l) => ({ itemId: l.intel_item_id, entityId: l.ioc_id }));
-
-  const { edges: pairEdges, linked, dropped } = collapseToPairs(links);
+  // A pair whose report did not come back - deleted between the two calls, or
+  // never readable by this caller - would be an edge to a node that is never
+  // drawn, which the canvas refuses outright.
+  const drawable = pairs.filter(([a, b]) => itemById.has(a) && itemById.has(b));
+  const pairEdges: GraphEdge[] = drawable.map(([a, b, weight]) => ({
+    ...edge(`item:${a}`, `item:${b}`),
+    weight,
+  }));
+  const linked = new Set(drawable.flatMap(([a, b]) => [a, b]));
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [...pairEdges];
@@ -228,5 +220,5 @@ export async function reportNetworkAction(): Promise<NetworkResult> {
   }
 
   const graph: GraphData = mergeGraph({ nodes, edges });
-  return { ok: true, graph, droppedEntities: dropped.length };
+  return { ok: true, graph, droppedEntities: payload.dropped ?? 0 };
 }
