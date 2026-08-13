@@ -7,7 +7,7 @@ import {
 } from "@/lib/ingest/enrich/rules";
 import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
 
-// The catalogue entry exactly as adversaries.json holds it.
+// The catalogue entry exactly as the adversaries table holds it.
 const groups = sortGroups(
   buildGroupsFromAdversaries([
     {

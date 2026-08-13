@@ -8,7 +8,6 @@
     "start": "next start",
     "lint": "eslint",
     "ingest": "NODE_OPTIONS='--conditions=react-server' tsx scripts/ingest.ts",
-    "load:adversaries": "NODE_OPTIONS='--conditions=react-server' tsx scripts/load-adversaries.ts",
     "reclassify": "NODE_OPTIONS='--conditions=react-server' tsx scripts/reclassify.ts",
     "backfill:iocs": "NODE_OPTIONS='--conditions=react-server' tsx scripts/backfill-ioc-domains.ts",
     "prune-iocs": "NODE_OPTIONS='--conditions=react-server' tsx scripts/prune-iocs.ts",

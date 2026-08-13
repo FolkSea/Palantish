@@ -1,21 +1,13 @@
-import { readFileSync } from "node:fs";
-import {
-  mapAdversaryRecords,
-  buildGroupsFromAdversaries,
-  type RawAdversaryRecord,
-} from "@/lib/ingest/adversaries";
+import { buildGroupsFromAdversaries } from "@/lib/ingest/adversaries";
 import { sortGroups, type GroupEntry } from "@/lib/ingest/enrich/rules";
+import { CATALOGUE_FIXTURE } from "../fixtures/adversaries";
 
-// The committed catalogue is the single source of actor identity. Tests derive
-// their matchers from it exactly as the loader and the app do, so a passing
-// suite proves attribution works without any hard-coded actor table. Tests run
-// from the repo root, so the relative path resolves.
-const raw = JSON.parse(
-  readFileSync("adversaries.json", "utf8"),
-) as RawAdversaryRecord[];
-const rows = mapAdversaryRecords(raw);
-
-/** Every catalogue actor as a longest-alias-first matcher. */
+/**
+ * The fixture actors as longest-alias-first matchers, built through the same
+ * function the app uses - so a passing suite proves attribution works, without
+ * the repository holding a copy of the catalogue that could be loaded over the
+ * real one.
+ */
 export function catalogueGroups(): GroupEntry[] {
-  return sortGroups(buildGroupsFromAdversaries(rows));
+  return sortGroups(buildGroupsFromAdversaries(CATALOGUE_FIXTURE));
 }
