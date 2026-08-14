@@ -156,6 +156,16 @@ export function HeaderMenu({ isAdministrator }: { isAdministrator: boolean }) {
             <MenuIcon d="M4 5h16M4 12h16M4 19h10" /> Refresh Summary
           </button>
           <Link
+            href="/ioc-search"
+            role="menuitem"
+            className={itemCls}
+            onClick={() => setOpen(false)}
+          >
+            {/* Magnifier over a document. */}
+            <MenuIcon d="M10.5 14.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM13.4 13.4 17 17M6 3h7l5 5v3M6 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" />
+            IOC Search
+          </Link>
+          <Link
             href="/settings"
             role="menuitem"
             className={itemCls}

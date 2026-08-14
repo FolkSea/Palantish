@@ -8,8 +8,8 @@
 
 -- Access allow-list ----------------------------------------------------------
 insert into allowed_users (email, note) values
-  ('andrew.m.dove@gmail.com', 'owner'),
-  ('andy@example.com', 'local dev user'),
+  ('admin@local.local', 'owner'),
+  ('user@example.com', 'local dev user'),
   -- The address pnpm dev:login signs in as. Without it a local database that
   -- has just been reset shows an empty dashboard and a 404 on every report,
   -- because the allow-list is what the read policy checks.
