@@ -58,6 +58,16 @@ export function reconcileIndicators(
   mitre: string[],
   fetchedText: string | null,
   ex: Excludes = {},
+  /**
+   * Whether to union in everything a deterministic extraction finds in the page.
+   *
+   * At ingest this is what you want: the result is added to whatever the report
+   * already has, so a false positive costs an extra row and a miss costs an
+   * indicator nobody will notice is absent. On a re-analysis the result replaces
+   * the stored set, which inverts that - so the caller can ask for the model's
+   * judged indicators alone.
+   */
+  { extractFromText = true }: { extractFromText?: boolean } = {},
 ): IocRow[] {
   const out = new Map<string, IocRow>();
   const key = (type: string, value: string) => `${type}\t${value.toLowerCase()}`;
@@ -105,7 +115,7 @@ export function reconcileIndicators(
   // arrives as [text](url) / ![alt](url) links - strip the link targets first so
   // chrome URLs are not extracted as IOCs. Prose indicators (plain or defanged)
   // survive, and linked IOCs the model judged real are already kept by step 1.
-  if (fetchedText) {
+  if (fetchedText && extractFromText) {
     const detText = fetchedText.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1");
     const det = extractIndicators(detText, ex.excludeDomains, ex.excludeIps);
     for (const v of det.ips) add("ip", v);

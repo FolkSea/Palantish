@@ -30,7 +30,16 @@ import {
   normalizeIndicatorValue,
   type Indicators,
 } from "@/lib/report-indicators";
-import { indicatorRows, linkIocsToItem, type IocRow } from "@/lib/ingest/iocs";
+import {
+  indicatorRows,
+  linkIocsToItem,
+  replaceIocsForItem,
+  type IocRow,
+} from "@/lib/ingest/iocs";
+import { AnalystAgent } from "@/lib/agent/analyst";
+import { reconcileIndicators } from "@/lib/agent/ioc-validate";
+import { notifyUsers } from "@/lib/notifications/create";
+import { itemHref } from "@/lib/browse-links";
 import { loadIocAllowlist } from "@/lib/ingest/allowlist";
 import { familyForAnimal } from "@/lib/ingest/adversaries";
 import { discoverTechniques } from "@/lib/mitre/discover";
@@ -877,6 +886,28 @@ export async function updateReportLabelsAction(
   }
   const names = [...seen.values()];
 
+  const error = await replaceReportLabels(db, item.id, names);
+  if (error) return { ok: false, error };
+
+  // The report may now match a label someone subscribes to. Queued only - the
+  // digest goes out with the next run, so saving labels stays instant.
+  await queueNotifications(db, [item.id], "labels");
+  revalidatePath("/");
+  return { ok: true, labels: names.sort((a, b) => a.localeCompare(b)) };
+}
+
+/**
+ * Make a report's labels exactly `names`: find-or-create each one and drop the
+ * links that are no longer in the set. Returns an error message, or null.
+ *
+ * Replace rather than add, because this is what the editor and the re-analysis
+ * both mean by setting labels - a label removed has to actually go.
+ */
+async function replaceReportLabels(
+  db: AdminDb,
+  itemId: string,
+  names: string[],
+): Promise<string | null> {
   const labelIds: string[] = [];
   for (const name of names) {
     const existing = await db
@@ -901,7 +932,7 @@ export async function updateReportLabelsAction(
         .ilike("name", name)
         .maybeSingle();
       if (again.data) labelIds.push(again.data.id);
-      else return { ok: false, error: inserted.error.message };
+      else return inserted.error.message;
     } else {
       labelIds.push(inserted.data.id);
     }
@@ -910,20 +941,15 @@ export async function updateReportLabelsAction(
   const del = await db
     .from("intel_item_labels")
     .delete()
-    .eq("intel_item_id", item.id);
-  if (del.error) return { ok: false, error: del.error.message };
+    .eq("intel_item_id", itemId);
+  if (del.error) return del.error.message;
   if (labelIds.length) {
     const ins = await db.from("intel_item_labels").insert(
-      labelIds.map((label_id) => ({ intel_item_id: item.id, label_id })),
+      labelIds.map((label_id) => ({ intel_item_id: itemId, label_id })),
     );
-    if (ins.error) return { ok: false, error: ins.error.message };
+    if (ins.error) return ins.error.message;
   }
-
-  // The report may now match a label someone subscribes to. Queued only - the
-  // digest goes out with the next run, so saving labels stays instant.
-  await queueNotifications(db, [item.id], "labels");
-  revalidatePath("/");
-  return { ok: true, labels: names.sort((a, b) => a.localeCompare(b)) };
+  return null;
 }
 
 export type DiscoverTechniquesResult =
@@ -964,6 +990,174 @@ export async function discoverTechniquesAction(
   }
 
   return { ok: true, techniques };
+}
+
+export type AiRefreshResult =
+  | {
+      ok: true;
+      summary: string;
+      labels: string[];
+      visibilityGaps: string;
+      indicators: Indicators;
+      /** The actor written, "" when the model named none, null when it named
+       *  one the catalogue does not recognise (nothing was written). */
+      adversary: string | null;
+      country: string | null;
+      confidence: string | null;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Re-read one report with the LLM and replace what is stored about it: summary,
+ * labels, attribution, visibility gaps and indicators.
+ *
+ * Ingest classifies a report once, from whatever the fetch returned at the time,
+ * and raw_hash dedupe means nothing ever revisits it - a report that arrived
+ * while the model was slow keeps its untagged, unattributed record for good.
+ * This is the way to ask for that second look.
+ *
+ * Indicators are replaced, not added to, so they are held to a higher bar than
+ * at ingest: only what the model judged to be attacker infrastructure, each
+ * value still checked against the fetched page. Nothing is written at all if the
+ * re-read fails - a half-read record is worse than the stale one.
+ *
+ * Notifies the analyst who pressed the button either way. It is a long call and
+ * they will have gone elsewhere by the time it lands.
+ */
+export async function aiRefreshReportAction(
+  rawHash: string,
+): Promise<AiRefreshResult> {
+  if (!rawHash) return { ok: false, error: "Missing report." };
+  const auth = await getAuthenticatedClient();
+  if (!auth) return { ok: false, error: "Not authorized." };
+
+  const db = createAdminClient();
+  const { data: item } = await db
+    .from("intel_items")
+    .select("id, title, url, description, source_name, published_at")
+    .eq("raw_hash", rawHash)
+    .maybeSingle();
+  if (!item) return { ok: false, error: "Report not found." };
+
+  const notify = async (title: string, body: string) => {
+    try {
+      await notifyUsers(db, [auth.user.id], {
+        kind: "report_reanalysed",
+        title,
+        body,
+        href: itemHref(rawHash),
+        // One notification per attempt: a second run is a second event, and the
+        // analyst asked for it and is owed the answer.
+        dedupeKey: `reanalyse:${rawHash}:${Date.now()}`,
+      });
+    } catch {
+      // Never fail the re-analysis over its own receipt.
+    }
+  };
+
+  const fail = async (error: string): Promise<AiRefreshResult> => {
+    await notify(`Re-analysis failed: ${item.title}`, error);
+    return { ok: false, error };
+  };
+
+  if (!item.url) return fail("This report has no link to re-read.");
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return fail("No ANTHROPIC_API_KEY is configured.");
+
+  const agent = new AnalystAgent(apiKey);
+  const out = await agent.reanalyse({
+    title: item.title,
+    url: item.url,
+    description: item.description,
+    publishedAt: item.published_at ? new Date(item.published_at) : null,
+    sourceName: item.source_name ?? "",
+    sourceCategory: null,
+  });
+  if (!out.parsed) return fail(out.error ?? "The re-analysis produced nothing.");
+  const p = out.parsed;
+
+  // Indicators: the model's own, validated against the page it read. The
+  // deterministic sweep the ingest unions in is deliberately off - it reads the
+  // whole page, and here its false positives would replace curated values.
+  const allowlist = await loadIocAllowlist(db);
+  const own = (() => {
+    try {
+      return new URL(item.url!).hostname.replace(/^www\./, "");
+    } catch {
+      return null;
+    }
+  })();
+  const rows = reconcileIndicators(
+    p.indicators,
+    p.mitreTechniques,
+    out.fetchedText,
+    {
+      excludeDomains: [...allowlist.domains, ...(own ? [own] : [])],
+      excludeIps: allowlist.ips,
+    },
+    { extractFromText: false },
+  );
+
+  try {
+    await replaceIocsForItem(db, item.id, rows);
+  } catch (err) {
+    return fail(
+      err instanceof Error ? err.message : "The indicators could not be stored.",
+    );
+  }
+
+  const update: { description?: string; visibility_gaps?: string } = {};
+  if (p.summary) update.description = p.summary;
+  if (p.visibilityGaps) update.visibility_gaps = p.visibilityGaps;
+  if (Object.keys(update).length) {
+    const { error } = await db.from("intel_items").update(update).eq("id", item.id);
+    if (error) return fail(error.message);
+  }
+
+  const labelError = await replaceReportLabels(db, item.id, p.labels);
+  if (labelError) return fail(labelError);
+
+  // Attribution goes through the ordinary edit so the report regroups under the
+  // right country the way a typed-in name does. An actor the catalogue does not
+  // know writes nothing; the panel says so rather than inventing a label.
+  let adversary: string | null = "";
+  let country: string | null = null;
+  if (p.crowdstrikeAdversary) {
+    const res = await updateReportAdversaryAction(rawHash, p.crowdstrikeAdversary);
+    adversary = res.ok && res.recognised ? res.label : null;
+    country = res.ok ? res.country : null;
+  }
+
+  await queueNotifications(db, [item.id], "labels");
+  const indicators = indicatorsFromRows(rows);
+  await notify(
+    `Re-analysis complete: ${item.title}`,
+    `${p.labels.length} labels, ${rows.length} indicators.`,
+  );
+  revalidatePath("/");
+  return {
+    ok: true,
+    summary: p.summary,
+    labels: p.labels.slice().sort((a, b) => a.localeCompare(b)),
+    visibilityGaps: p.visibilityGaps,
+    indicators,
+    adversary,
+    country,
+    confidence: p.confidence,
+  };
+}
+
+/** Group stored IOC rows back into the shape the panel renders. */
+function indicatorsFromRows(rows: IocRow[]): Indicators {
+  const of = (type: string) =>
+    rows.filter((r) => r.ioc_type === type).map((r) => r.value);
+  return {
+    ips: of("ip"),
+    domains: of("domain"),
+    files: of("file_hash"),
+    cves: of("cve"),
+    mitre: of("mitre"),
+  };
 }
 
 /**

@@ -10,6 +10,11 @@ import { isBookmarked } from "@/app/bookmark-actions";
 // Always render fresh intel; never cache the authenticated view.
 export const dynamic = "force-dynamic";
 
+// The panel's re-analysis runs as a server action on this route, and re-reading
+// a long article takes minutes. The platform ceiling, so the model's own timeout
+// is what ends the call.
+export const maxDuration = 300;
+
 export async function generateMetadata({
   params,
 }: {

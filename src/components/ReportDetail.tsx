@@ -22,6 +22,7 @@ import {
   updateReportNoteAction,
   updateReportLabelsAction,
   getAttributionOptionsAction,
+  aiRefreshReportAction,
 } from "@/app/actions";
 import { EditableIocList } from "./EditableIocList";
 import { Markdown, type Highlight } from "./Markdown";
@@ -297,6 +298,14 @@ export function ReportDetail({
   const [labels, setLabels] = useState<string[]>([]);
   const [analystComments, setAnalystComments] = useState<string | null>(null);
   const [visibilityGaps, setVisibilityGaps] = useState<string | null>(null);
+  // A re-analysis rewrites the summary the parent passed in as a prop, so the
+  // new one is held here until the page is reloaded.
+  const [summary, setSummary] = useState<string | null>(null);
+  const [magicBusy, setMagicBusy] = useState(false);
+  const [magicNote, setMagicNote] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  );
+
 
   async function saveLabels(
     value: string,
@@ -364,11 +373,15 @@ export function ReportDetail({
       setAnalystComments(null);
       setVisibilityGaps(null);
       setAllowlist({ domains: [], ips: [] });
+      setSummary(null);
+      setMagicNote(null);
       return;
     }
     let active = true;
     setStored(null);
     setKind(null);
+    setSummary(null);
+    setMagicNote(null);
     getReportIndicatorsAction(rawHash).then((r) => {
       if (active && r.ok) {
         setStored(r.indicators);
@@ -423,6 +436,52 @@ export function ReportDetail({
   // edit actions convert it and return moved:true, which flips kind here).
   const attributable = kind === "intel" || kind === "breach";
   const iocsEditable = attributable;
+
+  /**
+   * Re-read the report with the LLM and take what comes back.
+   *
+   * This replaces the stored indicators rather than adding to them, which is
+   * the point - a report classified badly at ingest can be put right - but it
+   * also means an analyst's curated set goes. Hence the confirmation.
+   */
+  async function runAiMagic() {
+    if (!rawHash || magicBusy) return;
+    if (
+      !window.confirm(
+        "Re-read this report with the LLM?\n\nThe summary, labels, " +
+          "attribution and visibility gaps will be rewritten, and the stored " +
+          "indicators replaced with the ones it finds in the article. This " +
+          "takes a couple of minutes.",
+      )
+    )
+      return;
+
+    setMagicBusy(true);
+    setMagicNote(null);
+    const res = await aiRefreshReportAction(rawHash);
+    setMagicBusy(false);
+    if (!res.ok) {
+      setMagicNote({ ok: false, text: res.error });
+      return;
+    }
+    setSummary(res.summary || null);
+    setLabels(res.labels);
+    setVisibilityGaps(res.visibilityGaps || null);
+    // Both, so the panel shows exactly what was stored: `stored` is ignored
+    // when it is empty, and an empty result is a real answer here.
+    setStored(res.indicators);
+    setIocEdits(res.indicators);
+    if (res.adversary !== null) setAdversary(res.adversary || null);
+    if (res.country) setCountry(res.country);
+    setConfidence(res.confidence);
+    setMagicNote({
+      ok: true,
+      text:
+        res.adversary === null
+          ? "Re-analysed. The actor it named is not in the catalogue, so the attribution was left alone."
+          : "Re-analysed.",
+    });
+  }
 
   /**
    * Search the report for an indicator. Replaces whatever was in the box: the
@@ -652,6 +711,30 @@ export function ReportDetail({
                   Graph
                 </a>
               ) : null}
+              {rawHash && attributable ? (
+                <button
+                  type="button"
+                  onClick={runAiMagic}
+                  disabled={magicBusy}
+                  title="Re-read this report with the LLM and rewrite its summary, labels, attribution, visibility gaps and indicators"
+                  className="inline-flex items-center gap-1 rounded-md border border-[#e5e7eb] bg-white px-2 py-1 text-[12px] font-medium text-[#7c3aed] hover:bg-slate-50 disabled:opacity-60"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" />
+                  </svg>
+                  {magicBusy ? "Working..." : "AI Magic"}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => (onClose ? onClose() : router.back())}
@@ -663,10 +746,27 @@ export function ReportDetail({
             </div>
           </div>
           <div className="flex-1 space-y-2 overflow-y-auto p-3 text-[13px]">
+            {magicBusy || magicNote ? (
+              <p
+                role="status"
+                className={`rounded-md border px-2 py-1 text-[12px] ${
+                  magicBusy
+                    ? "border-violet-200 bg-violet-50 text-violet-700"
+                    : magicNote?.ok
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-rose-200 bg-rose-50 text-rose-700"
+                }`}
+              >
+                {magicBusy
+                  ? "Re-reading the report. This takes a couple of minutes - a notification will tell you how it went."
+                  : magicNote?.text}
+              </p>
+            ) : null}
+
             <CollapsibleCard title="Summary">
-              {report.description ? (
+              {(summary ?? report.description) ? (
                 <p className="leading-relaxed text-slate-700">
-                  {report.description}
+                  {summary ?? report.description}
                 </p>
               ) : (
                 <Empty>No summary available.</Empty>

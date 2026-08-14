@@ -21,6 +21,19 @@ import {
   type FetchStatus,
   type WebTriageOutcome,
 } from "./web-triage";
+import {
+  REANALYSE_INSTRUCTIONS,
+  parseReanalysis,
+  type ReanalysisResult,
+} from "./reanalyse";
+
+/** What a re-analysis produced, or why it produced nothing. */
+export type ReanalysisOutcome = {
+  parsed: ReanalysisResult | null;
+  /** The fetched article, for checking indicators against their source. */
+  fetchedText: string | null;
+  error: string | null;
+};
 
 const SUMMARY_MODEL_DEFAULT = "claude-sonnet-5";
 const REFLECT_MODEL_DEFAULT = "claude-sonnet-5";
@@ -43,6 +56,13 @@ const REQUEST_TIMEOUT_MS = Number(process.env.INGEST_LLM_TIMEOUT_MS) || 20000;
 // under the remaining function time so finalisation still fits in maxDuration.
 const LONG_CALL_TIMEOUT_MS =
   Number(process.env.INGEST_LLM_LONG_TIMEOUT_MS) || 60000;
+// A re-analysis is one report, asked for by an analyst who is watching the
+// button. Nothing is batched behind it and no run budget is being spent, so it
+// gets the time to read the article properly - measured at up to ~160s on a
+// long one. Kept under the serverless function ceiling so the call fails on its
+// own terms rather than the platform's.
+const REANALYSE_TIMEOUT_MS =
+  Number(process.env.REANALYSE_TIMEOUT_MS) || 240000;
 
 export const ANALYST_PERSONA = `You are a cybersecurity analyst, whose task is to triage and classify industry open-source reports for a nation-state and eCrime cyber-intelligence dashboard, and to write its executive summaries.
 You reason only from the open-source reporting in front of you: stay evidence-based, prefer precise attribution over speculation, and never invent threat actors, victims, malware, or numbers.
@@ -186,6 +206,77 @@ export class AnalystAgent {
       fetchedText: outcome.succeeded ? outcome.text : null,
       fetchedUrl: outcome.fetchedUrl,
     };
+  }
+
+  /**
+   * Re-read one report and return the analyst's record of it: summary, labels,
+   * attribution, visibility gaps and indicators.
+   *
+   * Unlike triage this runs at the default effort rather than low. Triage is
+   * throttled because it runs per item inside a time-budgeted run; this runs
+   * once, for one report, because somebody asked - so it can afford to think.
+   *
+   * Returns null when the model could not be reached or did not answer in a
+   * shape that parses. The caller writes nothing in that case: replacing a
+   * curated record with a half-read one is worse than leaving it alone.
+   */
+  async reanalyse(c: RawCandidate): Promise<ReanalysisOutcome> {
+    const model = process.env.ANTHROPIC_MODEL || WEB_TRIAGE_MODEL_DEFAULT;
+    const tool = webFetchTool(model, {
+      allowedDomains: allowedDomainsFor(c.url),
+      maxContentTokens: WEB_FETCH_MAX_CONTENT_TOKENS,
+    });
+    const params = {
+      model,
+      max_tokens: 8000,
+      system: this.system(REANALYSE_INSTRUCTIONS, true),
+      tools: [tool],
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const create = (this.client as any).messages.create.bind(this.client.messages);
+    const options = { timeout: REANALYSE_TIMEOUT_MS };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let content: any[] = [];
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages: any[] = [
+        { role: "user", content: buildTriageUserMessage(c) },
+      ];
+      let msg = await create({ ...params, messages }, options);
+      let guard = 0;
+      while (msg.stop_reason === "pause_turn" && guard++ < 4) {
+        messages.push({ role: "assistant", content: msg.content });
+        msg = await create({ ...params, messages }, options);
+      }
+      content = msg.content ?? [];
+    } catch (err) {
+      return {
+        parsed: null,
+        fetchedText: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    const outcome = parseFetchOutcome(content);
+    const parsed = parseReanalysis(textOfBlocks(content));
+    if (!parsed) {
+      return {
+        parsed: null,
+        fetchedText: outcome.text,
+        error: "The model did not return a usable analysis.",
+      };
+    }
+    // The indicators are checked against what was actually fetched, so a failed
+    // fetch must not look like a report with no indicators in it.
+    if (!outcome.succeeded) {
+      return {
+        parsed: null,
+        fetchedText: outcome.text,
+        error: "The report page could not be fetched, so it was not re-read.",
+      };
+    }
+    return { parsed, fetchedText: outcome.text, error: null };
   }
 
   /**

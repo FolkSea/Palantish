@@ -53,3 +53,26 @@ export async function linkIocsToItem(
 
   return links.length;
 }
+
+/**
+ * Make an item's indicators exactly `rows`: unlink everything it has, then link
+ * the new set. For a re-analysis, where the point is that the previous set was
+ * wrong - adding to it would leave the wrong values in place.
+ *
+ * Only the links go. The `iocs` rows themselves are shared between reports and
+ * may carry an analyst's comment, so an indicator this report no longer claims
+ * stays available to the ones that do.
+ */
+export async function replaceIocsForItem(
+  db: Db,
+  intelItemId: string,
+  rows: IocRow[],
+): Promise<number> {
+  const { error } = await db
+    .from("intel_item_iocs")
+    .delete()
+    .eq("intel_item_id", intelItemId);
+  if (error) throw new Error(error.message);
+
+  return linkIocsToItem(db, intelItemId, rows);
+}
