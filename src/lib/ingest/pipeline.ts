@@ -597,6 +597,19 @@ export async function runIngest(
       `enrichment done: rules kept ${tally.rulesKeep}, rules dropped ${tally.rulesDrop}, ` +
         `LLM kept ${tally.llmKeep}, LLM dropped ${tally.llmDrop}`,
     );
+
+    // Under llm-first the rules only classify what the model could not, so a
+    // rules keep means a triage call failed - a timeout, usually. Those reports
+    // are stored with no labels, no adversary and no nexus, which is not
+    // visibly different from a report about nothing in particular, and matches
+    // no subscription so nobody is told. Worth an error rather than a silence:
+    // it is the difference between "quiet week" and "the classifier is down".
+    if (serverEnv.enrichStrategy === "llm-first" && tally.rulesKeep > 0) {
+      errors.push(
+        `enrichment: ${tally.rulesKeep} report(s) fell back to the rules and were ` +
+          `stored unclassified - the triage call did not answer in time`,
+      );
+    }
     ilog(
       `inserted ${added} new items; IOC extraction: ${iocLinks} links (${iocFailed} fetch failures); ` +
         `${labelLinks} labels linked`,

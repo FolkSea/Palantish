@@ -134,6 +134,14 @@ export class AnalystAgent {
       // at all (which would look like an unparseable response).
       model,
       max_tokens: 8000,
+      // Triage is recognition against a document the model has in front of it,
+      // not open-ended reasoning, and the default effort is high. On a long
+      // article that cost 159 seconds against the 80 this call is allowed -
+      // the request timed out, the item fell back to the deterministic rules,
+      // and rules assign no labels and no adversary. The same call at low
+      // effort takes 25. Reports were arriving untagged because classifying
+      // them was too slow, not because anything failed visibly.
+      output_config: { effort: "low" },
       system: this.system(WEB_TRIAGE_INSTRUCTIONS, true),
       tools: [tool],
     };
