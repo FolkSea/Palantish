@@ -25,7 +25,12 @@ begin
   values (
     new.id,
     case
-      when lower(new.email) = 'andydove71@gmail.com'
+      -- The bootstrap administrator, by address. A placeholder rather than
+      -- anybody's real one: this file is public, and the owner's account was
+      -- promoted when this ran. The address kept here is the one pnpm
+      -- dev:login uses, so a freshly reset local database has an
+      -- administrator without anybody promoting a row by hand.
+      when lower(new.email) = 'ccdev@local.test'
         then 'administrator'::public.account_role
       else 'user'::public.account_role
     end
@@ -49,7 +54,7 @@ on conflict (user_id) do nothing;
 insert into public.account_roles (user_id, role)
 select id, 'administrator'::public.account_role
 from auth.users
-where lower(email) = 'andydove71@gmail.com'
+where lower(email) = 'ccdev@local.test'
 on conflict (user_id) do update
 set role = excluded.role;
 
