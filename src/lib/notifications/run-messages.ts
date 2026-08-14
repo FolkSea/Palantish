@@ -14,6 +14,8 @@ export type RunOutcome = {
   summarised: boolean;
   flaggedIocs: number;
   errors: string[];
+  /** Reports stored with no classification, because the model never answered. */
+  unclassified: number;
   /** Active feeds with nothing recent, counted by the caller. */
   staleFeeds: number;
   /** Window the stale rule uses, for the wording. */
@@ -37,6 +39,7 @@ export function buildRunNotifications(outcome: RunOutcome): NewNotification[] {
     summarised,
     flaggedIocs,
     errors,
+    unclassified,
     staleFeeds,
     staleDays,
   } = outcome;
@@ -81,6 +84,20 @@ export function buildRunNotifications(outcome: RunOutcome): NewNotification[] {
       body: "The daily check found indicators that may not be real.",
       href: "/settings?tab=review",
       dedupeKey: `suspect_iocs:${runId}`,
+    });
+  }
+
+  if (unclassified > 0) {
+    out.push({
+      kind: "unclassified_reports",
+      title: `${plural(unclassified, "report")} stored unclassified`,
+      body:
+        "The triage call did not answer, so these came in with no labels, " +
+        "adversary or nexus. Open one and use AI Magic to read it properly.",
+      // The queue itself. Saying how many arrived and then not being able to
+      // show which ones is the whole of the complaint this answers.
+      href: "/settings?tab=unclassified",
+      dedupeKey: `unclassified_reports:${runId}`,
     });
   }
 

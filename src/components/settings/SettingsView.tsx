@@ -11,6 +11,10 @@ import {
   type ReviewFlag,
   type ReviewStatus,
 } from "./ReviewPanel";
+import {
+  UnclassifiedPanel,
+  type UnclassifiedReport,
+} from "./UnclassifiedPanel";
 import { AgentMemoryPanel, type AgentMemoryNote } from "./AgentMemoryPanel";
 import { UsersPanel } from "./UsersPanel";
 import {
@@ -54,6 +58,11 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
   { id: "hidden", label: "Hidden posts", hint: "Unhide posts you hid" },
   { id: "dropped", label: "Dropped", hint: "Review filtered-out candidates" },
   { id: "review", label: "Suspect IOCs", hint: "Indicators the daily check flagged" },
+  {
+    id: "unclassified",
+    label: "Unclassified",
+    hint: "Reports the classifier could not read",
+  },
   { id: "memory", label: "Agent memory", hint: "What the analyst agent knows" },
 ];
 
@@ -69,6 +78,7 @@ export function SettingsView({
   dropped,
   reviewFlags,
   reviewStatus,
+  unclassified,
   memory,
   subscriptions,
   subscriptionOptions,
@@ -86,6 +96,7 @@ export function SettingsView({
   hidden: HiddenPost[];
   dropped: DroppedItem[];
   reviewFlags: ReviewFlag[];
+  unclassified: UnclassifiedReport[];
   reviewStatus: ReviewStatus | null;
   memory: AgentMemoryNote[];
   subscriptions: SubscriptionRow[];
@@ -121,6 +132,7 @@ export function SettingsView({
             "actors",
             "dropped",
             "review",
+            "unclassified",
             "memory",
           ].includes(item.id),
         );
@@ -180,6 +192,8 @@ export function SettingsView({
           <DroppedPanel initial={dropped} source={droppedSource} />
         ) : tab === "review" && role === "administrator" ? (
           <ReviewPanel initial={reviewFlags} status={reviewStatus} />
+        ) : tab === "unclassified" && role === "administrator" ? (
+          <UnclassifiedPanel initial={unclassified} />
         ) : tab === "memory" && role === "administrator" ? (
           <AgentMemoryPanel notes={memory} />
         ) : null}

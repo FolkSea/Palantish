@@ -16,6 +16,8 @@ export type RunSummary = {
   added: number;
   summarised: boolean;
   flaggedIocs: number;
+  /** Reports stored with no classification: the review queue this run added to. */
+  unclassified: number;
   errors: string[];
 };
 

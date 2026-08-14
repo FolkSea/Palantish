@@ -70,7 +70,7 @@ describe("HybridEnricher (rules-first)", () => {
     };
     const h = new HybridEnricher({ classify: vi.fn(async () => item) });
     const out = await h.enrich(candidate({ title: "Ambiguous item" }));
-    expect(out).toBe(item);
+    expect(out).toEqual({ ...item, classifiedBy: "llm" });
   });
 
   it("includes an ambiguous item as a report when the LLM is unavailable", async () => {
@@ -116,7 +116,7 @@ describe("HybridEnricher (llm-first)", () => {
       candidate({ title: "Volt Typhoon targets critical infrastructure" }),
     );
     expect(spy).toHaveBeenCalledOnce();
-    expect(out).toBe(item);
+    expect(out).toEqual({ ...item, classifiedBy: "llm" });
   });
 
   it("pre-gates obvious marketing without paying for an LLM call", async () => {
@@ -146,7 +146,7 @@ describe("HybridEnricher (llm-first)", () => {
       candidate({ title: "Volt Typhoon targets critical infrastructure" }),
     );
     expect(spy).toHaveBeenCalledOnce();
-    expect(out).toBe(item);
+    expect(out).toEqual({ ...item, classifiedBy: "llm" });
   });
 
   it("honours an LLM drop", async () => {
@@ -184,5 +184,47 @@ describe("HybridEnricher (llm-first)", () => {
     const out = await h.enrich(candidate({ title: "Some report" }));
     // "Volt Typhoon" is a catalogue alias of VANGUARD PANDA.
     expect(out?.crowdstrikeAdversary).toBe("VANGUARD PANDA");
+  });
+});
+
+describe("recording which classifier read an item", () => {
+  // Under llm-first a rules keep means the model never answered, so the report
+  // is stored with nothing read about it. The stamp is how those reports are
+  // found again once the run is over - a count in a notification was all there
+  // used to be.
+  it("marks a report the rules had to fall back on", async () => {
+    const h = new HybridEnricher(
+      { classify: vi.fn(async () => "unavailable" as const) },
+      [],
+      undefined,
+      "llm-first",
+    );
+    const out = await h.enrich(candidate({ title: "Actor report on a campaign" }));
+    expect(out?.classifiedBy).toBe("rules");
+  });
+
+  it("marks a report the model classified", async () => {
+    const h = new HybridEnricher(
+      {
+        classify: vi.fn(async () => ({
+          title: "x",
+          description: null,
+          url: "u",
+          publishedAt: new Date("2026-07-20"),
+          nexus: "russia" as const,
+          itemType: "actor_activity" as const,
+          confidence: "suspected" as const,
+          crowdstrikeAdversary: null,
+          sourceName: "s",
+          rawHash: "h",
+          labels: [],
+        })),
+      },
+      [],
+      undefined,
+      "llm-first",
+    );
+    const out = await h.enrich(candidate({ title: "Actor report on a campaign" }));
+    expect(out?.classifiedBy).toBe("llm");
   });
 });

@@ -11,6 +11,7 @@ function build(over: Record<string, unknown> = {}) {
     added: 0,
     summarised: false,
     flaggedIocs: 0,
+    unclassified: 0,
     errors: [],
     staleFeeds: 0,
     staleDays: 30,
@@ -19,6 +20,20 @@ function build(over: Record<string, unknown> = {}) {
 }
 
 describe("buildRunNotifications", () => {
+  // The complaint this answers: the count arrived and the reports it counted
+  // could not be found anywhere.
+  it("sends the unclassified count to the queue that holds them", () => {
+    const n = build({ unclassified: 3 }).find(
+      (s) => s.kind === "unclassified_reports",
+    );
+    expect(n?.title).toBe("3 reports stored unclassified");
+    expect(n?.href).toBe("/settings?tab=unclassified");
+  });
+
+  it("says nothing when the classifier read everything", () => {
+    expect(build().some((s) => s.kind === "unclassified_reports")).toBe(false);
+  });
+
   it("announces a full run with the count added", () => {
     const feeds = build({ added: 12 }).find((s) => s.kind === "feeds_ingested");
     expect(feeds?.title).toBe("All feeds ingested");

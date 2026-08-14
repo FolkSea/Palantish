@@ -12,6 +12,7 @@ export type SettingsTab =
   | "hidden"
   | "dropped"
   | "review"
+  | "unclassified"
   | "memory";
 
 export const SETTINGS_TABS: SettingsTab[] = [
@@ -23,6 +24,7 @@ export const SETTINGS_TABS: SettingsTab[] = [
   "hidden",
   "dropped",
   "review",
+  "unclassified",
   "memory",
 ];
 

@@ -19,6 +19,12 @@ export type RawCandidate = {
 
 /** A candidate that has been classified and is ready to persist. */
 export type EnrichedItem = {
+  /**
+   * Which classifier produced this. Under llm-first "rules" means the model
+   * could not be reached, so the report is stored unclassified and somebody
+   * has to look at it.
+   */
+  classifiedBy?: "rules" | "llm";
   title: string;
   description: string | null;
   url: string;

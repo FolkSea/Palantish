@@ -15,7 +15,8 @@ export type NotificationKind =
   | "ingest_errors"
   | "new_user"
   | "poc_released"
-  | "report_reanalysed";
+  | "report_reanalysed"
+  | "unclassified_reports";
 
 export type NewNotification = {
   kind: NotificationKind;

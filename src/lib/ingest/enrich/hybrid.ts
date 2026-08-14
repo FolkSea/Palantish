@@ -76,10 +76,7 @@ export class HybridEnricher implements Enricher {
   /** Rules lead; ambiguous items escalate to the LLM. */
   private async enrichRulesFirst(c: RawCandidate): Promise<EnrichedItem | null> {
     const verdict = rulesClassify(c, this.groups);
-    if (verdict.kind === "keep") {
-      this.reportKeep("rules", c, verdict.item);
-      return verdict.item;
-    }
+    if (verdict.kind === "keep") return this.keep("rules", c, verdict.item);
     if (verdict.kind === "drop") {
       this.reportDrop("rules", c, verdict.reason);
       return null;
@@ -113,10 +110,7 @@ export class HybridEnricher implements Enricher {
     }
     // No LLM, or it was unavailable: fall back to the deterministic rules.
     const verdict = rulesClassify(c, this.groups);
-    if (verdict.kind === "keep") {
-      this.reportKeep("rules", c, verdict.item);
-      return verdict.item;
-    }
+    if (verdict.kind === "keep") return this.keep("rules", c, verdict.item);
     if (verdict.kind === "drop") {
       this.reportDrop("rules", c, verdict.reason);
       return null;
@@ -142,11 +136,7 @@ export class HybridEnricher implements Enricher {
       this.reportDrop("llm", c, r.reason || "LLM: not intelligence");
       return null;
     }
-    if (r !== "unavailable") {
-      const item = this.canonicalise(r);
-      this.reportKeep("llm", c, item);
-      return item;
-    }
+    if (r !== "unavailable") return this.keep("llm", c, this.canonicalise(r));
     // Unavailable.
     if (keepOnUnavailable) return this.keepByDefault("llm", c);
     return "fallthrough";
@@ -166,9 +156,24 @@ export class HybridEnricher implements Enricher {
   }
 
   private keepByDefault(via: "rules" | "llm", c: RawCandidate): EnrichedItem {
-    const item = buildReport(c);
-    this.reportKeep(via, c, item);
-    return item;
+    return this.keep(via, c, buildReport(c));
+  }
+
+  /**
+   * Keep an item, recording which classifier decided it.
+   *
+   * Every keep goes through here, so the stamp cannot be forgotten on one path
+   * - and it is the stamp that lets an unclassified report be found again once
+   * the run that produced it is over.
+   */
+  private keep(
+    via: "rules" | "llm",
+    c: RawCandidate,
+    item: EnrichedItem,
+  ): EnrichedItem {
+    const stamped = { ...item, classifiedBy: via };
+    this.reportKeep(via, c, stamped);
+    return stamped;
   }
 
   private reportKeep(via: "rules" | "llm", c: RawCandidate, item: EnrichedItem) {

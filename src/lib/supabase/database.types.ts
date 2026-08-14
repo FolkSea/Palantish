@@ -380,6 +380,7 @@ export type Database = {
           cve_id: string | null
           date_label: string | null
           description: string | null
+          enriched_by: string | null
           exploit_status: string | null
           id: string
           item_type: Database["public"]["Enums"]["item_type"] | null
@@ -408,6 +409,7 @@ export type Database = {
           cve_id?: string | null
           date_label?: string | null
           description?: string | null
+          enriched_by?: string | null
           exploit_status?: string | null
           id?: string
           item_type?: Database["public"]["Enums"]["item_type"] | null
@@ -436,6 +438,7 @@ export type Database = {
           cve_id?: string | null
           date_label?: string | null
           description?: string | null
+          enriched_by?: string | null
           exploit_status?: string | null
           id?: string
           item_type?: Database["public"]["Enums"]["item_type"] | null

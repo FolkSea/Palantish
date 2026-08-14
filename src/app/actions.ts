@@ -1109,10 +1109,16 @@ export async function aiRefreshReportAction(
     );
   }
 
-  const update: { description?: string; visibility_gaps?: string } = {};
+  // enriched_by: the model has now read this report, whatever read it at
+  // ingest - which is what takes it off the unclassified queue.
+  const update: {
+    description?: string;
+    visibility_gaps?: string;
+    enriched_by: string;
+  } = { enriched_by: "llm" };
   if (p.summary) update.description = p.summary;
   if (p.visibilityGaps) update.visibility_gaps = p.visibilityGaps;
-  if (Object.keys(update).length) {
+  {
     const { error } = await db.from("intel_items").update(update).eq("id", item.id);
     if (error) return fail(error.message);
   }
@@ -1142,6 +1148,7 @@ export async function aiRefreshReportAction(
   }
 
   await queueNotifications(db, [item.id], "labels");
+  revalidatePath("/settings");
   const indicators = indicatorsFromRows(rows);
   await notify(
     `Re-analysis complete: ${item.title}`,
@@ -1160,6 +1167,30 @@ export async function aiRefreshReportAction(
     country,
     confidence: p.confidence,
   };
+}
+
+/**
+ * Take a report off the unclassified queue without re-reading it.
+ *
+ * Some of what the classifier missed needs nothing: a report an analyst has
+ * looked at and judged uninteresting still has to be able to leave the list,
+ * or the queue only ever grows and stops being read.
+ */
+export async function markReportReviewedAction(
+  rawHash: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!rawHash) return { ok: false, error: "Missing report." };
+  const unauth = await ensureAuthenticated();
+  if (unauth) return { ok: false, error: unauth };
+
+  const db = createAdminClient();
+  const { error } = await db
+    .from("intel_items")
+    .update({ enriched_by: "reviewed" })
+    .eq("raw_hash", rawHash);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/settings");
+  return { ok: true };
 }
 
 /** Group stored IOC rows back into the shape the panel renders. */

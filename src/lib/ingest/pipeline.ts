@@ -358,6 +358,10 @@ export async function runIngest(
         source_id: sourceId,
         item_type: item.itemType,
         raw_hash: item.rawHash,
+        // Which classifier read it. "rules" under llm-first is the review
+        // queue: the model never answered, so nothing about this report has
+        // been read by anything.
+        enriched_by: item.classifiedBy ?? null,
         // How the body was retrieved for analysis (web fetch vs feed/scrape),
         // and the LLM's summary of the fetched article. Refined post-insert for
         // items that fall back to the app-side scraper.
@@ -380,6 +384,9 @@ export async function runIngest(
       kind: string;
       adversary: string | null;
     }[] = [];
+    // Reports stored without a classification this run: the review queue the
+    // notification points at.
+    let insertedUnclassified = 0;
     // Per-feed keep/drop tally, accumulated into the sources table after the run.
     const perSource = new Map<string, { kept: number; dropped: number }>();
 
@@ -466,6 +473,14 @@ export async function runIngest(
         else {
           insertedIntel = data ?? [];
           added += insertedIntel.length;
+          const unread = new Set(
+            batchRows
+              .filter((r) => r.enriched_by === "rules")
+              .map((r) => r.raw_hash),
+          );
+          insertedUnclassified += insertedIntel.filter((r) =>
+            unread.has(r.raw_hash),
+          ).length;
         }
       }
 
@@ -602,14 +617,13 @@ export async function runIngest(
     // rules keep means a triage call failed - a timeout, usually. Those reports
     // are stored with no labels, no adversary and no nexus, which is not
     // visibly different from a report about nothing in particular, and matches
-    // no subscription so nobody is told. Worth an error rather than a silence:
-    // it is the difference between "quiet week" and "the classifier is down".
-    if (serverEnv.enrichStrategy === "llm-first" && tally.rulesKeep > 0) {
-      errors.push(
-        `enrichment: ${tally.rulesKeep} report(s) fell back to the rules and were ` +
-          `stored unclassified - the triage call did not answer in time`,
-      );
-    }
+    // no subscription so nobody is told.
+    //
+    // Counted from what was actually stored rather than from the tally: the
+    // tally counts candidates kept, and dedup means some of those were already
+    // in the table. The queue has to be the rows an analyst can open.
+    const unclassified =
+      serverEnv.enrichStrategy === "llm-first" ? insertedUnclassified : 0;
     ilog(
       `inserted ${added} new items; IOC extraction: ${iocLinks} links (${iocFailed} fetch failures); ` +
         `${labelLinks} labels linked`,
@@ -740,6 +754,7 @@ export async function runIngest(
         added,
         summarised,
         flaggedIocs,
+        unclassified,
         errors,
       })),
     );
@@ -758,6 +773,7 @@ export async function runIngest(
           enriched: reflectionInputs.length,
           added,
           enricher: enricher.name,
+          unclassified,
           errors: errors.slice(0, 50),
         }),
       })

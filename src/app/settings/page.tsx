@@ -90,6 +90,26 @@ export default async function SettingsPage({
         .order("reports", { ascending: false })
         .limit(500)
     : { data: [] };
+  // The unclassified queue: reports the triage call could not read. Only the
+  // rows still waiting - a re-analysis or a review stamps the column, so the
+  // list empties as they are worked through.
+  const { data: unclassifiedRows } = administrator
+    ? await supabase
+        .from("intel_items")
+        .select("raw_hash, title, url, source_name, published_at, created_at")
+        .eq("enriched_by", "rules")
+        .order("created_at", { ascending: false })
+        .limit(500)
+    : { data: [] };
+  const unclassified = (unclassifiedRows ?? []).map((r) => ({
+    rawHash: r.raw_hash,
+    title: r.title,
+    url: r.url,
+    sourceName: r.source_name,
+    publishedAt: r.published_at,
+    createdAt: r.created_at,
+  }));
+
   const reviewFlags = (reviewRows ?? []).map((r) => ({
     id: r.id,
     value: r.value,
@@ -210,6 +230,7 @@ export default async function SettingsPage({
         dropped={dropped}
       reviewFlags={reviewFlags}
       reviewStatus={reviewStatus}
+      unclassified={unclassified}
         memory={memory}
         reading={readingPrefsFrom(user?.user_metadata)}
         subscriptions={subscriptions}
