@@ -176,6 +176,14 @@ export function ActorsPanel({
                 <tr key={a.id} className="border-t border-slate-100 align-top">
                   <td className="py-2 pr-3 font-medium text-slate-900">
                     {a.name}
+                    {a.status === "provisional" ? (
+                      <span
+                        title="Added automatically from a report. Edit it to confirm the details and clear this."
+                        className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700"
+                      >
+                        Provisional
+                      </span>
+                    ) : null}
                   </td>
                   <td className="py-2 pr-3 whitespace-nowrap text-slate-600">
                     {motivationLabel(a.motivation)}

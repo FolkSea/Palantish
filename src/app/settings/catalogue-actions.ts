@@ -26,7 +26,7 @@ function toList(csv: string): string[] {
 }
 
 const ACTOR_SELECT =
-  "id, name, motivation, country, community_identifiers, description";
+  "id, name, motivation, country, community_identifiers, description, status";
 
 // The ingest attributes intel by nexus, so derive it from the actor's
 // motivation + country. This used to carry its own copy of the country switch,
@@ -52,6 +52,9 @@ function actorRow(input: ActorInput) {
     nexus: nexusFor(motivation, country),
     community_identifiers: toList(input.aliases),
     description: toAscii(input.description).trim() || null,
+    // A person filled this in, so the entry is no longer provisional - that is
+    // what reviewing an automatically added actor consists of.
+    status: null,
   };
 }
 

@@ -40,6 +40,7 @@ import { AnalystAgent } from "@/lib/agent/analyst";
 import { reconcileIndicators } from "@/lib/agent/ioc-validate";
 import { notifyUsers } from "@/lib/notifications/create";
 import { itemHref } from "@/lib/browse-links";
+import { ensureCatalogueActor } from "@/lib/ingest/catalogue";
 import { loadIocAllowlist } from "@/lib/ingest/allowlist";
 import { familyForAnimal } from "@/lib/ingest/adversaries";
 import { discoverTechniques } from "@/lib/mitre/discover";
@@ -999,9 +1000,11 @@ export type AiRefreshResult =
       labels: string[];
       visibilityGaps: string;
       indicators: Indicators;
-      /** The actor written, "" when the model named none, null when it named
-       *  one the catalogue does not recognise (nothing was written). */
+      /** The actor written, "" when the model named none, null when the name
+       *  could not be an actor at all (nothing was written). */
       adversary: string | null;
+      /** True when that actor was new and has just entered the catalogue. */
+      actorAdded: boolean;
       country: string | null;
       confidence: string | null;
     }
@@ -1118,21 +1121,32 @@ export async function aiRefreshReportAction(
   if (labelError) return fail(labelError);
 
   // Attribution goes through the ordinary edit so the report regroups under the
-  // right country the way a typed-in name does. An actor the catalogue does not
-  // know writes nothing; the panel says so rather than inventing a label.
+  // right country the way a typed-in name does - which means the actor has to
+  // exist in the catalogue first. Reporting names actors faster than anyone
+  // curates them, so an unknown one is added as provisional rather than
+  // dropped: an attribution to an actor the catalogue has never heard of is
+  // uneditable, unmatchable, and joins up with nothing.
   let adversary: string | null = "";
   let country: string | null = null;
+  let actorAdded = false;
   if (p.crowdstrikeAdversary) {
-    const res = await updateReportAdversaryAction(rawHash, p.crowdstrikeAdversary);
-    adversary = res.ok && res.recognised ? res.label : null;
-    country = res.ok ? res.country : null;
+    const ensured = await ensureCatalogueActor(db, p.crowdstrikeAdversary, p.nexus);
+    if (!ensured.name) {
+      adversary = null; // not a name that can be an actor; attribute nothing
+    } else {
+      actorAdded = ensured.created;
+      const res = await updateReportAdversaryAction(rawHash, ensured.name);
+      adversary = res.ok && res.recognised ? res.label : null;
+      country = res.ok ? res.country : null;
+    }
   }
 
   await queueNotifications(db, [item.id], "labels");
   const indicators = indicatorsFromRows(rows);
   await notify(
     `Re-analysis complete: ${item.title}`,
-    `${p.labels.length} labels, ${rows.length} indicators.`,
+    `${p.labels.length} labels, ${rows.length} indicators.` +
+      (actorAdded ? ` Added ${adversary} to the actor catalogue.` : ""),
   );
   revalidatePath("/");
   return {
@@ -1142,6 +1156,7 @@ export async function aiRefreshReportAction(
     visibilityGaps: p.visibilityGaps,
     indicators,
     adversary,
+    actorAdded,
     country,
     confidence: p.confidence,
   };

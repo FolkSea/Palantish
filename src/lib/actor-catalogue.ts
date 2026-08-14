@@ -31,6 +31,8 @@ export type ActorRecord = {
   country: string | null;
   community_identifiers: string[] | null;
   description: string | null;
+  /** "provisional" for an actor added automatically and not yet reviewed. */
+  status?: string | null;
 };
 
 export type ActorResult =

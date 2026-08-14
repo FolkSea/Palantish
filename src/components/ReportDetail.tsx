@@ -474,11 +474,13 @@ export function ReportDetail({
     if (res.adversary !== null) setAdversary(res.adversary || null);
     if (res.country) setCountry(res.country);
     setConfidence(res.confidence);
+    if (res.actorAdded) getAttributionOptionsAction().then(setOptions);
     setMagicNote({
       ok: true,
-      text:
-        res.adversary === null
-          ? "Re-analysed. The actor it named is not in the catalogue, so the attribution was left alone."
+      text: res.actorAdded
+        ? `Re-analysed. ${res.adversary} was new, and is now in the actor catalogue as provisional - worth a look.`
+        : res.adversary === null
+          ? "Re-analysed. The name it gave for the actor cannot be catalogued, so the attribution was left alone."
           : "Re-analysed.",
     });
   }

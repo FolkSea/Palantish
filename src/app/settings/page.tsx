@@ -45,7 +45,9 @@ export default async function SettingsPage({
 
   const { data: actors } = await supabase
     .from("adversaries")
-    .select("id, name, motivation, country, community_identifiers, description")
+    .select(
+      "id, name, motivation, country, community_identifiers, description, status",
+    )
     .order("name");
 
   const droppedCutoff = new Date(
