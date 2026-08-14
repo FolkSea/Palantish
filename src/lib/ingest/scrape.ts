@@ -23,6 +23,12 @@ export type ScrapedArticle = {
   finalUrl: string;
   siteName: string;
   domain: string;
+  /**
+   * The article itself, as Markdown, when it came with the import rather than
+   * from the web. Only the paste flow sets it: everything fetched is re-fetched
+   * for reading, and a stored copy would go stale.
+   */
+  bodyMarkdown?: string | null;
 };
 
 const FETCH_TIMEOUT_MS = 20000;

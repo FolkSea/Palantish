@@ -66,6 +66,12 @@ export type ReportModalData = {
   country?: string | null;
   confidence?: string | null;
   rawHash?: string | null;
+  /**
+   * The article as Markdown, kept with the report because its page cannot be
+   * fetched (the paste import). When present the reading view shows this
+   * instead of fetching - which is the only way the reader ever sees it.
+   */
+  bodyMarkdown?: string | null;
 };
 
 type ViewState =
@@ -78,6 +84,8 @@ type ViewState =
       frameable: boolean;
       /** Self-contained snapshot to embed when they do not. */
       html: string;
+      /** Where the text came from. "pasted" is a body stored with the report. */
+      source?: "fetched" | "pasted";
     }
   | { status: "error"; error?: string };
 
@@ -171,6 +179,21 @@ export function ReportDetail({
   // async view before starting the next fetch.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    // A report that came in by hand carries its own body: the page could not be
+    // fetched, which is why somebody pasted it, so fetching again would only
+    // reproduce the failure that sent them to the paste box.
+    if (report.bodyMarkdown) {
+      setView({
+        status: "ready",
+        markdown: report.bodyMarkdown,
+        frameable: false,
+        html: "",
+        source: "pasted",
+      });
+      setDetailsText(report.bodyMarkdown);
+      setShowOriginal(false);
+      return;
+    }
     if (!report.url) {
       setView({ status: "error", error: "No report link available." });
       setDetailsText("");
@@ -200,7 +223,7 @@ export function ReportDetail({
     return () => {
       active = false;
     };
-  }, [report.url]);
+  }, [report.url, report.bodyMarkdown]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const rawHash = report.rawHash;
@@ -1041,7 +1064,10 @@ function ReportBody({
     );
   }
 
-  const hasReading = view.markdown.length >= MIN_READING_CHARS;
+  // A body somebody pasted is shown however short it is: they chose every word
+  // of it, so "too thin to be worth showing" cannot apply.
+  const pasted = view.source === "pasted";
+  const hasReading = pasted || view.markdown.length >= MIN_READING_CHARS;
   const hasOriginal = view.frameable || !!view.html;
   const original = showOriginal && hasOriginal;
 
@@ -1051,9 +1077,11 @@ function ReportBody({
         <span className="text-slate-500">
           {original
             ? "Original page, as published."
-            : hasReading
-              ? "Reading view: adverts and site furniture removed."
-              : "Little readable text could be extracted from this page."}
+            : pasted
+              ? "Pasted at import, because the page could not be fetched."
+              : hasReading
+                ? "Reading view: adverts and site furniture removed."
+                : "Little readable text could be extracted from this page."}
         </span>
         {hasOriginal && hasReading ? (
           <button

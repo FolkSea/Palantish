@@ -372,6 +372,7 @@ export type Database = {
         Row: {
           adversary_label: string | null
           analyst_comments: string | null
+          body_markdown: string | null
           confidence: string | null
           country: string | null
           created_at: string
@@ -399,6 +400,7 @@ export type Database = {
         Insert: {
           adversary_label?: string | null
           analyst_comments?: string | null
+          body_markdown?: string | null
           confidence?: string | null
           country?: string | null
           created_at?: string
@@ -426,6 +428,7 @@ export type Database = {
         Update: {
           adversary_label?: string | null
           analyst_comments?: string | null
+          body_markdown?: string | null
           confidence?: string | null
           country?: string | null
           created_at?: string

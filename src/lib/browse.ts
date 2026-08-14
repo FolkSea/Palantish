@@ -148,6 +148,8 @@ export type ItemDetail = {
   country: string | null;
   confidence: string | null;
   rawHash: string | null;
+  /** The article body kept with the report, for pages that cannot be fetched. */
+  bodyMarkdown?: string | null;
 };
 
 const UUID_RE =
@@ -164,7 +166,7 @@ export async function loadItem(key: string): Promise<ItemDetail | null> {
   const db = await createClient();
   const cols =
     "id, title, url, description, source_name, published_at, country, confidence, " +
-    "adversary_label, crowdstrike_adversary, raw_hash";
+    "adversary_label, crowdstrike_adversary, raw_hash, body_markdown";
 
   // raw_hash first: every in-app link uses it, so this is the common path.
   let { data } = await db.from("intel_items").select(cols).eq("raw_hash", k).maybeSingle();
@@ -185,6 +187,7 @@ export async function loadItem(key: string): Promise<ItemDetail | null> {
     adversary_label: string | null;
     crowdstrike_adversary: string | null;
     raw_hash: string | null;
+    body_markdown: string | null;
   };
   return {
     id: r.id,
@@ -197,5 +200,6 @@ export async function loadItem(key: string): Promise<ItemDetail | null> {
     country: r.country,
     confidence: r.confidence,
     rawHash: r.raw_hash,
+    bodyMarkdown: r.body_markdown,
   };
 }

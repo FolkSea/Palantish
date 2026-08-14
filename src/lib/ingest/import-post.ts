@@ -209,6 +209,7 @@ export async function ingestArticle(article: ScrapedArticle): Promise<ImportResu
     source_id: source.id,
     item_type: enriched.itemType,
     raw_hash: rawHash,
+    body_markdown: article.bodyMarkdown ?? null,
   };
   const { data: insertedRow, error } = await db
     .from("intel_items")
@@ -256,6 +257,21 @@ export async function importBlogPostWithAI(rawUrl: string): Promise<ImportResult
 }
 
 /**
+ * The card-sized version of a pasted body: the markup a paste brings with it is
+ * no use in a one-line summary, so image and link syntax is reduced to the
+ * words around it before the text is cut.
+ */
+function summarise(text: string): string {
+  return text
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[#>*`_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 2000);
+}
+
+/**
  * Fallback: ingest a title + body the user pasted from the blog (no fetch). The
  * URL is still used to attach/create the source and as the item link.
  */
@@ -267,14 +283,23 @@ export async function importPastedPost(
   const { finalUrl, domain, siteName } = siteIdentity(rawUrl);
   const cleanTitle = toAscii(title).trim();
   if (!cleanTitle) return { ok: false, error: "A title is required." };
-  const cleanBody = toAscii(body).replace(/\s+/g, " ").trim();
+  // Two readings of the same paste. The summary is what every card and search
+  // result shows, so it is flattened and cut; the body is the article, kept as
+  // it was pasted (Markdown, images and all) because the reading view has
+  // nothing else to show - the page could not be fetched, which is why somebody
+  // was pasting it.
+  // keepNewlines: the body is Markdown, where a line break is the difference
+  // between a heading and a sentence starting with a hash.
+  const bodyMarkdown = toAscii(body, true);
+  const cleanBody = bodyMarkdown.replace(/\s+/g, " ").trim();
   const article: ScrapedArticle = {
     title: cleanTitle,
-    description: cleanBody ? cleanBody.slice(0, 2000) : null,
+    description: cleanBody ? summarise(cleanBody) : null,
     publishedAt: null,
     finalUrl,
     siteName,
     domain,
+    bodyMarkdown: bodyMarkdown || null,
   };
   return ingestArticle(article);
 }
