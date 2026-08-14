@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { announceFirstSignIn } from "@/lib/notifications/first-sign-in";
 import { isEmailAllowed } from "@/lib/allowlist";
+import { landingFor } from "@/lib/auth-fragment";
 
 const NOT_ALLOWED =
   "That account is not approved for this application. Ask an administrator to add it.";
@@ -49,6 +50,35 @@ export async function signInWithMagicLink(
 
   if (error) return { error: error.message };
   return { message: `If ${email} has an account, a magic link is on its way.` };
+}
+
+/**
+ * Finish a sign-in whose session arrived in the URL fragment.
+ *
+ * The browser has already called setSession, so the cookies are in place and
+ * this runs as that user. What is left is what the browser cannot check: that
+ * the account is allowed to use the application at all. An invitation sent from
+ * the Supabase dashboard does not touch the allow-list - only the invite in
+ * Settings does - so without this check the recipient signs in successfully and
+ * finds an application with nothing in it and no explanation.
+ */
+export async function completeFragmentSignIn(
+  type: string | null,
+): Promise<{ ok: true; next: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) return { ok: false, error: "That sign-in link has expired." };
+
+  if (!(await isEmailAllowed(user.email))) {
+    await supabase.auth.signOut();
+    return { ok: false, error: NOT_ALLOWED };
+  }
+
+  // Only ever fires once per user - see announceFirstSignIn.
+  await announceFirstSignIn(user.id, user.email);
+  return { ok: true, next: landingFor(type) };
 }
 
 export async function signInWithPassword(

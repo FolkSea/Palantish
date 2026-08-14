@@ -58,8 +58,13 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Signed-in users hitting /login go to the dashboard.
-  if (user && pathname === "/login") {
+  // Signed-in users hitting /login go to the dashboard - but only when they are
+  // navigating to it. The sign-in page also posts server actions to its own
+  // URL, and the moment one of those establishes a session the next post would
+  // be answered with a redirect instead of its result, which the client reports
+  // as "an unexpected response was received from the server". That is what an
+  // invited user saw at the end of an otherwise successful sign-in.
+  if (user && pathname === "/login" && request.method === "GET") {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     url.search = "";

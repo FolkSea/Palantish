@@ -1,15 +1,19 @@
 "use client";
 
-import { Suspense, useActionState, useState } from "react";
+import { Suspense, useActionState, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { signInWithMagicLink, signInWithPassword } from "./actions";
+import {
+  completeFragmentSignIn,
+  signInWithMagicLink,
+  signInWithPassword,
+} from "./actions";
+import { createClient } from "@/lib/supabase/client";
+import { authErrorMessage, parseAuthFragment } from "@/lib/auth-fragment";
 
 type ActionResult = { error?: string; message?: string };
 const initial: ActionResult = {};
 
-const ERROR_COPY: Record<string, string> = {
-  invalid_link: "That sign-in link was invalid or has expired.",
-};
+
 
 export default function LoginPage() {
   return (
@@ -23,6 +27,7 @@ function LoginForm() {
   const params = useSearchParams();
   const urlError = params.get("error");
   const [mode, setMode] = useState<"magic" | "password">("magic");
+  const fragment = useFragmentSignIn();
 
   const [magicState, magicAction, magicPending] = useActionState(
     signInWithMagicLink,
@@ -122,21 +127,111 @@ function LoginForm() {
           </form>
         )}
 
+        {fragment.status === "working" ? (
+          <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
+            Signing you in...
+          </p>
+        ) : null}
+        {fragment.status === "error" ? (
+          <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
+            {fragment.error}
+          </p>
+        ) : null}
         {state.message ? (
           <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-700">
             {state.message}
           </p>
         ) : null}
-        {(state.error || urlError) && !state.message ? (
+        {(state.error || urlError) &&
+        !state.message &&
+        fragment.status === "none" ? (
           <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">
-            {state.error ??
-              ERROR_COPY[urlError ?? ""] ??
-              "Something went wrong."}
+            {state.error ?? authErrorMessage(urlError)}
           </p>
         ) : null}
       </div>
     </main>
   );
+}
+
+type FragmentState =
+  | { status: "none" }
+  | { status: "working" }
+  | { status: "error"; error: string };
+
+/**
+ * Complete a sign-in whose session came back in the URL fragment.
+ *
+ * Nothing on the server can see a fragment, so a link that returns one - an
+ * invitation sent from the Supabase dashboard, a recovery link, any link using
+ * the default email template - lands here as an anonymous visitor with the
+ * session sitting unread in the address bar. Reading it is the browser's job
+ * and only the browser's.
+ *
+ * The tokens are removed from the address bar before anything else happens:
+ * they are credentials, they would otherwise sit in history and in whatever
+ * gets pasted into a bug report, and a reload would retry a token that has
+ * already been spent.
+ */
+function useFragmentSignIn(): FragmentState {
+  const [state, setState] = useState<FragmentState>({ status: "none" });
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const parsed = parseAuthFragment(window.location.hash);
+    if (!parsed) return;
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search,
+    );
+    if (parsed.kind === "error") {
+      setState({ status: "error", error: parsed.message });
+      return;
+    }
+
+    setState({ status: "working" });
+    let active = true;
+    const client = createClient();
+    client.auth
+      .setSession({
+        access_token: parsed.accessToken,
+        refresh_token: parsed.refreshToken,
+      })
+      .then(async ({ error }) => {
+        if (error) throw new Error(error.message);
+        const res = await completeFragmentSignIn(parsed.type);
+        if (!res.ok) {
+          await client.auth.signOut();
+          if (active) setState({ status: "error", error: res.error });
+          return;
+        }
+        // A full load rather than a client navigation: the session lives in
+        // cookies now, and every page here is rendered on the server.
+        window.location.assign(res.next);
+      })
+      .catch(async (err: unknown) => {
+        // Whatever went wrong, do not leave a half-established session behind:
+        // the account has not been checked against the allow-list, and a
+        // reload would carry it into an application it may not be allowed to
+        // read - which looks like an empty dashboard and no explanation.
+        await client.auth.signOut().catch(() => {});
+        if (active)
+          setState({
+            status: "error",
+            error:
+              err instanceof Error
+                ? err.message
+                : "That sign-in link did not work.",
+          });
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  return state;
 }
 
 function Field(props: {
